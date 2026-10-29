@@ -11,6 +11,8 @@ for Revit 2025, 2026 and 2027.
 
 ## Install
 
+<!-- Adapted from gantt-it README.md, "Install" (gantt-it commit aa83f35). -->
+
 1. Download `SplashIt-<version>.msi` from the [latest release](https://github.com/jedbjorn/splash-it/releases/latest).
 2. Close Revit, then run the file.
 3. If Windows says "Windows protected your PC", choose **More info**, then **Run anyway**. Windows asks this because Splash-It is not digitally signed yet. That is expected.
@@ -28,9 +30,9 @@ Your tabs are now colored by file, and the **Splash-It** button on the **Add-Ins
 - Windows 11: **Settings › Apps › Installed apps**, find **Splash-It**, open its **⋯** menu and choose **Uninstall**.
 - Windows 10: **Settings › Apps › Apps & features**, select **Splash-It** and choose **Uninstall**.
 
-Uninstalling leaves one small file behind: `%AppData%\SplashIt\settings.json`, which holds your colors and settings. Reinstalling picks them up again. To remove it as well, delete the `%AppData%\SplashIt` folder.
+Uninstalling leaves two things behind: your settings in `%AppData%\SplashIt\settings.json` (your colors and choices; reinstalling picks them up again), and Splash-It's log files in `%LocalAppData%\SplashIt\logs`. To remove them as well, delete the `%AppData%\SplashIt` and `%LocalAppData%\SplashIt` folders.
 
-**For IT:** `msiexec /i SplashIt-<version>.msi /qn` installs silently for the signed-in user. Releases and the installer's behaviour are described in [docs/RELEASING.md](docs/RELEASING.md).
+**For IT:** close Revit, then run `msiexec /i SplashIt-<version>.msi /qn /norestart` in the user's own context. It installs for that user only, not when run as SYSTEM. It exits with 1603 when no Revit 2025, 2026 or 2027 is found, and can end with 3010 (restart needed) if Revit was open. To add a Revit year installed later, run `msiexec /i SplashIt-<version>.msi REINSTALL=ALL REINSTALLMODE=ecmus /qn /norestart`; installing the same MSI again does not. Details, including the exit codes for setup bundles that chain this installer, are in [docs/RELEASING.md](docs/RELEASING.md#silent-install-and-chaining).
 
 ## License
 
