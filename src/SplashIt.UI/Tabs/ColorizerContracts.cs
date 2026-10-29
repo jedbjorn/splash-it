@@ -1,4 +1,5 @@
 using SplashIt.Core.Files;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.UI.Tabs;
 
@@ -38,7 +39,7 @@ public interface IColorizerEventSink
     void OnLayoutUpdated();
 
     /// <summary>The UI theme changed to <paramref name="theme"/>.</summary>
-    void OnThemeChanged(ThemeKind theme);
+    void OnThemeChanged(UiTheme theme);
 }
 
 /// <summary>
@@ -49,7 +50,7 @@ public interface IColorizerEventSink
 public interface IColorizerEventSource
 {
     /// <summary>The UI theme now.</summary>
-    ThemeKind CurrentTheme { get; }
+    UiTheme CurrentTheme { get; }
 
     /// <summary>Starts delivering events to <paramref name="sink"/> (replacing any earlier sink).</summary>
     void Subscribe(IColorizerEventSink sink);

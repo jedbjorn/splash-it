@@ -16,6 +16,7 @@ using SplashIt.Revit.Resources;
 using SplashIt.Revit.Tabs;
 using SplashIt.Revit.Theming;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 using RevitApplication = Autodesk.Revit.ApplicationServices.Application;
 
 namespace SplashIt.Revit;
@@ -60,7 +61,7 @@ public sealed class App : IExternalApplication
                 AvailabilityClassName = typeof(AlwaysAvailable).FullName,
             };
             _button = panel.AddItem(data) as PushButton;
-            SetIcons(SplashItTheme.Detect());
+            OnTheme(RevitThemeDetector.Detect());
         }
         catch (Exception ex)
         {
@@ -130,7 +131,7 @@ public sealed class App : IExternalApplication
     {
         try
         {
-            if (e.ThemeChangedType == ThemeType.UITheme) SetIcons(SplashItTheme.Detect());
+            if (e.ThemeChangedType == ThemeType.UITheme) OnTheme(RevitThemeDetector.Detect());
         }
         catch (Exception ex)
         {
@@ -138,10 +139,17 @@ public sealed class App : IExternalApplication
         }
     }
 
-    private void SetIcons(ThemeKind theme)
+    /// <summary>The ribbon icons follow the theme, and the settings window opens in it (SplashItTheme).</summary>
+    private void OnTheme(UiTheme theme)
+    {
+        SplashIt.UI.Theming.SplashItTheme.Apply(theme);
+        SetIcons(theme);
+    }
+
+    private void SetIcons(UiTheme theme)
     {
         if (_button is null) return;
-        var suffix = theme == ThemeKind.Dark ? "_dark" : "";
+        var suffix = theme == UiTheme.Dark ? "_dark" : "";
         // A missing dark icon falls back to the light one; with neither, the button has no icon.
         _button.LargeImage = LoadIcon($"splash_32{suffix}.png") ?? LoadIcon("splash_32.png");
         _button.Image = LoadIcon($"splash_16{suffix}.png") ?? LoadIcon("splash_16.png");

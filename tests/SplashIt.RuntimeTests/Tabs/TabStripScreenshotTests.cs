@@ -6,6 +6,7 @@ using SplashIt.Core.Colors;
 using SplashIt.Core.Settings;
 using SplashIt.RuntimeTests.Support;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.RuntimeTests.Tabs;
 
@@ -23,11 +24,11 @@ public class TabStripScreenshotTests
     private static readonly Rgb P2 = SplashItDefaults.ProjectColors[1];
     private static readonly Rgb F1 = SplashItDefaults.FamilyColors[0];
 
-    public static TheoryData<ThemeKind> Themes => new() { ThemeKind.Light, ThemeKind.Dark };
+    public static TheoryData<UiTheme> Themes => new() { UiTheme.Light, UiTheme.Dark };
 
-    private static string Suffix(ThemeKind theme) => theme == ThemeKind.Dark ? "dark" : "light";
+    private static string Suffix(UiTheme theme) => theme == UiTheme.Dark ? "dark" : "light";
 
-    private static TextBlock Label(string text, ThemeKind theme) => new()
+    private static TextBlock Label(string text, UiTheme theme) => new()
     {
         Text = text,
         FontFamily = new FontFamily("Segoe UI"),
@@ -37,7 +38,7 @@ public class TabStripScreenshotTests
     };
 
     /// <summary>One strip of tabs, each colored by a treatment (null = native), with the given tab selected.</summary>
-    private static TabControl Styled(TabStyleFactory factory, Style? original, ThemeKind theme, int selected,
+    private static TabControl Styled(TabStyleFactory factory, Style? original, UiTheme theme, int selected,
         params (string Title, TabTreatment? Treatment)[] tabs)
     {
         var strip = HostTabs.Strip(original, theme, tabs.Select(t => t.Title).ToArray());
@@ -51,7 +52,7 @@ public class TabStripScreenshotTests
         return strip;
     }
 
-    private static (BitmapSource Bitmap, FrameworkElement Root) Shoot(string name, ThemeKind theme, params UIElement[] rows)
+    private static (BitmapSource Bitmap, FrameworkElement Root) Shoot(string name, UiTheme theme, params UIElement[] rows)
     {
         var stack = new StackPanel();
         foreach (var row in rows) stack.Children.Add(row);
@@ -80,7 +81,7 @@ public class TabStripScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TwoProjects_OneSelected(ThemeKind theme)
+    public void TwoProjects_OneSelected(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -111,7 +112,7 @@ public class TabStripScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void OneFamily_AtBarWidths1_3_6(ThemeKind theme)
+    public void OneFamily_AtBarWidths1_3_6(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -145,7 +146,7 @@ public class TabStripScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void ProjectFill_At30And100Percent(ThemeKind theme)
+    public void ProjectFill_At30And100Percent(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -178,7 +179,7 @@ public class TabStripScreenshotTests
     /// <summary>#23: the Unselected tab opacity at 20, 50 (default) and 100 % of a 100 % fill.</summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void UnselectedTabOpacity_At20_50And100(ThemeKind theme)
+    public void UnselectedTabOpacity_At20_50And100(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -211,7 +212,7 @@ public class TabStripScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TwelveProjects_AllDefaultColors(ThemeKind theme)
+    public void TwelveProjects_AllDefaultColors(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -235,7 +236,7 @@ public class TabStripScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void NativeRteTab_StaysNative(ThemeKind theme)
+    public void NativeRteTab_StaysNative(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -258,7 +259,7 @@ public class TabStripScreenshotTests
 
     [Theory]
     [MemberData(nameof(Themes))]
-    public void Aero2_StockTemplate_ShowsTheLimitOfTheFill(ThemeKind theme)
+    public void Aero2_StockTemplate_ShowsTheLimitOfTheFill(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {

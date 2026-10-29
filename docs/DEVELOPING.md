@@ -42,11 +42,12 @@ src/
                          surface, Revit event and theme adapters, logger wiring.
                          References SplashIt.UI and SplashIt.Core.
     App.cs               IExternalApplication: ribbon button, icons, colorizer start
-    Commands/            OpenSettings (a status TaskDialog until the settings window)
+    Commands/            OpenSettings → SettingsLauncher.Show (the settings window),
+                         over ColorizerSettingsHost
     Tabs/                RevitTabSurface (the only class touching Revit's UI tree),
                          RevitDocuments (keys, titles, kinds; API context only),
                          RevitColorizerEvents, TabDiagnostics (Debug only)
-    Theming/             SplashItTheme.Detect() → light or dark
+    Theming/             RevitThemeDetector.Detect() → UiTheme, pushed into SplashItTheme
     Resources/           RevitStrings.resx; icons\splash_{16,32}[_dark].png
     SplashIt.addin       manifest (VendorId DSOS; the ClientId never changes)
 tests/

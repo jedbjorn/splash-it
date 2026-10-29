@@ -4,6 +4,7 @@ using Autodesk.Revit.UI.Events;
 using SplashIt.Core.Logging;
 using SplashIt.Revit.Theming;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.Revit.Tabs;
 
@@ -31,7 +32,7 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         _log = log ?? NullLog.Instance;
     }
 
-    public ThemeKind CurrentTheme => SplashItTheme.Detect();
+    public UiTheme CurrentTheme => RevitThemeDetector.Detect();
 
     public void Subscribe(IColorizerEventSink sink)
     {
@@ -160,7 +161,7 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         try
         {
             if (e.ThemeChangedType != ThemeType.UITheme || _sink is not { } sink) return;
-            sink.OnThemeChanged(SplashItTheme.Detect());
+            sink.OnThemeChanged(RevitThemeDetector.Detect());
         }
         catch (Exception ex)
         {

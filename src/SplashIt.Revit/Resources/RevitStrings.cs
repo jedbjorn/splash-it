@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Resources;
-using SplashIt.UI.Tabs;
 
 namespace SplashIt.Revit.Resources;
 
@@ -22,18 +21,5 @@ internal static class RevitStrings
 
     internal static string Ribbon_ButtonText => Get(nameof(Ribbon_ButtonText));
     internal static string Ribbon_Tooltip => Get(nameof(Ribbon_Tooltip));
-    internal static string Status_Title => Get(nameof(Status_Title));
-    internal static string Status_Heading(object? status) => Format(nameof(Status_Heading), status);
-    internal static string Status_NotStarted => Get(nameof(Status_NotStarted));
-    internal static string Status_Details(object? styledTabs) => Format(nameof(Status_Details), styledTabs);
-
-    /// <summary>The status line text for <paramref name="status"/>.</summary>
-    internal static string Status(ColorizerStatus status) => Get(status switch
-    {
-        ColorizerStatus.Active => "Status_Active",
-        ColorizerStatus.Unavailable => "Status_Unavailable",
-        ColorizerStatus.BlockedByPyRevit => "Status_BlockedByPyRevit",
-        ColorizerStatus.Faulted => "Status_Faulted",
-        _ => "Status_Off",
-    });
+    internal static string Command_CouldNotOpen(object? detail) => Format(nameof(Command_CouldNotOpen), detail);
 }

@@ -5,6 +5,7 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using SplashIt.Core.Colors;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.RuntimeTests.Support;
 
@@ -26,9 +27,9 @@ public static class HostTabs
     /// sets its own selected and unselected backgrounds (selected: the theme's surface;
     /// unselected: transparent over the strip).
     /// </summary>
-    public static Style RevitLikeStyle(ThemeKind theme)
+    public static Style RevitLikeStyle(UiTheme theme)
     {
-        var dark = theme == ThemeKind.Dark;
+        var dark = theme == UiTheme.Dark;
         var text = dark ? "#FFF5F5F5" : "#FF3C3C3C";
         var selected = dark ? "#FF2A2F37" : "#FFFFFFFF";
         var hover = dark ? "#FF4A5261" : "#FFE6E6E6";
@@ -81,7 +82,7 @@ public static class HostTabs
     public static readonly Color CloseGrey = Color.FromRgb(0xA2, 0xA6, 0xB0);
 
     /// <summary>The strip behind the tabs (Revit's tab well), per theme.</summary>
-    public static Rgb Well(ThemeKind theme) => theme == ThemeKind.Dark ? Rgb.Parse("#3B4453") : Rgb.Parse("#D5D9DE");
+    public static Rgb Well(UiTheme theme) => theme == UiTheme.Dark ? Rgb.Parse("#3B4453") : Rgb.Parse("#D5D9DE");
 
     public static SolidColorBrush Brush(Rgb c)
     {
@@ -93,7 +94,7 @@ public static class HostTabs
     public static Color ColorOf(Rgb c) => Color.FromRgb(c.R, c.G, c.B);
 
     /// <summary>A TabControl whose strip shows only the headers (no content area), with one tab per title.</summary>
-    public static TabControl Strip(Style? tabStyle, ThemeKind theme, params string[] titles)
+    public static TabControl Strip(Style? tabStyle, UiTheme theme, params string[] titles)
     {
         var strip = new TabControl
         {
