@@ -83,16 +83,18 @@ def draw_splash(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float
         circle(bx + distance * math.cos(a), by + distance * math.sin(a), r)
 
 
-# The Group Tabs glyph (spec #2): a tab strip in two groups. Each file's two tabs (square
-# bottoms, rounded tops) stand side by side over a bar that joins them, and a wider gap
-# separates the two files. Unit square, y down.
-TAB_TOP, TAB_BOTTOM = 0.16, 0.58
-BAR_TOP, BAR_BOTTOM = 0.68, 0.84
-TAB_RADIUS = 0.08
-# Each file: its tabs as (left, right) spans; its bar runs under all of them.
+# The Group Tabs glyph (spec #2): a tab strip in two groups. Each file's two tabs are short
+# and wide (wider than tall, so they read as tabs even at 16 px, review n1), with square
+# bottoms and rounded tops, side by side over a bar that joins them; a wider gap separates
+# the two files. Unit square, y down.
+TAB_TOP, TAB_BOTTOM = 0.27, 0.43
+BAR_TOP, BAR_BOTTOM = 0.51, 0.67
+TAB_RADIUS = 0.05
+# Each file: its tabs as (left, right) spans; its bar runs under all of them. The gap
+# between the files (0.12) is more than twice the gap between a file's tabs (0.05).
 GROUPS = [
-    [(0.02, 0.205), (0.255, 0.44)],
-    [(0.56, 0.745), (0.795, 0.98)],
+    [(0.00, 0.195), (0.245, 0.44)],
+    [(0.56, 0.755), (0.805, 1.00)],
 ]
 
 
