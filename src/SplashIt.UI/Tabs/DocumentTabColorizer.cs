@@ -83,6 +83,16 @@ public sealed class DocumentTabColorizer
 
     private readonly Dictionary<object, FileKind> _kinds = new();
     private readonly Dictionary<TabItem, TabState> _tabs = new();
+
+    /// <summary>
+    /// What is behind the tabs, per pane (the tabs' visual parent): a frozen brush of the color
+    /// <see cref="TabBackdrop.Behind"/> found, or null when nothing solid is (then each tab's own
+    /// background counts). Found once per pane, dropped on a theme change and on Stop.
+    /// </summary>
+    private readonly Dictionary<DependencyObject, Brush?> _backdrops = new();
+
+    /// <summary>Above this many panes the backdrop cache starts over (a safety bound).</summary>
+    private const int MaxBackdrops = 64;
     private readonly List<SurfaceTab> _read = new();
     private readonly List<Signature> _signature = new();
     private readonly List<TabItem> _drop = new();
@@ -349,6 +359,7 @@ public sealed class DocumentTabColorizer
             _running = false;
         }
         RestoreAll();
+        _backdrops.Clear();
         _kinds.Clear();
         _projects.Clear();
         _families.Clear();
@@ -457,6 +468,7 @@ public sealed class DocumentTabColorizer
             _log.Info(Inv($"colorizer: theme changed to {theme}; restyling."));
             Theme = theme;
             RestoreAll();           // originals back on every tab...
+            _backdrops.Clear();     // ...what is behind the tabs found again...
             _styles.ClearCache();   // ...styles rebuilt for the new backdrop...
             _signatureValid = false;
             Pass(force: true);      // ...originals recaptured, contrast recomputed, reapplied.
@@ -654,7 +666,10 @@ public sealed class DocumentTabColorizer
         if (state.Unstylable || state.Abandoned) return null;
         try
         {
-            return _styles.Create(state.BaseStyle, treatment, state.OriginalBackground, Theme);
+            // A project's text and × are chosen against what shows behind the tab (#30/#31: the fill
+            // fades to transparent); a family bar has no text, so its backdrop does not matter.
+            var backdrop = kind == FileKind.Project ? BackdropFor(entry.Tab, state) : state.OriginalBackground;
+            return _styles.Create(state.BaseStyle, treatment, backdrop, Theme);
         }
         catch (ArgumentException)
         {
@@ -663,6 +678,35 @@ public sealed class DocumentTabColorizer
             _log.Warn(Inv($"colorizer: a tab's style targets {state.BaseStyle?.TargetType.Name}; that tab stays native."));
             return null;
         }
+    }
+
+    /// <summary>
+    /// The backdrop brush for a project tab's contrast: what is behind its pane, found once per pane
+    /// and logged; else (nothing solid behind it, or not in a tree yet) its own original background,
+    /// which the factory blends over the theme surface.
+    /// </summary>
+    private Brush? BackdropFor(TabItem tab, TabState state)
+    {
+        var pane = VisualTreeHelper.GetParent(tab);
+        if (pane is null) return state.OriginalBackground;
+        if (_backdrops.TryGetValue(pane, out var cached)) return cached ?? state.OriginalBackground;
+
+        Brush? brush = null;
+        if (TabBackdrop.Behind(tab) is { } behind)
+        {
+            var c = behind.Color;
+            var solid = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
+            solid.Freeze();
+            brush = solid;
+            _log.Info(Inv($"colorizer: tabs sit on {c.ToHex()} ({behind.Source}); project text and × are chosen against it."));
+        }
+        else
+        {
+            _log.Info("colorizer: nothing solid behind the tabs; project text and × are chosen against each tab's own background, else the theme surface.");
+        }
+        if (_backdrops.Count >= MaxBackdrops) _backdrops.Clear();
+        _backdrops[pane] = brush;
+        return brush ?? state.OriginalBackground;
     }
 
     private FileKind KindOf(object key)
