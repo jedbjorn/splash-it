@@ -5,9 +5,16 @@ namespace SplashIt.Core.Settings;
 /// <summary>
 /// Writes a file so a reader never sees it half-written: the text goes to a temp
 /// file in the same folder, is flushed to disk, then replaces the target in one
-/// step (<see cref="File.Replace(string, string, string?)"/> when the target exists,
-/// else <see cref="File.Move(string, string, bool)"/>). A failure at any point leaves
-/// the previous file untouched and no temp file behind.
+/// rename, <see cref="File.Move(string, string, bool)"/> with overwrite (MoveFileEx with
+/// MOVEFILE_REPLACE_EXISTING on Windows, rename(2) elsewhere). A failure at any point
+/// leaves the previous file untouched and no temp file behind.
+/// <para>
+/// Not <see cref="File.Replace(string, string, string?)"/>: Win32 ReplaceFile can fail
+/// with ERROR_UNABLE_TO_MOVE_REPLACEMENT (1176) after the target is already gone, and if
+/// every retry failed too, the temp file would be cleaned up and no settings.json would
+/// be left; the next Read would give the defaults and switch coloring back on for a
+/// user who had turned it off. A move with overwrite never leaves the target missing.
+/// </para>
 /// <para>
 /// On Windows the replace is refused while another process (a reader without
 /// <see cref="FileShare.Delete"/>, an antivirus scanner, a sync client) holds the target
@@ -82,8 +89,8 @@ internal static class AtomicFile
         {
             try
             {
-                if (File.Exists(target)) File.Replace(temp, target, destinationBackupFileName: null);
-                else File.Move(temp, target, overwrite: true);
+                // One call whether or not the target exists: it never leaves the target missing.
+                File.Move(temp, target, overwrite: true);
                 if (attempt > 1)
                     log?.Invoke(FormattableString.Invariant($"settings: replaced {Path.GetFileName(target)} on attempt {attempt}."));
                 return;

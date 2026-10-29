@@ -38,6 +38,8 @@ public sealed class ColorAllocator<TKey> where TKey : notnull
     /// <summary>
     /// A snapshot of the keys holding an index, in the order they first took one.
     /// Safe to enumerate while releasing keys; later changes do not show in it.
+    /// Each read allocates a new copy, so keep it off hot paths (such as a
+    /// <c>LayoutUpdated</c> handler); use <see cref="Count"/> and <see cref="TryGetIndex"/> there.
     /// </summary>
     public IReadOnlyList<TKey> Keys => Array.AsReadOnly(_order.ToArray());
 

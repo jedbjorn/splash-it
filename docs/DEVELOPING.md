@@ -141,7 +141,9 @@ launch.
 ## Settings file
 
 `%AppData%\SplashIt\settings.json`, written atomically: a temp file in the same folder,
-flushed, then `File.Replace` over the existing file (or `File.Move` when there is none).
+flushed, then moved over the target with `File.Move(..., overwrite: true)` (one rename,
+which never leaves the target missing; `File.Replace` is avoided because Win32
+`ReplaceFile` can fail after the target is already gone).
 Windows refuses that replace while another process holds the file open without
 `FileShare.Delete` (a scanner, a sync client), so it is retried up to 5 times over about
 0.3 s, each retry logged; after that the error surfaces and the previous file is kept.
