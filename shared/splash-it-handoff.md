@@ -2,13 +2,13 @@
 
 From: rst-c Planner-01 (PLN1). For: the splash-it repo's planner, to author splash-it's first spec in its own DB.
 
-Source: rst-c feature #12 / spec #14 "Document Tab Coloring" (now retired in rst-c). rst-c decisions: #3, superseded by #4.
+Source: rst-c feature #12 / spec #14 "Document Tab Coloring" (now retired in rst-c). rst-c decisions: #3, superseded by #4, superseded by #5 (installer model).
 The original spec body follows the revision list below. **The revisions win wherever they conflict with it.**
 
 ## Revisions agreed with the FnB (jed), 2026-10-29
 
-1. **Own add-in, own repo, own installer.** Splash-It lives in `jedbjorn/splash-it` and ships its own per-user MSI. It is also bundled in rst-c's `RST.msi`.
-2. **Single-copy rule.** The standalone MSI and `RST.msi` must install identical files to the identical path under the same `.addin` ClientId, so Windows Installer treats them as one shared install and Revit never loads Splash-It twice. Settle the exact path and component identity with rst-c's bundling feature (#13 in rst-c's roadmap). Gantt-It needs the same rule.
+1. **Own add-in, own repo, own installer.** Splash-It lives in `jedbjorn/splash-it` and ships its own per-user MSI. rst-c's setup `.exe` can install that MSI as an option (see 2).
+2. **Standalone MSI that rst-c can chain (revised 2026-10-29, rst-c decision #5).** Splash-It ships its own per-user MSI as a GitHub release asset. It needs a stable UpgradeCode, `MajorUpgrade` (upgrades older versions in place, never downgrades), a clean silent install and uninstall (`msiexec /i … /qn`, `msiexec /x … /qn`), and no prompts or reboots. rst-c's setup `.exe` (a WiX Burn bundle) offers Splash-It as a checkbox and installs that exact MSI silently and unmodified, from a release tag pinned in rst-c's `companions.json` (it checks the file's sha256). The companion is permanent: uninstalling rst-c leaves it, and it has its own Add/Remove Programs entry. There are no shared components with RST.msi and no rst-c runtime coupling. The earlier single-copy rule is **withdrawn**. Gantt-It follows the same contract. rst-c tracks this as its feature #13 (Companion Add-ins: Registry & Chained Install).
 3. **Native WPF, no WebView2.** Replace the `tab_colors.html` / bridge / host design with a WPF window and view-models, built the way gantt-it is (`GanttIt.Revit/UI/`: MVVM with plain `INotifyPropertyChanged`, a modal window owned by Revit's main window, a `DialogService`, a color picker).
 4. **gantt-it's look, light and dark.** Use gantt-it's `Theme.xaml` tokens and control styles. gantt-it is adding dark mode now; Splash-It follows Revit's theme (`UIThemeManager.CurrentTheme`, plus `ThemeChanged`) in the same way gantt-it does once that lands. Keep the two in step (how the theme is shared, vendored copy or package, is still open).
 5. **gantt-it's architecture.** Use `SplashIt.Core` (net8.0;net10.0, no Revit, no WPF), with the pure model: config, rules, slots, style catalogue, color math. Add `SplashIt.Revit` (the `$(RevitTargetFramework)` add-in) and `tests/SplashIt.Core.Tests`. Use the rst-c/gantt-it build pattern (`Debug|Release R25|R26|R27`), the `Nice3point.Revit.Api.*` reference packages, and only .NET's built-in libraries plus WPF as dependencies.
