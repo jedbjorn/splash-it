@@ -1,21 +1,22 @@
-"""The Splash-It "splash" glyph, shared by the ribbon icons (tools/make_icons.py) and the
-installer branding (Lane D).
+"""The Splash-It "splash" glyph and its tile, shared by the ribbon icons
+(tools/make_icons.py) and the installer branding (tools/make_installer_branding.py).
 
 A paint splash: a round body with six tapering arms ending in round tips, and three
-loose droplets, drawn as a union of simple shapes so it stays readable from 16 px up. Coordinates are in a unit square
-(0..1, y down) and scaled to any box, so callers draw it at any size.
+loose droplets, drawn as a union of simple shapes so it stays readable from 16 px up.
+Coordinates are in a unit square (0..1, y down) and scaled to any box.
 
-    from glyph import draw_splash
-    draw_splash(draw, (x0, y0, x1, y1), fill=(0x4F, 0x8E, 0xF7, 0xFF))
+    from glyph import draw_splash, tile
+    draw_splash(draw, (x0, y0, x1, y1), fill=BLUE)   # the glyph alone, into any box
+    tile(32)                                          # the icon: glyph on the rounded tile
 
-Pillow only. The tile and the colors live in the callers.
+Pillow only.
 """
 
 from __future__ import annotations
 
 import math
 
-from PIL import ImageDraw
+from PIL import Image, ImageDraw
 
 # Glyph blue, the tile greys and the dark-theme variant (spec, App: a #4F8EF7 glyph on a
 # #D9D9D9 tile; the dark tile matches gantt-it's dark icon tile).
@@ -79,3 +80,26 @@ def draw_splash(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float
     for angle, distance, r in DROPS:
         a = math.radians(angle)
         circle(bx + distance * math.cos(a), by + distance * math.sin(a), r)
+
+
+SUPERSAMPLE = 8
+
+# Corner radius and glyph inset, in pixels, for the ribbon icon sizes; other sizes scale
+# the 32 px values.
+TILE_SPECS = {
+    32: (3, 3),
+    16: (1.5, 1),
+}
+
+
+def tile(size: int, tile_color=TILE, glyph_color=BLUE) -> Image.Image:
+    """The glyph on a full-bleed rounded tile, `size` px square, RGBA with transparent
+    corners. Supersampled and box-filtered down, so the edges anti-alias (as gantt-it's
+    icons)."""
+    radius, inset = TILE_SPECS.get(size, (3 * size / 32, 3 * size / 32))
+    s = SUPERSAMPLE
+    big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(big)
+    draw.rounded_rectangle((0, 0, size * s - 1, size * s - 1), radius=radius * s, fill=tile_color)
+    draw_splash(draw, (inset * s, inset * s, (size - inset) * s, (size - inset) * s), glyph_color)
+    return big.reduce(s)
