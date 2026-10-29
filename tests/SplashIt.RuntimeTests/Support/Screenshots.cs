@@ -86,6 +86,26 @@ public static class Screenshots
         return path;
     }
 
+    /// <summary>
+    /// <paramref name="bitmap"/> enlarged <paramref name="factor"/> times, each pixel a block
+    /// (nearest neighbour), so thin bars stay sharp: the "2x" zoomed captures.
+    /// </summary>
+    public static BitmapSource Zoom(BitmapSource bitmap, int factor)
+    {
+        var source = bitmap.Format == PixelFormats.Pbgra32 ? bitmap : new FormatConvertedBitmap(bitmap, PixelFormats.Pbgra32, null, 0);
+        int w = source.PixelWidth, h = source.PixelHeight, stride = w * 4;
+        var pixels = new byte[stride * h];
+        source.CopyPixels(pixels, stride, 0);
+        int zw = w * factor, zh = h * factor, zstride = zw * 4;
+        var zoomed = new byte[zstride * zh];
+        for (var y = 0; y < zh; y++)
+            for (var x = 0; x < zw; x++)
+                Buffer.BlockCopy(pixels, (y / factor) * stride + (x / factor) * 4, zoomed, y * zstride + x * 4, 4);
+        var result = BitmapSource.Create(zw, zh, 96, 96, PixelFormats.Pbgra32, null, zoomed, zstride);
+        result.Freeze();
+        return result;
+    }
+
     /// <summary>The number of distinct pixel values in <paramref name="bitmap"/> (a blank image has 1).</summary>
     public static int DistinctPixels(BitmapSource bitmap)
     {

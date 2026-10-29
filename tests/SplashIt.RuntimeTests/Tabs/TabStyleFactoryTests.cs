@@ -218,7 +218,7 @@ public class TabStyleFactoryTests
     [InlineData(1, 100)]
     [InlineData(3, 100)]
     [InlineData(6, 30)]
-    public void FamilyBar_IsOnlyALeftBar_OfTheWidthAndOpacity(int width, int opacity)
+    public void FamilyMarks_AreTheSideBarOfTheWidth_AndTheFixedTopBar_AtTheBarOpacity(int width, int opacity)
     {
         Screenshots.RunSta(() =>
         {
@@ -232,9 +232,53 @@ public class TabStyleFactoryTests
             var bar = (TabDecorationSpec)setter.Value;
             Assert.Equal(width, bar.LeftBarWidth);
             Assert.Equal(Argb(Magenta, opacity), Solid(bar.LeftBar!));
-            Assert.Null(bar.TopAccent);
+            // #27: the top bar, 2 px whatever the side bar's width, 90 % of the tab, same color and opacity.
+            Assert.Equal(Argb(Magenta, opacity), Solid(bar.TopAccent!));
+            Assert.Equal(2, bar.TopAccentHeight);
+            Assert.Equal(0.9, bar.TopAccentWidth);
+            Assert.Equal(0, bar.TopAccentFade);
+            Assert.Null(bar.TopAccentFadeBrush);
         });
     }
+
+    /// <summary>#27, option A is the default; the other options the FnB saw differ only in the shape's numbers.</summary>
+    [Fact]
+    public void FamilyTopBar_DefaultIsOptionA_AndTheShapeIsAParameter()
+    {
+        Screenshots.RunSta(() =>
+        {
+            Assert.Equal(new FamilyTopBarShape(2, 0.9, 1, 0, false), FamilyTopBarShape.Default);
+            Assert.Equal(FamilyTopBarShape.Default, new TabStyleFactory().FamilyTopBar);
+
+            var matched = new TabStyleFactory(new FamilyTopBarShape(2, 0.9, MatchSideBar: true));
+            var spec = SetterValue<TabDecorationSpec>(matched.Create(Base(), TabTreatment.FamilyBar(Magenta, 5, 100), null, UiTheme.Light).Setters, TabDecoration.DecorationProperty);
+            Assert.Equal(5, spec.TopAccentHeight);
+
+            var light = new TabStyleFactory(new FamilyTopBarShape(2, 0.9, OpacityShare: 0.6));
+            spec = SetterValue<TabDecorationSpec>(light.Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 50), null, UiTheme.Light).Setters, TabDecoration.DecorationProperty);
+            Assert.Equal(Argb(Magenta, 50), Solid(spec.LeftBar!));
+            Assert.Equal(Argb(Magenta, 0.3), Solid(spec.TopAccent!));
+
+            var faded = new TabStyleFactory(new FamilyTopBarShape(2, 0.9, Fade: 0.15));
+            spec = SetterValue<TabDecorationSpec>(faded.Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 100), null, UiTheme.Light).Setters, TabDecoration.DecorationProperty);
+            var fade = Assert.IsType<LinearGradientBrush>(spec.TopAccentFadeBrush);
+            Assert.True(fade.IsFrozen);
+            Assert.Equal(Argb(Magenta, 100), fade.GradientStops[0].Color);
+            Assert.Equal(0, fade.GradientStops[1].Color.A);
+        });
+    }
+
+    /// <summary>#27: the top bar's length is the share of the width, rounded half away from zero.</summary>
+    [Theory]
+    [InlineData(100, 0.9, 90)]
+    [InlineData(155, 0.9, 140)]   // 139.5 → 140
+    [InlineData(151, 0.9, 136)]   // 135.9 → 136
+    [InlineData(57, 0.9, 51)]     // 51.3 → 51
+    [InlineData(80, 1.0, 80)]
+    [InlineData(80.5, 1.0, 80.5)] // full width is the width itself
+    [InlineData(0, 0.9, 0)]
+    public void TopBarWidth_IsTheShareOfTheTab_Rounded(double tabWidth, double share, double expected) =>
+        Assert.Equal(expected, TabDecorationAdorner.TopAccentWidthFor(tabWidth, share));
 
     [Fact]
     public void Styles_AreCachedPerOriginalAndTreatment()
@@ -333,6 +377,7 @@ public class TabStyleFactoryTests
             var bar = TabDecoration.FindAdorner(family);
             Assert.NotNull(bar);
             Assert.Equal(3, bar!.Spec.LeftBarWidth);
+            Assert.Equal(2, bar.Spec.TopAccentHeight); // #27: the L's top bar is in the same adorner
             Assert.Equal(Colors.Transparent.A, Solid(family.Background).A); // the family's own background is untouched
 
             // Selection moves: the trigger restyles at once, no new style needed.
