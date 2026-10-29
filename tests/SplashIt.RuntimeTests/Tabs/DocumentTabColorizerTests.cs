@@ -548,7 +548,7 @@ public class DocumentTabColorizerTests
             HostTabs.Layout(root);
 
             Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E"));
-            Assert.Contains(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E (Border"));
+            Assert.Contains(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E (rendered"));
             // The × is chosen against the dark strip: white, though the theme surface is white.
             var close = TabCloseGlyph.FindButton(rig.Tab(0))!;
             Assert.Equal(Colors.White, ((SolidColorBrush)close.Foreground).Color);

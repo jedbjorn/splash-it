@@ -301,7 +301,8 @@ public class ProjectFillShapeTests
             var behind = TabBackdrop.Behind(selected);
             Assert.NotNull(behind);
             Assert.Equal(HostTabs.Well(theme), behind!.Value.Color);
-            Assert.StartsWith("Border", behind.Value.Source);
+            Assert.StartsWith("rendered", behind.Value.Source); // sampled from what the window draws
+            Assert.Equal(HostTabs.Well(theme), TabBackdrop.Rendered(selected)!.Value.Color);
             Assert.Equal(HostTabs.Well(theme), TabBackdrop.Resolve(selected, selected.Background, theme).Color);
         });
     }
