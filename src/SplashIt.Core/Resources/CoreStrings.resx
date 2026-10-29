@@ -50,6 +50,12 @@
     <value>The file is not valid JSON ({0}).</value>
     <comment>{0} the parser's message.</comment>
   </data>
+  <data name="Import_Empty" xml:space="preserve">
+    <value>The file is empty.</value>
+  </data>
+  <data name="Import_FileNotFound" xml:space="preserve">
+    <value>The file does not exist.</value>
+  </data>
   <data name="Import_NotObject" xml:space="preserve">
     <value>The file does not hold a settings object.</value>
   </data>

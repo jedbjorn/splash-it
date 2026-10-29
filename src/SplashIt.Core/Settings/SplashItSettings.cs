@@ -76,7 +76,13 @@ public sealed record SplashItSettings
     /// unreadable or corrupt file gives <see cref="Default"/> (enabled), and
     /// <paramref name="log"/> says why. Values out of range are clamped to the
     /// nearest valid value, bad colors are dropped, and a missing or emptied list
-    /// falls back to its default list, each logged.
+    /// falls back to its default list, each logged. The file is opened with
+    /// <c>FileShare.ReadWrite | FileShare.Delete</c>, so reading never blocks a Save.
+    /// <para>
+    /// A file with a newer <c>schemaVersion</c> is read for the fields this version
+    /// knows and comes back as schema 1, so the next <see cref="Write"/> rewrites it as
+    /// schema 1 and drops the fields this version does not know. Known and accepted for v1.
+    /// </para>
     /// </summary>
     public static SplashItSettings Read(string path, Action<string>? log = null)
     {
@@ -88,11 +94,11 @@ public sealed record SplashItSettings
                 log?.Invoke("settings: no settings file; using defaults.");
                 return Default;
             }
-            json = File.ReadAllText(path);
+            json = AtomicFile.ReadAllText(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException or ArgumentException)
         {
-            log?.Invoke($"settings: the settings file could not be read ({ex.GetType().Name}); using defaults.");
+            log?.Invoke(FormattableString.Invariant($"settings: the settings file could not be read ({ex.GetType().Name}); using defaults."));
             return Default;
         }
         return FromJson(json, log);
@@ -106,12 +112,16 @@ public sealed record SplashItSettings
     /// Writes these settings to <paramref name="path"/> atomically (a temp file in the
     /// same folder, then a replace), creating the folder if needed. Invalid settings
     /// are refused with <see cref="InvalidOperationException"/> and nothing is written.
+    /// On Windows a replace refused because another process holds the file open is
+    /// retried briefly, each retry logged to <paramref name="log"/>; if it still fails,
+    /// the <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/>
+    /// surfaces and the previous file is kept.
     /// </summary>
-    public void Write(string path)
+    public void Write(string path, Action<string>? log = null)
     {
         var errors = Validate();
         if (errors.Count > 0) throw new InvalidOperationException(string.Join(" ", errors));
-        AtomicFile.WriteAllText(path, ToJson());
+        AtomicFile.WriteAllText(path, ToJson(), log);
     }
 
     /// <summary>The settings file text: indented JSON with camelCase names.</summary>

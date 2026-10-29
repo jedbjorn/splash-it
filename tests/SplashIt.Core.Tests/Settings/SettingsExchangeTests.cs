@@ -161,6 +161,11 @@ public sealed class SettingsExchangeTests : IDisposable
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
+    [InlineData(null)]
+    public void Import_Empty_IsRejected(string? json) =>
+        Assert.Equal(["The file is empty."], SettingsExchange.Import(json, SplashItSettings.Default).Errors);
+
+    [Theory]
     [InlineData("{ \"format\": ")]
     [InlineData("not json at all")]
     public void Import_NotJson_IsRejected(string json)
@@ -235,6 +240,36 @@ public sealed class SettingsExchangeTests : IDisposable
     }
 
     [Fact]
+    public void Import_EscapedLoneSurrogateColor_IsABadColor_NotThrown()
+    {
+        // "\ud800" is legal JSON, but JsonElement.GetString() throws on it.
+        var result = SettingsExchange.Import(ExportWith("familyColors", """["#00FF00", "\ud800"]"""), SplashItSettings.Default);
+        Assert.False(result.Succeeded);
+        Assert.Equal(["Family colors, color 2: \"\\ud800\" is not a #RRGGBB color."], result.Errors);
+    }
+
+    [Fact]
+    public void Import_EscapedLoneSurrogateFormat_IsTheWrongFormat_NotThrown()
+    {
+        var result = SettingsExchange.Import(ExportWith("format", "\"\\ud800\""), SplashItSettings.Default);
+        Assert.Equal(["This is not a Splash-It settings export: \"format\" must be \"splash-it-settings\"."], result.Errors);
+    }
+
+    [Fact]
+    public void ImportFile_SettingsWithAnEscapedLoneSurrogate_ListsErrors_NotThrown()
+    {
+        var path = _temp.File("broken.json");
+        File.WriteAllText(path, """{ "format": "\udc00", "schemaVersion": 1, "projectColors": ["\ud800"] }""");
+
+        var result = SettingsExchange.ImportFile(path, SplashItSettings.Default);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("This is not a Splash-It settings export: \"format\" must be \"splash-it-settings\".", result.Errors);
+        Assert.Contains("Project colors, color 1: \"\\ud800\" is not a #RRGGBB color.", result.Errors);
+        Assert.Contains("The file has no \"familyColors\".", result.Errors);
+    }
+
+    [Fact]
     public void Import_ThirteenColors_IsRejected()
     {
         var thirteen = "[" + string.Join(",", Enumerable.Range(0, 13).Select(i => $"\"#0000{i:X2}\"")) + "]";
@@ -293,8 +328,7 @@ public sealed class SettingsExchangeTests : IDisposable
     {
         var result = SettingsExchange.ImportFile(_temp.File("nope.json"), SplashItSettings.Default);
         Assert.False(result.Succeeded);
-        Assert.Single(result.Errors);
-        Assert.StartsWith("The file could not be read", result.Errors[0]);
+        Assert.Equal(["The file does not exist."], result.Errors);
     }
 
     [Fact]
