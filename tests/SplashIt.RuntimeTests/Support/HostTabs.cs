@@ -37,7 +37,7 @@ public static class HostTabs
     /// </para>
     /// </summary>
     public static Style RevitLikeStyle(UiTheme theme, double closeWidth = 16, double closeRightInset = 1,
-        string closeName = "mDocumentCloseButton")
+        string closeName = "mDocumentCloseButton", string unselectedBackground = "#00FFFFFF")
     {
         var dark = theme == UiTheme.Dark;
         var text = dark ? "#FFF5F5F5" : "#FF3C3C3C";
@@ -47,7 +47,7 @@ public static class HostTabs
             <Style xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                    TargetType="TabItem">
-              <Setter Property="Background" Value="#00FFFFFF" />
+              <Setter Property="Background" Value="{{unselectedBackground}}" />
               <Setter Property="Foreground" Value="{{text}}" />
               <Setter Property="BorderBrush" Value="#00FFFFFF" />
               <Setter Property="FontFamily" Value="Segoe UI" />
