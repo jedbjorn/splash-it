@@ -596,7 +596,7 @@ public sealed class SettingsStoreTests : IDisposable
                     using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                     using (var streamReader = new StreamReader(stream))
                         text = streamReader.ReadToEnd();
-                    reads++;
+                    Interlocked.Increment(ref reads);
                     var log = new List<string>();
                     var s = SplashItSettings.FromJson(text, log.Add);
                     if (log.Count > 0 || (s != a && s != b)) Interlocked.Increment(ref bad);
@@ -611,13 +611,21 @@ public sealed class SettingsStoreTests : IDisposable
             }
         });
 
+        // Start writing only once the reader is reading: under a busy test run the thread
+        // pool can start the reader task after all 200 writes are done.
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref reads) == 0 && waited.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(1);
+        var readsBefore = Volatile.Read(ref reads);
+        Assert.True(readsBefore > 0, "the reader never started");
+
         // Every write must succeed (on Windows too, with the reader holding the file).
         for (var i = 0; i < 200; i++) (i % 2 == 0 ? b : a).Write(path);
+        var readsDuring = Volatile.Read(ref reads) - readsBefore;
         stop.Cancel();
         await reader;
 
         Assert.Equal(0, bad);
-        Assert.True(reads > 0);
+        Assert.True(readsDuring > 0, "no read overlapped the writes");
     }
 
     // --------------------------------------------------------------- misc
