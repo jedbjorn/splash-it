@@ -37,6 +37,9 @@ public sealed class FakeSurface : ITabSurface
     /// </summary>
     public Func<object, bool>? IsKnown { get; set; }
 
+    /// <summary>When set, a tab with no bound key resolves by its title through this (SC-004: titles as Revit shows them).</summary>
+    public Func<string, object?>? ResolveTitle { get; set; }
+
     public void Bind(TabItem tab, object key) => _keys[tab] = key;
 
     public void Unbind(TabItem tab) => _keys.Remove(tab);
@@ -51,7 +54,7 @@ public sealed class FakeSurface : ITabSurface
         for (var i = 0; i < items.Count; i++)
         {
             var tab = (TabItem)items[i]!;
-            _keys.TryGetValue(tab, out var key);
+            if (!_keys.TryGetValue(tab, out var key) && ResolveTitle is { } resolve) key = resolve((string)tab.Header);
             if (key is not null && IsKnown is { } known && !known(key)) key = null;
             into.Add(new SurfaceTab(tab, (string)tab.Header, tab.IsSelected, key));
         }

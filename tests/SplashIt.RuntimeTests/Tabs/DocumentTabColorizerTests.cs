@@ -835,4 +835,47 @@ public class DocumentTabColorizerTests
             Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), ((SolidColorBrush)tab.Background).Color);
         });
     }
+
+    /// <summary>
+    /// SC-004, the rc.1 root cause: an Edit Family document (announced, classified Family, no
+    /// path, title "Support - Steel Bar") whose tab reads "Support - Steel Bar.rfa - 3D View: View 1"
+    /// resolves through its title forms and gets the bar, beside a project titled "Support".
+    /// </summary>
+    [Fact]
+    public void AnEditFamilyTab_WithTheRfaExtension_ResolvesByTitle_AndGetsTheBar()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            var support = new DocKey("Support");
+            var steelBar = new DocKey("Support - Steel Bar");
+            var forms = new List<(object Key, IReadOnlyList<string> Forms)>
+            {
+                (support, SplashIt.Core.Files.TabTitleMatcher.TitleForms("Support", @"C:\Models\Support.rvt", isFamilyDocument: false)),
+                (steelBar, SplashIt.Core.Files.TabTitleMatcher.TitleForms("Support - Steel Bar", "", isFamilyDocument: true)),
+            };
+            rig.Surface.ResolveTitle = title =>
+            {
+                var match = SplashIt.Core.Files.TabTitleMatcher.Find(title, forms.Select(f => f.Forms).ToArray());
+                return match.IsMatch ? forms[match.Index].Key : null;
+            };
+            rig.Documents.Add(support, FileKind.Project);
+            var supportTab = new TabItem { Header = "Support - Floor Plan: L1", Style = rig.Original };
+            rig.Strip.Items.Add(supportTab);
+            rig.Colorizer.Start();
+
+            rig.Documents.Add(steelBar, FileKind.Family); // DocumentCreated, as in the rc.1 log
+            var tab = new TabItem { Header = "Support - Steel Bar.rfa - 3D View: View 1", Style = rig.Original };
+            rig.Strip.Items.Add(tab);
+            rig.Events.Sink!.OnDocumentOpened(steelBar);
+
+            var bar = TabDecoration.GetDecoration(tab);
+            Assert.NotNull(bar?.LeftBar);
+            Assert.Equal(Opaque(SplashItDefaults.FamilyColors[1]), ((SolidColorBrush)bar!.LeftBar!).Color); // F1 holds colour 1
+            Assert.True(TabStyleFactory.IsDerived(supportTab.Style));
+            Assert.Null(TabDecoration.GetDecoration(supportTab)?.LeftBar);                                // the project keeps its fill
+            Assert.Contains(rig.Log.Lines, l => l.Contains("1 unresolved")); // only the rig's own unresolvable tab
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("2 unresolved"));
+        });
+    }
 }
