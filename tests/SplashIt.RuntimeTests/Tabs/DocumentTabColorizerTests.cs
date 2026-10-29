@@ -561,6 +561,9 @@ public class DocumentTabColorizerTests
             // A theme change finds it again.
             rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#F0F0F0"));
             rig.Events.Sink!.OnThemeChanged(UiTheme.Light);
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on #F0F0F0")); // the old theme is still drawn: not sampled yet
+            HostTabs.Layout(root);
+            rig.Events.Layout(); // the next layout pass samples the new theme
             HostTabs.Layout(root);
             Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on #F0F0F0"));
             Assert.Equal(Colors.Black, ((SolidColorBrush)TabCloseGlyph.FindButton(rig.Tab(0))!.Foreground).Color);

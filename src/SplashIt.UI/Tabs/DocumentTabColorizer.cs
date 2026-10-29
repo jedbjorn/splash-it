@@ -94,6 +94,9 @@ public sealed class DocumentTabColorizer
     /// <summary>A project tab was styled while its pane was not laid out, so its backdrop is still to find.</summary>
     private bool _backdropPending;
 
+    /// <summary>After a theme change, until the next layout pass: the window still draws the old theme, so nothing is sampled.</summary>
+    private bool _backdropNeedsLayout;
+
     /// <summary>Passes repeated so far to find a backdrop (bounded by <see cref="MaxBackdropRetries"/>; reset with the cache).</summary>
     private int _backdropRetries;
 
@@ -400,6 +403,7 @@ public sealed class DocumentTabColorizer
         if (!_running) return;
         try
         {
+            _backdropNeedsLayout = false;
             Pass(force: false);
             _consecutiveFaults = 0;
         }
@@ -479,6 +483,7 @@ public sealed class DocumentTabColorizer
             RestoreAll();           // originals back on every tab...
             _backdrops.Clear();     // ...what is behind the tabs found again...
             _backdropRetries = 0;
+            _backdropNeedsLayout = true; // what is drawn is the old theme until the next layout
             _styles.ClearCache();   // ...styles rebuilt for the new backdrop...
             _signatureValid = false;
             Pass(force: true);      // ...originals recaptured, contrast recomputed, reapplied.
@@ -709,15 +714,15 @@ public sealed class DocumentTabColorizer
         // Best: what the window actually draws behind the tabs (a rendered sample). No tab may offer a
         // point to sample yet (the first tab is selected and not styled): use the tree's answer for now,
         // uncached, and look again on the next passes (bounded).
-        var rendered = TabBackdrop.Rendered(tab);
-        if (rendered is null && _backdropRetries < MaxBackdropRetries)
+        var rendered = _backdropNeedsLayout ? null : TabBackdrop.Rendered(tab);
+        if ((rendered is null || _backdropNeedsLayout) && _backdropRetries < MaxBackdropRetries)
         {
             _backdropPending = true;
-            return TabBackdrop.Behind(tab) is { } guess ? Frozen(guess.Color) : state.OriginalBackground;
+            return TabBackdrop.FromTree(tab) is { } guess ? Frozen(guess.Color) : state.OriginalBackground;
         }
 
         Brush? brush = null;
-        if ((rendered ?? TabBackdrop.Behind(tab)) is { } behind)
+        if ((rendered ?? TabBackdrop.FromTree(tab)) is { } behind)
         {
             var c = behind.Color;
             brush = Frozen(c);

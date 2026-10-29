@@ -49,6 +49,22 @@ public static class TabBackdrop
     }
 
     /// <summary>
+    /// What the tree says is behind <paramref name="tab"/>, from properties alone (no rendering): the
+    /// painted-layer search, else the ancestor walk. Current even before the next layout pass.
+    /// </summary>
+    public static (Rgb Color, string Source)? FromTree(DependencyObject tab)
+    {
+        try
+        {
+            return PaintedBehind(tab, null) ?? AncestorBehind(tab);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// What is actually drawn behind the tabs of <paramref name="tab"/>'s pane, sampled from the
     /// rendered window at a point where a tab shows only what is behind it: on a project tab carrying
     /// a Splash-It fill, the 1 px just before its close button (the fill has ended, #30); on a tab
