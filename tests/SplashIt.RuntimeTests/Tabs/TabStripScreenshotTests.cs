@@ -79,6 +79,56 @@ public class TabStripScreenshotTests
                     && Math.Abs(expected.B - actual.B) <= tolerance, $"expected {expected}, got {actual}");
     }
 
+    /// <summary>
+    /// #30: the project fill fades over a fixed 24 px ending 2 px before the close ×, and the selected
+    /// tab's line takes the same shape. Rows at fill 100 % and 60 % (unselected 50 %): two Tower tabs
+    /// (blue, the first selected), a Bridge tab (orange), a family tab and a native .rte tab; then a
+    /// long view name (about 350 px), selected and not. Saved at 1x and at 2x.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void ProjectFill_FadesBeforeTheClose(UiTheme theme)
+    {
+        Screenshots.RunSta(() =>
+        {
+            var factory = new TabStyleFactory();
+            var original = HostTabs.RevitLikeStyle(theme);
+            var rows = new List<UIElement>();
+            var strips = new List<TabControl>();
+            foreach (var fill in new[] { 100, 60 })
+            {
+                var strip = Styled(factory, original, theme, selected: 0,
+                    ("Tower - Floor Plan: L1", TabTreatment.ProjectFill(P1, fill)),
+                    ("Tower - Sheet: A101", TabTreatment.ProjectFill(P1, fill)),
+                    ("Bridge - Floor Plan: L1", TabTreatment.ProjectFill(P2, fill)),
+                    ("Door - Floor Plan: Ref. Level", TabTreatment.FamilyBar(F1, 3, 100)),
+                    ("Template - 3D View: {3D}", null));
+                rows.Add(Label($"Fill {fill} %, unselected 50 %: solid, then a 24 px fade ending 2 px before the × (1st tab selected)", theme));
+                rows.Add(strip);
+                strips.Add(strip);
+            }
+            const string longTitle = "Tower - Floor Plan: Level 01 - Architectural Coordination Model";
+            var longStrip = Styled(factory, original, theme, selected: 0,
+                (longTitle, TabTreatment.ProjectFill(P1, 100)),
+                ("Bridge - " + longTitle[8..], TabTreatment.ProjectFill(P2, 100)));
+            rows.Add(Label("A long view name (about 350 px), selected and not: the fade is the same 24 px", theme));
+            rows.Add(longStrip);
+            var (bitmap, root) = Shoot("tabs-project-fill", theme, rows.ToArray());
+            Screenshots.Save(Screenshots.Zoom(bitmap, 2), "tabs-project-fill-" + Suffix(theme) + "-2x");
+
+            var well = HostTabs.Well(theme);
+            var shape = ProjectFillShape.Default;
+            foreach (var tab in strips.SelectMany(s => s.Items.Cast<TabItem>().Take(3)).Concat(longStrip.Items.Cast<TabItem>()))
+            {
+                var anchor = shape.AnchorFor(tab);
+                Assert.Equal(tab.ActualWidth - shape.CloseSlot - shape.Gap, anchor);
+                Near(HostTabs.ColorOf(well), PixelIn(bitmap, root, tab, anchor + 0.5, 10));      // the strip from the anchor
+                Assert.NotEqual(HostTabs.ColorOf(well), PixelIn(bitmap, root, tab, anchor - shape.FadeWidth - 1.5, 10)); // the fill before the fade
+            }
+            Assert.InRange(HostTabs.Tab(longStrip, 0).ActualWidth, 330, 400);
+        });
+    }
+
     [Theory]
     [MemberData(nameof(Themes))]
     public void TwoProjects_OneSelected(UiTheme theme)

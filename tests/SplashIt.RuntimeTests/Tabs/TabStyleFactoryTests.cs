@@ -26,6 +26,17 @@ public class TabStyleFactoryTests
 
     private static Color Solid(object brush) => ((SolidColorBrush)brush).Color;
 
+    /// <summary>
+    /// A project fill setter's color at its opacity (#30: the value is a binding whose converter
+    /// draws that color, solid up to the fade).
+    /// </summary>
+    private static Color Fill(SetterBaseCollection setters)
+    {
+        var value = setters.OfType<Setter>().Single(s => s.Property == Control.BackgroundProperty).Value;
+        var converter = Assert.IsType<ProjectFillConverter>(Assert.IsType<System.Windows.Data.MultiBinding>(value).Converter);
+        return Argb(converter.Color, converter.Opacity);
+    }
+
     private static Color Argb(Rgb c, int opacityPercent) => Argb(c, opacityPercent / 100.0);
 
     private static Color Argb(Rgb c, double opacity) =>
@@ -69,11 +80,11 @@ public class TabStyleFactoryTests
             var style = new TabStyleFactory().Create(Base(), treatment, null, UiTheme.Light);
 
             var unselected = Argb(Blue, opacity / 100.0 * share / 100.0);
-            Assert.Equal(unselected, Solid(SetterValue<Brush>(style.Setters, Control.BackgroundProperty)));
+            Assert.Equal(unselected, Fill(style.Setters));
             var normal = NormalTrigger(style);
             Assert.Equal(TabItem.IsSelectedProperty, normal.Property);
-            Assert.Equal(unselected, Solid(SetterValue<Brush>(normal.Setters, Control.BackgroundProperty)));
-            Assert.Equal(Argb(Blue, opacity), Solid(SetterValue<Brush>(SelectedTrigger(style).Setters, Control.BackgroundProperty)));
+            Assert.Equal(unselected, Fill(normal.Setters));
+            Assert.Equal(Argb(Blue, opacity), Fill(SelectedTrigger(style).Setters));
             Assert.Equal(share, treatment.UnselectedPercent);
         });
     }
@@ -156,16 +167,26 @@ public class TabStyleFactoryTests
         });
     }
 
-    /// <summary>Review M1: the close glyph follows the text color in every state, never Revit's grey.</summary>
-    [Fact]
-    public void ProjectFill_CloseGlyph_FollowsTheTextInEveryState()
+    /// <summary>
+    /// Review M1 and #30: the close glyph is never Revit's grey; the fill ends before it, so in every
+    /// state it is black or white against the strip it sits on (the tab's own background, else the
+    /// theme surface), not the fill: on the dark theme a full orange tab has black text and a white ×.
+    /// </summary>
+    [Theory]
+    [InlineData(UiTheme.Light, "#000000", "#000000")]
+    [InlineData(UiTheme.Dark, "#000000", "#FFFFFF")]
+    public void ProjectFill_CloseGlyph_IsChosenAgainstTheStrip_InEveryState(UiTheme theme, string text, string glyph)
     {
         Screenshots.RunSta(() =>
         {
-            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Rgb.Parse("#F28E2B"), 100), null, UiTheme.Light);
-            foreach (var setters in new[] { style.Setters, NormalTrigger(style).Setters, style.Triggers.OfType<MultiTrigger>().Single().Setters, SelectedTrigger(style).Setters })
-                Assert.Same(SetterValue<Brush>(setters, Control.ForegroundProperty), SetterValue<Brush>(setters, TabCloseGlyph.ForegroundProperty));
-            Assert.Equal(Colors.Black, Solid(SetterValue<Brush>(SelectedTrigger(style).Setters, TabCloseGlyph.ForegroundProperty)));
+            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Rgb.Parse("#F28E2B"), 100), null, theme);
+            var states = new[] { style.Setters, NormalTrigger(style).Setters, style.Triggers.OfType<MultiTrigger>().Single().Setters, SelectedTrigger(style).Setters };
+            var first = SetterValue<Brush>(style.Setters, TabCloseGlyph.ForegroundProperty);
+            foreach (var setters in states)
+                Assert.Same(first, SetterValue<Brush>(setters, TabCloseGlyph.ForegroundProperty));
+            Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(theme.Surface())), Solid(first));
+            Assert.Equal(HostTabs.ColorOf(Rgb.Parse(glyph)), Solid(first));
+            Assert.Equal(HostTabs.ColorOf(Rgb.Parse(text)), Solid(SetterValue<Brush>(SelectedTrigger(style).Setters, Control.ForegroundProperty)));
 
             var bar = new TabStyleFactory().Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 100), null, UiTheme.Light);
             Assert.DoesNotContain(bar.Setters.OfType<Setter>(), s => s.Property == TabCloseGlyph.ForegroundProperty); // families stay native
@@ -183,7 +204,7 @@ public class TabStyleFactoryTests
             Assert.Contains(hover.Conditions, c => c.Property == UIElement.IsMouseOverProperty && Equals(c.Value, true));
             Assert.Contains(hover.Conditions, c => c.Property == TabItem.IsSelectedProperty && Equals(c.Value, false));
             var lighter = ColorMath.Lighten(Blue, TabStyleFactory.HoverLighten);
-            Assert.Equal(Argb(lighter, 0.3), Solid(SetterValue<Brush>(hover.Setters, Control.BackgroundProperty))); // 50 % of 60 %
+            Assert.Equal(Argb(lighter, 0.3), Fill(hover.Setters)); // 50 % of 60 %
             Assert.True(ColorMath.RelativeLuminance(lighter) > ColorMath.RelativeLuminance(Blue));
             Assert.Equal(
                 HostTabs.ColorOf(ColorMath.TextColorFor(lighter, 0.3, ColorMath.White)),
@@ -200,7 +221,7 @@ public class TabStyleFactoryTests
 
             var selected = SelectedTrigger(style);
             Assert.Equal(TabItem.IsSelectedProperty, selected.Property);
-            Assert.Equal(Argb(Yellow, 30), Solid(SetterValue<Brush>(selected.Setters, Control.BackgroundProperty)));
+            Assert.Equal(Argb(Yellow, 30), Fill(selected.Setters));
             Assert.Equal(Colors.White, Solid(SetterValue<Brush>(selected.Setters, Control.ForegroundProperty))); // 30 % yellow over #2A2F37
 
             var accent = SetterValue<TabDecorationSpec>(selected.Setters, TabDecoration.DecorationProperty);
@@ -208,6 +229,8 @@ public class TabStyleFactoryTests
             Assert.Equal(TabStyleFactory.AccentHeight, accent.TopAccentHeight);
             Assert.Equal(3, accent.TopAccentHeight);
             Assert.Equal(HostTabs.ColorOf(ColorMath.Darken(Yellow, TabStyleFactory.AccentDarken)), Solid(accent.TopAccent!));
+            Assert.Equal(ProjectFillShape.Default, accent.TopAccentAnchor); // #30: the line takes the fill's shape
+            Assert.IsType<LinearGradientBrush>(accent.TopAccentFadeBrush);
 
             // Selected comes last, so it wins over the hover trigger when both apply.
             Assert.Same(selected, style.Triggers[^1]);
@@ -377,15 +400,16 @@ public class TabStyleFactoryTests
             family.Style = factory.Create(original, TabTreatment.FamilyBar(Magenta, 3, 100), family.Background, UiTheme.Light);
             HostTabs.Layout(root);
 
-            Assert.Equal(Argb(Blue, 20), Solid(project.Background));          // unselected: 50 % of the 40 % fill
-            Assert.Equal(Argb(Blue, 40), Solid(selectedProject.Background));  // beats the original's white
+            Assert.Equal(Argb(Blue, 20), HostTabs.FillOf(project.Background));          // unselected: 50 % of the 40 % fill
+            Assert.Equal(Argb(Blue, 40), HostTabs.FillOf(selectedProject.Background));  // beats the original's white
+            Assert.IsType<LinearGradientBrush>(selectedProject.Background);              // #30: it fades before the ×
             Assert.Equal(Colors.Black, Solid(project.Foreground));
             Assert.Null(TabDecoration.FindAdorner(project));
             var accent = TabDecoration.FindAdorner(selectedProject);
             Assert.NotNull(accent);
             Assert.Equal(3, accent!.Spec.TopAccentHeight);
 
-            // The close button is recolored to the text color; the family's keeps its grey.
+            // The close button is recolored (black, against the light strip); the family's keeps its grey.
             var close = TabCloseGlyph.FindButton(selectedProject)!;
             Assert.Equal(Colors.Black, Solid(close.Foreground));
             Assert.Same(close, TabCloseGlyph.FindRecolored(selectedProject));
@@ -401,7 +425,7 @@ public class TabStyleFactoryTests
             HostTabs.Layout(root);
             Assert.NotNull(TabDecoration.FindAdorner(project));
             Assert.Null(TabDecoration.FindAdorner(selectedProject));
-            Assert.Equal(Argb(Blue, 20), Solid(selectedProject.Background));
+            Assert.Equal(Argb(Blue, 20), HostTabs.FillOf(selectedProject.Background));
 
             foreach (var tab in new[] { project, selectedProject, family }) tab.Style = original;
             HostTabs.Layout(root);
