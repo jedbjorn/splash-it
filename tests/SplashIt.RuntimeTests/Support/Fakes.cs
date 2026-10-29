@@ -19,6 +19,9 @@ public sealed class FakeHost : ISettingsHost
 
     public Exception? ApplyThrows { get; set; }
 
+    /// <summary>Runs inside Apply (e.g. a second Save arriving while the first is still applying).</summary>
+    public Action? OnApply { get; set; }
+
     public List<SplashItSettings> Applied { get; } = [];
 
     /// <summary>The settings file's text at the moment Apply ran (null when it did not exist).</summary>
@@ -30,6 +33,7 @@ public sealed class FakeHost : ISettingsHost
     {
         Applied.Add(settings);
         FileAtApply.Add(SettingsPath is not null && File.Exists(SettingsPath) ? File.ReadAllText(SettingsPath) : null);
+        OnApply?.Invoke();
         if (ApplyThrows is not null) throw ApplyThrows;
         if (StatusAfterApply is not null) Status = StatusAfterApply(settings);
     }
