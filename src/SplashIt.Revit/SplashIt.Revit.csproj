@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplashIt.Revit — the Revit add-in. TargetFramework comes from $(RevitVersion)
+    (set by the Configuration in Directory.Build.props): 2025 and 2026 →
+    net8.0-windows, 2027 → net10.0-windows. Builds on Linux/macOS via
+    EnableWindowsTargeting.
+
+    The Revit API comes from the Nice3point reference packages (versions in
+    Directory.Packages.props). ExcludeAssets=runtime keeps RevitAPI*.dll out of
+    the output: Revit supplies them at runtime.
+
+    It holds only the Revit-facing parts (App, commands, the tab surface, event
+    and theme adapters); the WPF engine and window live in SplashIt.UI, which
+    has no Revit references (spec #1, Project split).
+
+    Adapted from gantt-it src/GanttIt.Revit/GanttIt.Revit.csproj (gantt-it commit 1e27832).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>$(RevitTargetFramework)</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputType>Library</OutputType>
+    <RootNamespace>SplashIt.Revit</RootNamespace>
+    <AssemblyName>SplashIt.Revit</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplashIt.Core\SplashIt.Core.csproj" />
+    <!-- SplashIt.UI targets net8.0-windows;net10.0-windows: R25/R26 get its
+         net8.0-windows build, R27 its net10.0-windows build. -->
+    <ProjectReference Include="..\SplashIt.UI\SplashIt.UI.csproj" />
+  </ItemGroup>
+
+  <!-- The manifest ships alongside the DLL folder. Ribbon icons
+       (Resources\icons\*.png, loaded from disk next to the DLL) arrive with the App. -->
+  <ItemGroup>
+    <None Update="SplashIt.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

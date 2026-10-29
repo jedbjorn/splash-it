@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Splash-It — Revit add-in manifest.
+  Adapted from gantt-it src/GanttIt.Revit/GanttIt.addin (gantt-it commit 1e27832).
+
+  Dev deployment: copy the build output folder to
+  %AppData%\Autodesk\Revit\Addins\<year>\SplashIt\ and this file next to that
+  folder, in Addins\<year>\.
+
+  ClientId is Splash-It's permanent application id. NEVER change it once
+  shipped: Revit identifies the add-in across upgrades by it, and rst-c's
+  chained install depends on it.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Splash-It</Name>
+    <Assembly>SplashIt\SplashIt.Revit.dll</Assembly>
+    <FullClassName>SplashIt.Revit.App</FullClassName>
+    <ClientId>0b1cc712-e936-4da1-9680-2d9a95f88271</ClientId>
+    <VendorId>DSOS</VendorId>
+    <VendorDescription>Designs/OS</VendorDescription>
+  </AddIn>
+</RevitAddIns>

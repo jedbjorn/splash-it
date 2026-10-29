@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    Central package versions. Adapted from gantt-it Directory.Packages.props
+    (gantt-it commit 1e27832), with the 2025 versions from gantt-it's Revit 2025
+    work. Dependencies stay minimal (spec: Identity and layout): the BCL, the
+    Revit API reference packages and the test stack. No runtime NuGet
+    packages ship with the add-in. WiX is added with the installer.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- Revit API reference packages, one version per Revit major. Keyed off
+       $(RevitVersion) from Directory.Build.props, which is imported first. -->
+  <ItemGroup Condition="'$(RevitVersion)' == '2025'">
+    <PackageVersion Include="Nice3point.Revit.Api.RevitAPI"   Version="2025.4.60" />
+    <PackageVersion Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.4.60" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2026'">
+    <PackageVersion Include="Nice3point.Revit.Api.RevitAPI"   Version="2026.4.0" />
+    <PackageVersion Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.4.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RevitVersion)' == '2027'">
+    <PackageVersion Include="Nice3point.Revit.Api.RevitAPI"   Version="2027.0.10" />
+    <PackageVersion Include="Nice3point.Revit.Api.RevitAPIUI" Version="2027.0.10" />
+  </ItemGroup>
+
+  <!-- Test stack. -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk"    Version="17.14.1" />
+    <PackageVersion Include="xunit"                     Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+</Project>
