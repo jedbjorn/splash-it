@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SplashIt.Core user-facing strings (English only in v1, decision #8).
+  Each entry has a matching accessor in CoreStrings.cs; the Core test
+  CoreStringsTests checks that every accessor resolves.
+-->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="Field_ProjectColors" xml:space="preserve">
+    <value>Project colors</value>
+  </data>
+  <data name="Field_FamilyColors" xml:space="preserve">
+    <value>Family colors</value>
+  </data>
+  <data name="Field_ProjectFillOpacity" xml:space="preserve">
+    <value>Project fill opacity</value>
+  </data>
+  <data name="Field_FamilyBarWidth" xml:space="preserve">
+    <value>Family bar width</value>
+  </data>
+  <data name="Field_FamilyBarOpacity" xml:space="preserve">
+    <value>Family bar opacity</value>
+  </data>
+
+  <data name="Validation_ColorCount" xml:space="preserve">
+    <value>{0} must have from {1} to {2} colors; there are {3}.</value>
+    <comment>{0} field name, {1} minimum, {2} maximum, {3} actual count.</comment>
+  </data>
+  <data name="Validation_Range" xml:space="preserve">
+    <value>{0} must be from {1} to {2}; it is {3}.</value>
+    <comment>{0} field name, {1} minimum, {2} maximum, {3} actual value.</comment>
+  </data>
+  <data name="Validation_Schema" xml:space="preserve">
+    <value>Schema version {0} is not supported; this version of Splash-It uses schema version {1}.</value>
+  </data>
+
+  <data name="Import_NotJson" xml:space="preserve">
+    <value>The file is not valid JSON ({0}).</value>
+    <comment>{0} the parser's message.</comment>
+  </data>
+  <data name="Import_Empty" xml:space="preserve">
+    <value>The file is empty.</value>
+  </data>
+  <data name="Import_FileNotFound" xml:space="preserve">
+    <value>The file does not exist.</value>
+  </data>
+  <data name="Import_NotObject" xml:space="preserve">
+    <value>The file does not hold a settings object.</value>
+  </data>
+  <data name="Import_WrongFormat" xml:space="preserve">
+    <value>This is not a Splash-It settings export: "format" must be "splash-it-settings".</value>
+  </data>
+  <data name="Import_NoSchema" xml:space="preserve">
+    <value>The file has no whole-number "schemaVersion".</value>
+  </data>
+  <data name="Import_NewerSchema" xml:space="preserve">
+    <value>This file was exported by a newer version of Splash-It (schema version {0}); this version reads schema version {1}. Update Splash-It to import it.</value>
+  </data>
+  <data name="Import_OldSchema" xml:space="preserve">
+    <value>Schema version {0} is not supported.</value>
+  </data>
+  <data name="Import_Missing" xml:space="preserve">
+    <value>The file has no "{0}".</value>
+    <comment>{0} the JSON property name.</comment>
+  </data>
+  <data name="Import_NotWholeNumber" xml:space="preserve">
+    <value>{0} must be a whole number.</value>
+    <comment>{0} field name.</comment>
+  </data>
+  <data name="Import_NotColorList" xml:space="preserve">
+    <value>{0} must be a list of #RRGGBB colors.</value>
+    <comment>{0} field name.</comment>
+  </data>
+  <data name="Import_BadColor" xml:space="preserve">
+    <value>{0}, color {1}: {2} is not a #RRGGBB color.</value>
+    <comment>{0} field name, {1} 1-based position, {2} the value as written in the file.</comment>
+  </data>
+  <data name="Import_TooLarge" xml:space="preserve">
+    <value>The file is larger than {0} KB, too large for a settings export.</value>
+  </data>
+  <data name="Import_ReadFailed" xml:space="preserve">
+    <value>The file could not be read: {0}</value>
+  </data>
+</root>

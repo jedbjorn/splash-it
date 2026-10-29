@@ -1,0 +1,29 @@
+name: build
+
+# CI for every PR and push to main. Adapted from gantt-it
+# .github/workflows/build.yml (gantt-it commit 1e27832). This is the only
+# off-host Windows seat: the host has no .NET SDK (local builds run in the
+# dotnet/sdk Docker image, docs/DEVELOPING.md).
+#
+# Delegates to the reusable _build.yml so a release workflow can build exactly
+# the same pipeline: Core tests, the six configuration builds (Debug R25/R26/R27
+# upload the SplashIt-Debug-R25 / -R26 / -R27 add-in artifacts), and the
+# Windows runtime tests (SplashIt-screenshots). Every job is required.
+# Push/PR builds carry the dev version (0.0.0-dev).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml

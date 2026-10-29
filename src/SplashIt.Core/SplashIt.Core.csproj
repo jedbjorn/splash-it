@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplashIt.Core — pure managed logic shared by the Revit add-in and the WPF
+    settings window: settings and their defaults, export/import, file-kind
+    classification, color allocation and color math. No Revit and no WPF
+    references, no NuGet packages.
+    Adapted from gantt-it src/GanttIt.Core/GanttIt.Core.csproj (gantt-it commit 1e27832).
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>SplashIt.Core</RootNamespace>
+    <AssemblyName>SplashIt.Core</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SplashIt.Core.Tests" />
+  </ItemGroup>
+
+</Project>
