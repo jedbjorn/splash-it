@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using SplashIt.Revit.Tabs;
+using SplashIt.RuntimeTests.Support;
 using SplashIt.UI.Tabs;
 using Fake = SplashIt.RuntimeTests.Tabs.FakeAvalonDock;
 
@@ -27,9 +28,9 @@ namespace SplashIt.RuntimeTests.Tabs
         public void Finder_WrapsTheParentPane_AndReadsItThroughReflection()
         {
             var (model, documents) = Pane("A1 B1 A2", selected: 1);
-            var log = new List<string>();
+            var log = new ListLog();
 
-            var lookup = new AvalonDockPane.Finder(log.Add).Find(documents);
+            var lookup = new AvalonDockPane.Finder(log).Find(documents);
 
             Assert.True(lookup.IsAvailable);
             var pane = Assert.IsType<AvalonDockPane>(Assert.Single(lookup.Panes));
@@ -51,15 +52,15 @@ namespace SplashIt.RuntimeTests.Tabs
         {
             var (_, first) = Pane("A1");
             var (_, second) = Pane("B1");
-            var log = new List<string>();
-            var finder = new AvalonDockPane.Finder(log.Add);
+            var log = new ListLog();
+            var finder = new AvalonDockPane.Finder(log);
 
             finder.Find(first);
             finder.Find(second);
 
-            var line = Assert.Single(log);
+            var line = Assert.Single(log.Lines);
             var assembly = typeof(Fake.LayoutDocumentPane).Assembly.GetName();
-            Assert.StartsWith($"group tabs: LayoutDocumentPane from {assembly.Name} {assembly.Version} (file ", line);
+            Assert.StartsWith($"Info group tabs: LayoutDocumentPane from {assembly.Name} {assembly.Version} (file ", line);
             Assert.EndsWith("MoveChild found.", line);
         }
 
@@ -104,13 +105,15 @@ namespace SplashIt.RuntimeTests.Tabs
         {
             var pane = new Fake.Old.LayoutDocumentPane();
             var document = new Fake.LayoutDocument("A1") { Parent = pane };
-            var log = new List<string>();
+            var log = new ListLog();
 
-            var lookup = new AvalonDockPane.Finder(log.Add).Find([document]);
+            var lookup = new AvalonDockPane.Finder(log).Find([document]);
 
             Assert.False(lookup.IsAvailable);
             Assert.Equal("LayoutDocumentPane has no public MoveChild(int, int).", lookup.Reason);
-            Assert.EndsWith("MoveChild NOT found.", Assert.Single(log));
+            var line = Assert.Single(log.Lines);
+            Assert.StartsWith("Warn ", line);
+            Assert.EndsWith("MoveChild NOT found.", line);
         }
 
         [Fact]
@@ -176,17 +179,17 @@ namespace SplashIt.RuntimeTests.Tabs
         {
             var (left, l) = Pane("B1 A1 B2 A2", selected: 2);
             var (right, r) = Pane("A3 C1 A4", selected: 0);
-            var log = new List<string>();
+            var log = new ListLog();
 
-            var lookup = new AvalonDockPane.Finder(log.Add).Find(l.Concat(r));
-            var result = new TabGrouper(item => ((Fake.LayoutDocument)item).Title[..1], log.Add).Group(lookup.Panes);
+            var lookup = new AvalonDockPane.Finder(log).Find(l.Concat(r));
+            var result = new TabGrouper(item => ((Fake.LayoutDocument)item).Title[..1], log).Group(lookup.Panes);
 
             Assert.Equal(TabGroupOutcome.Grouped, result.Outcome);
             Assert.Equal(new[] { "B1", "B2", "A1", "A2" }, left.Children.Select(c => c.Title));
             Assert.Equal(new[] { "A3", "A4", "C1" }, right.Children.Select(c => c.Title));
             Assert.Same(l[2], left.Children[left.SelectedContentIndex]);
             Assert.Same(r[0], right.Children[right.SelectedContentIndex]);
-            Assert.Equal(2, log.Count); // the version once, then the result
+            Assert.Equal(2, log.Lines.Count); // the version once, then the result
         }
     }
 }

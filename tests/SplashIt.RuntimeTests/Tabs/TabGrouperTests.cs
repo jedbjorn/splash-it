@@ -1,4 +1,5 @@
 using SplashIt.Core.Tabs;
+using SplashIt.RuntimeTests.Support;
 using SplashIt.UI.Tabs;
 
 namespace SplashIt.RuntimeTests.Tabs;
@@ -99,8 +100,8 @@ public class TabGrouperTests
 
     private static (TabGrouper Grouper, List<string> Log) Grouper()
     {
-        var log = new List<string>();
-        return (new TabGrouper(KeyOf, log.Add), log);
+        var log = new ListLog();
+        return (new TabGrouper(KeyOf, log), log.Lines);
     }
 
     [Fact]
@@ -117,7 +118,7 @@ public class TabGrouperTests
         Assert.Equal(3, pane.MoveCalls.Count); // the planner's minimum, applied as planned
         Assert.Same(selected, pane.SelectedItem);
         Assert.Equal(1, pane.SelectSets);
-        Assert.Equal("group tabs: 3 moves over 7 tabs in 1 panes.", Assert.Single(log));
+        Assert.Equal("Info group tabs: 3 moves over 7 tabs in 1 panes.", Assert.Single(log));
     }
 
     [Fact]
@@ -146,7 +147,7 @@ public class TabGrouperTests
         Assert.Empty(pane.MoveCalls);
         Assert.Equal(0, pane.SelectSets);
         Assert.Equal("C1 C2 A1 B1 B2 _1", Names(pane));
-        Assert.Contains("already grouped", Assert.Single(log));
+        Assert.StartsWith("Info group tabs: already grouped", Assert.Single(log));
     }
 
     [Fact]
@@ -178,7 +179,7 @@ public class TabGrouperTests
         Assert.Equal(1, result.Moves);
         Assert.Equal(2, pane.MoveCalls.Count);
         Assert.Equal($"Move 2 of {plan.Count} failed (InvalidOperationException).", result.Reason);
-        Assert.Equal($"group tabs: stopped after 1 moves. {result.Reason}", Assert.Single(log));
+        Assert.Equal($"Error group tabs: stopped after 1 moves. {result.Reason}", Assert.Single(log));
 
         // A valid order: the same tabs, each once, as after the first planned move.
         var expected = tabs.Cast<object>().ToList();
@@ -253,7 +254,7 @@ public class TabGrouperTests
         var result = grouper.Group(empty ? Array.Empty<IDocumentPane>() : null);
 
         Assert.Equal(TabGroupResult.Unavailable(TabGrouper.NoPaneReason), result);
-        Assert.Equal("group tabs: unavailable. " + TabGrouper.NoPaneReason, Assert.Single(log));
+        Assert.Equal("Warn group tabs: unavailable. " + TabGrouper.NoPaneReason, Assert.Single(log));
     }
 
     [Fact]
@@ -279,8 +280,8 @@ public class TabGrouperTests
             "selected" => new FakePane(tabs, "B1") { ThrowOnGetSelected = true },
             _ => new FakePane(tabs, "B1"),
         };
-        var log = new List<string>();
-        var grouper = new TabGrouper(item => failure == "key" ? throw new FormatException() : KeyOf(item), log.Add);
+        var log = new ListLog();
+        var grouper = new TabGrouper(item => failure == "key" ? throw new FormatException() : KeyOf(item), log);
 
         var result = grouper.Group([pane]);
 
@@ -289,7 +290,7 @@ public class TabGrouperTests
         Assert.StartsWith("Reading the tabs failed (", result.Reason);
         Assert.Empty(pane.MoveCalls);
         Assert.Equal("A1 B1 A2", Names(pane));
-        Assert.Single(log);
+        Assert.StartsWith("Error group tabs: stopped after 0 moves. Reading the tabs failed (", Assert.Single(log.Lines));
     }
 
     [Fact]
@@ -344,11 +345,16 @@ public class TabGrouperTests
     public void Group_ALogThatThrows_DoesNotThrow()
     {
         var pane = new FakePane(Tabs("A1 B1 A2"), selected: "A1");
-        var grouper = new TabGrouper(KeyOf, _ => throw new System.IO.IOException());
+        var grouper = new TabGrouper(KeyOf, new ThrowingLog());
 
         var result = grouper.Group([pane]);
 
         Assert.Equal(TabGroupOutcome.Grouped, result.Outcome);
         Assert.Equal("A1 A2 B1", Names(pane));
+    }
+
+    private sealed class ThrowingLog : SplashIt.Core.Logging.ILog
+    {
+        public void Write(SplashIt.Core.Logging.LogLevel level, string message) => throw new System.IO.IOException();
     }
 }
