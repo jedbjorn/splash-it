@@ -60,7 +60,7 @@ namespace SplashIt.RuntimeTests.Tabs
 
             var line = Assert.Single(log.Lines);
             var assembly = typeof(Fake.LayoutDocumentPane).Assembly.GetName();
-            Assert.StartsWith($"Info group tabs: LayoutDocumentPane from {assembly.Name} {assembly.Version} (file ", line);
+            Assert.StartsWith($"Info group tabs: first click this session: LayoutDocumentPane from {assembly.Name} {assembly.Version} (file ", line);
             Assert.EndsWith("MoveChild found.", line);
         }
 

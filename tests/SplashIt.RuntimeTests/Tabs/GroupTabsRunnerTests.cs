@@ -68,13 +68,13 @@ public class GroupTabsRunnerTests
     private static string Selected(Fake.LayoutDocumentPane model) => model.Children[model.SelectedContentIndex].Title;
 
     [Fact]
-    public void Run_GroupsByDocument_LongestTitleAndKeptTitles_UnmatchedLast_SelectionKept()
+    public void Run_GroupsByDocument_ActiveFileFirst_LongestTitleAndKeptTitles_UnmatchedLast_SelectionKept()
     {
         Screenshots.RunSta(() =>
         {
             var (root, models) = Tree(new[] { "Tower B - L1", "Tower - L1", "Family1 - Ref. Level", "Tower - L2", "OldTower - L3", "Tower B - L2", "Elsewhere - X" });
             var model = models[0];
-            model.SelectedContentIndex = 2; // Family1, which moves to index 5
+            model.SelectedContentIndex = 3; // Tower - L2: Tower is the active file, so it goes first (#28)
             var log = new ListLog();
 
             var result = GroupTabsRunner.Run(Surface(root, log), new AvalonDockPane.Finder(log).Find, log);
@@ -82,9 +82,9 @@ public class GroupTabsRunnerTests
             Assert.Equal(TabGroupOutcome.Grouped, result.Outcome);
             // "Tower B - L1" is Tower B's, not Tower's (longest match); "OldTower - L3" is Tower's (kept title).
             Assert.Equal(
-                new[] { "Tower B - L1", "Tower B - L2", "Tower - L1", "Tower - L2", "OldTower - L3", "Family1 - Ref. Level", "Elsewhere - X" },
+                new[] { "Tower - L1", "Tower - L2", "OldTower - L3", "Tower B - L1", "Tower B - L2", "Family1 - Ref. Level", "Elsewhere - X" },
                 Titles(model));
-            Assert.Equal("Family1 - Ref. Level", Selected(model));
+            Assert.Equal("Tower - L2", Selected(model));
             Assert.Equal(result.Moves, model.MoveChildCalls.Count);
             Assert.DoesNotContain(log.Lines, l => l.StartsWith("Error", StringComparison.Ordinal) || l.StartsWith("Warn", StringComparison.Ordinal));
         });
@@ -108,10 +108,11 @@ public class GroupTabsRunnerTests
 
             Assert.Equal(TabGroupOutcome.Grouped, result.Outcome);
             Assert.Equal(2, result.Panes);
+            // Each pane leads with the file of its own selected tab.
             Assert.Equal(
-                new[] { "Tower - L1", "Tower - L2", "Family1 - Ref. Level" }, Titles(models[0]));
+                new[] { "Family1 - Ref. Level", "Tower - L1", "Tower - L2" }, Titles(models[0]));
             Assert.Equal(
-                new[] { "Family1 - Front", "Family1 - Back", "Tower B - L1" }, Titles(models[1]));
+                new[] { "Tower B - L1", "Family1 - Front", "Family1 - Back" }, Titles(models[1]));
             Assert.True(left.SetEquals(models[0].Children));
             Assert.True(right.SetEquals(models[1].Children));
             Assert.Equal("Family1 - Ref. Level", Selected(models[0]));
@@ -150,7 +151,7 @@ public class GroupTabsRunnerTests
             Assert.Equal(TabGroupResult.Unavailable("No pane (test)."), result);
             Assert.Equal(1, surface.Invalidations);
             Assert.Equal(0, finds);
-            Assert.Equal("Warn group tabs: unavailable. No pane (test).", Assert.Single(log.Lines));
+            Assert.Equal("Warn group tabs: unavailable; nothing moved. No pane (test).", Assert.Single(log.Lines));
         });
     }
 
@@ -168,12 +169,12 @@ public class GroupTabsRunnerTests
             Assert.Equal(TabGroupOutcome.Unavailable, result.Outcome);
             Assert.Equal("A document tab's parent is LayoutAnchorablePane, not LayoutDocumentPane.", result.Reason);
             Assert.Empty(models[0].MoveChildCalls);
-            Assert.Contains("Warn group tabs: unavailable. A document tab's parent is LayoutAnchorablePane, not LayoutDocumentPane.", log.Lines);
+            Assert.Contains("Warn group tabs: unavailable; nothing moved. A document tab's parent is LayoutAnchorablePane, not LayoutDocumentPane.", log.Lines);
         });
     }
 
     [Fact]
-    public void Run_NoTabs_IsNothingToDo()
+    public void Run_DocumentsOpenButNoTabs_IsUnavailable()
     {
         Screenshots.RunSta(() =>
         {
@@ -181,8 +182,31 @@ public class GroupTabsRunnerTests
 
             var result = GroupTabsRunner.Run(new FakeSurface(new TabControl()), _ => throw new InvalidOperationException(), log);
 
-            Assert.Equal(new TabGroupResult(TabGroupOutcome.AlreadyGrouped, 0, 0, null), result);
-            Assert.Equal("Info " + GroupTabsRunner.NoTabsMessage, Assert.Single(log.Lines));
+            Assert.Equal(TabGroupResult.Unavailable(GroupTabsRunner.NoTabsReason), result);
+            Assert.Equal(TabGroupNotice.CantGroup, result.Notice);
+            Assert.Equal("Warn group tabs: unavailable; nothing moved. " + GroupTabsRunner.NoTabsReason, Assert.Single(log.Lines));
+        });
+    }
+
+    /// <summary>
+    /// Review m2: with coloring off nothing has started the surface's 5 s grace period, so on
+    /// the first click a tree without the pane control reads as "no tabs yet". The click must
+    /// still say it can't group, not do nothing.
+    /// </summary>
+    [Fact]
+    public void Run_ATreeWithoutThePaneControl_IsUnavailable_OnTheFirstClick()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var strip = new TabControl { Items = { new TabItem { Header = "x", ToolTip = "Tower - L1" } } };
+            var root = new Border { Child = new DockingManager { Content = strip } };
+            HostTabs.Layout(root);
+            var log = new ListLog();
+
+            var result = GroupTabsRunner.Run(Surface(root, log), new AvalonDockPane.Finder(log).Find, log);
+
+            Assert.Equal(TabGroupOutcome.Unavailable, result.Outcome);
+            Assert.Equal(GroupTabsRunner.NoTabsReason, result.Reason);
         });
     }
 
