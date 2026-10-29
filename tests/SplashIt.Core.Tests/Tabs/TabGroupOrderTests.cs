@@ -44,6 +44,8 @@ public class TabGroupOrderTests
     [InlineData("_1 A1 _2 B1 A2", "A1 A2 B1 _1 _2", 3)]
     [InlineData("A1 B1 A2 B2 _1 _2", "A1 A2 B1 B2 _1 _2", 1)]
     [InlineData("_2 _1 A1", "A1 _2 _1", 1)]
+    // An unmatched tab first: one move to the end, not one move per file tab.
+    [InlineData("_1 A1 B1 C1 C2", "A1 B1 C1 C2 _1", 1)]
     [InlineData("_1 _2", "_1 _2", 0)]
     // One tab, no tabs.
     [InlineData("A1", "A1", 0)]
