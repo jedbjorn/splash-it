@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -60,7 +61,9 @@ public class SettingsWindowScreenshotTests
     /// <summary>A settings window shown off-screen over a temp settings file, with a fake host and dialogs.</summary>
     private sealed class Shown : IDisposable
     {
-        public Shown(UiTheme theme, SettingsStatus status, SplashItSettings? stored = null)
+        /// <param name="workArea">Stands in for a small screen; null uses the monitor's.</param>
+        /// <param name="realDialogs">Use the real <see cref="DialogService"/> (owned by the window) instead of the fake.</param>
+        public Shown(UiTheme theme, SettingsStatus status, SplashItSettings? stored = null, Rect? workArea = null, bool realDialogs = false)
         {
             SplashItTheme.Apply(theme);
             Theme = theme;
@@ -68,8 +71,10 @@ public class SettingsWindowScreenshotTests
             SettingsPath = Folder.File("settings.json");
             (stored ?? SplashItSettings.Default).Write(SettingsPath);
             Host = new FakeHost { Status = status, SettingsPath = SettingsPath };
-            Model = new SettingsViewModel(SplashItSettings.Read(SettingsPath), SettingsPath, Host, Dialogs);
-            Window = new SettingsWindow(Model);
+            var real = realDialogs ? new DialogService() : null;
+            Model = new SettingsViewModel(SplashItSettings.Read(SettingsPath), SettingsPath, Host, (IDialogService?)real ?? Dialogs);
+            Window = new SettingsWindow(Model) { WorkArea = workArea };
+            if (real is not null) real.Owner = Window;
             WindowCapture.ShowOffScreen(Window);
         }
 
@@ -130,6 +135,57 @@ public class SettingsWindowScreenshotTests
         Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, bitmap.PixelWidth - 3, bitmap.PixelHeight - 3));
     }
 
+    private static Color At(BitmapSource bitmap, FrameworkElement element, FrameworkElement root, double x, double y)
+    {
+        var p = element.TranslatePoint(new Point(x, y), root);
+        return Screenshots.PixelAt(bitmap, (int)Math.Floor(p.X), (int)Math.Floor(p.Y));
+    }
+
+    private static int Distance(Color a, Color b) =>
+        Math.Max(Math.Abs(a.R - b.R), Math.Max(Math.Abs(a.G - b.G), Math.Abs(a.B - b.B)));
+
+    /// <summary>
+    /// Every chip of both lists shows its number: the label's text is "n", and the rendered chip
+    /// has label-colored pixels in its middle (where the number is drawn) on an otherwise solid fill.
+    /// </summary>
+    private static void AssertChipNumbers(Shown shown, BitmapSource bitmap)
+    {
+        foreach (var list in new[] { shown.Model.ProjectColors, shown.Model.FamilyColors })
+        {
+            foreach (var chip in list.Chips)
+            {
+                var button = shown.ById<Button>(chip.AutomationId);
+                var label = (TextBlock)button.Template.FindName("Label", button);
+                Assert.Equal(chip.Number.ToString(System.Globalization.CultureInfo.InvariantCulture), label.Text);
+                Assert.Equal(Visibility.Visible, label.Visibility);
+
+                var fill = ToColor(chip.Color);
+                // Below the number, the chip's face is plain fill.
+                Assert.True(Distance(fill, At(bitmap, button, shown.Root, 8, 24)) <= 3, $"{chip.Name}: the chip is not its color");
+                // The middle carries the number: count pixels far from the fill.
+                var inked = 0;
+                for (var y = 9; y <= 21; y++)
+                    for (var x = 9; x <= 21; x++)
+                        if (Distance(fill, At(bitmap, button, shown.Root, x, y)) > 60) inked++;
+                Assert.True(inked >= 4, $"{chip.Name}: no number drawn ({inked} label pixels)");
+            }
+        }
+    }
+
+    /// <summary>The ring around the selected chip is the text color; other chips have none.</summary>
+    private static void AssertSelectionRing(Shown shown, BitmapSource bitmap, ColorListViewModel list)
+    {
+        var ring = Palette(shown.Theme, UiPalette.Text);
+        var surface = Palette(shown.Theme, UiPalette.Surface);
+        foreach (var chip in list.Chips)
+        {
+            var button = shown.ById<Button>(chip.AutomationId);
+            var edge = At(bitmap, button, shown.Root, 1, button.ActualHeight / 2);
+            if (chip.IsSelected) Assert.True(Distance(ring, edge) <= 3, $"{chip.Name}: selection ring is {edge}, expected {ring}");
+            else Assert.True(Distance(surface, edge) <= 3, $"{chip.Name}: unselected chip has a ring ({edge})");
+        }
+    }
+
     // ---- status states --------------------------------------------------------------------------
 
     [Theory]
@@ -153,6 +209,26 @@ public class SettingsWindowScreenshotTests
         Assert.Equal(kind == SettingsStatusKind.Active, shown.ById<Button>("Settings.ResetAssignments").IsEnabled);
         Assert.Equal("100%", shown.ById<TextBlock>("Settings.ProjectFillOpacityValue").Text);
         Assert.Equal("3 px", shown.ById<TextBlock>("Settings.FamilyBarWidthValue").Text);
+        AssertChipNumbers(shown, bitmap);
+        // Chip 1 (blue in the project list) is selected: its ring must still read.
+        AssertSelectionRing(shown, bitmap, shown.Model.ProjectColors);
+        AssertSelectionRing(shown, bitmap, shown.Model.FamilyColors);
+
+        // The preview: colored tabs when on; native tabs and a note when "Color document tabs" is off.
+        var note = shown.ById<TextBlock>("Settings.Preview.OffNote");
+        var tower2 = shown.ById<TabItem>("Settings.Preview.Tower2");
+        var tower2Pixel = At(bitmap, tower2, shown.Root, 4, tower2.ActualHeight - 3);
+        if (kind == SettingsStatusKind.Off)
+        {
+            Assert.Equal(Visibility.Visible, note.Visibility);
+            Assert.Equal(UiStrings.Preview_Off, note.Text);
+            Assert.True(Distance(Palette(theme, UiPalette.Hover), tower2Pixel) <= 3, $"off preview tab is {tower2Pixel}");
+        }
+        else
+        {
+            Assert.Equal(Visibility.Collapsed, note.Visibility);
+            Assert.True(Distance(ToColor(SplashItDefaults.ProjectColors[0]), tower2Pixel) <= 3, $"preview tab is {tower2Pixel}");
+        }
     });
 
     // ---- a 12-color project list --------------------------------------------------------------------
@@ -172,7 +248,22 @@ public class SettingsWindowScreenshotTests
             FamilyBarOpacity = 80,
         };
         using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.Active), stored);
-        shown.Model.ProjectColors.Selected = shown.Model.ProjectColors.Chips[11];
+
+        // Select project chip 12 with a right-click and family chip 3 with keyboard focus: no picker opens.
+        var chip12 = shown.ById<Button>("Settings.ProjectColors.Chip12");
+        chip12.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Right)
+        {
+            RoutedEvent = UIElement.PreviewMouseRightButtonDownEvent,
+        });
+        var family3 = shown.ById<Button>("Settings.FamilyColors.Chip3");
+        family3.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, null, family3)
+        {
+            RoutedEvent = Keyboard.GotKeyboardFocusEvent,
+        });
+        Assert.Same(shown.Model.ProjectColors.Chips[11], shown.Model.ProjectColors.Selected);
+        Assert.Same(shown.Model.FamilyColors.Chips[2], shown.Model.FamilyColors.Selected);
+        Assert.Empty(shown.Dialogs.PickCalls);
+        Assert.False(shown.Model.ProjectColors.MoveRightCommand.CanExecute(null));
 
         var bitmap = shown.Capture();
         Screenshots.Save(bitmap, Name("settings-project-12-colors", theme));
@@ -185,10 +276,10 @@ public class SettingsWindowScreenshotTests
         Assert.Equal("5 px", shown.ById<TextBlock>("Settings.FamilyBarWidthValue").Text);
         Assert.Equal("80%", shown.ById<TextBlock>("Settings.FamilyBarOpacityValue").Text);
 
-        // Each project chip is drawn in its color: sample the middle of chip 1's left edge area.
-        var chip = shown.ById<Button>("Settings.ProjectColors.Chip1");
-        var at = chip.TranslatePoint(new Point(8, chip.ActualHeight / 2), shown.Root);
-        Assert.Equal(ToColor(project[0]), Screenshots.PixelAt(bitmap, (int)at.X, (int)at.Y));
+        // Each chip is drawn in its color with its number (1 to 12) in the middle.
+        AssertChipNumbers(shown, bitmap);
+        AssertSelectionRing(shown, bitmap, shown.Model.ProjectColors);
+        AssertSelectionRing(shown, bitmap, shown.Model.FamilyColors);
     });
 
     // ---- the color picker open on a chip ----------------------------------------------------------------
@@ -197,45 +288,68 @@ public class SettingsWindowScreenshotTests
     [MemberData(nameof(Themes))]
     public void ColorPicker_OpenOnAChip(UiTheme theme) => Sta(() =>
     {
-        using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.Active));
-        var chipModel = shown.Model.ProjectColors.Chips[2];
-        shown.Model.ProjectColors.Selected = chipModel;
+        // The real chain: the chip's EditCommand, the real DialogService, the real ColorPickerDialog.
+        using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.Active), realDialogs: true);
         foreach (var recent in new[] { "#2E86AB", "#C0392B", "#7D3C98" }) PickerSession.RecentColors.Add(Rgb.Parse(recent));
-
         var window = shown.Capture();
-        var picker = new ColorPickerDialog(chipModel.Color, SplashItDefaults.ProjectColors, chipModel.Name, null, SystemParameters.WorkArea)
-        {
-            Owner = shown.Window,
-        };
-        WindowCapture.ShowOffScreen(picker);
-        try
-        {
-            var pickerImage = WindowCapture.Client(picker);
-            Screenshots.Save(pickerImage, Name("color-picker", theme));
 
-            var chip = shown.ById<Button>("Settings.ProjectColors.Chip3");
-            var anchor = chip.TranslatePoint(new Point(chip.ActualWidth / 2, chip.ActualHeight + 6), shown.Root);
-            var composed = WindowCapture.Compose(window, pickerImage, new Point(Math.Round(anchor.X) - 20, Math.Round(anchor.Y)),
-                Palette(theme, UiPalette.StrongBorder));
-            Screenshots.Save(composed, Name("settings-color-picker", theme));
+        var project3 = shown.Model.ProjectColors.Chips[2];
+        var projectPicker = OpenPickerFrom(shown.Model.ProjectColors, project3);
+        Assert.Equal("Project color 3", projectPicker.Title);
+        Assert.Equal(SplashItDefaults.ProjectColors, projectPicker.Swatches);
+        Assert.Equal(project3.Hex, projectPicker.Hex);
+        Assert.True(projectPicker.Recent >= 3, $"{projectPicker.Recent} recent colors");
+        Assert.True(Screenshots.DistinctPixels(projectPicker.Image) > 50, "the picker looks blank");
+        Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(projectPicker.Image, 1, 1));
+        Assert.Same(project3, shown.Model.ProjectColors.Selected);
+        Assert.False(shown.Model.IsDirty); // cancelled
 
-            Assert.Equal("Project color 3", picker.Title);
-            Assert.True(Screenshots.DistinctPixels(pickerImage) > 50, "the picker looks blank");
-            Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(pickerImage, 1, 1));
-            var swatches = WindowCapture.Descendants<Button>(picker)
-                .Count(b => AutomationProperties.GetAutomationId(b).StartsWith("ColorPicker.Swatch", StringComparison.Ordinal));
-            var recents = WindowCapture.Descendants<Button>(picker)
-                .Count(b => AutomationProperties.GetAutomationId(b).StartsWith("ColorPicker.Recent", StringComparison.Ordinal));
-            Assert.Equal(12, swatches);
-            Assert.True(recents >= 3, $"{recents} recent colors");
-            var hex = WindowCapture.Descendants<TextBox>(picker).Single(b => AutomationProperties.GetAutomationId(b) == "ColorPicker.Hex");
-            Assert.Equal(chipModel.Hex, hex.Text);
-        }
-        finally
-        {
-            picker.Close();
-        }
+        // The family list's picker offers the family palette.
+        var family2 = shown.Model.FamilyColors.Chips[1];
+        var familyPicker = OpenPickerFrom(shown.Model.FamilyColors, family2);
+        Assert.Equal("Family color 2", familyPicker.Title);
+        Assert.Equal(SplashItDefaults.FamilyColors, familyPicker.Swatches);
+
+        Screenshots.Save(projectPicker.Image, Name("color-picker", theme));
+        // A composite: both are real windows, rendered off-screen, so the picker is drawn under
+        // project chip 3 (in Revit it opens at the pointer, beside the chip clicked).
+        var chip = shown.ById<Button>("Settings.ProjectColors.Chip3");
+        var anchor = chip.TranslatePoint(new Point(chip.ActualWidth / 2, chip.ActualHeight + 6), shown.Root);
+        var composed = WindowCapture.Compose(window, projectPicker.Image, new Point(Math.Round(anchor.X) - 20, Math.Round(anchor.Y)),
+            Palette(theme, UiPalette.StrongBorder));
+        Screenshots.Save(composed, Name("settings-color-picker", theme));
     });
+
+    private sealed record PickerSeen(string Title, IReadOnlyList<Rgb> Swatches, string Hex, int Recent, BitmapSource Image);
+
+    /// <summary>Clicks <paramref name="chip"/> (its EditCommand), inspects and renders the modal picker it opens, then cancels it.</summary>
+    private static PickerSeen OpenPickerFrom(ColorListViewModel list, ColorChipViewModel chip)
+    {
+        PickerSeen? seen = null;
+        var attempts = 0;
+        void InspectAndCancel()
+        {
+            var picker = PresentationSource.CurrentSources.OfType<HwndSource>()
+                .Select(s => s.RootVisual).OfType<ColorPickerDialog>().FirstOrDefault(w => w.IsLoaded);
+            if (picker is null)
+            {
+                if (++attempts > 500) throw new TimeoutException("The color picker never opened.");
+                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, InspectAndCancel);
+                return;
+            }
+            Button[] Buttons(string prefix) => WindowCapture.Descendants<Button>(picker)
+                .Where(b => AutomationProperties.GetAutomationId(b).StartsWith(prefix, StringComparison.Ordinal)).ToArray();
+            var swatches = Buttons("ColorPicker.Swatch")
+                .Select(b => ((SolidColorBrush)b.Background).Color)
+                .Select(c => new Rgb(c.R, c.G, c.B)).ToArray();
+            var hex = WindowCapture.Descendants<TextBox>(picker).Single(b => AutomationProperties.GetAutomationId(b) == "ColorPicker.Hex");
+            seen = new PickerSeen(picker.Title, swatches, hex.Text, Buttons("ColorPicker.Recent").Length, WindowCapture.Client(picker));
+            picker.Close(); // Cancel
+        }
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, InspectAndCancel);
+        list.EditCommand.Execute(chip); // modal: returns once the picker closes
+        return seen ?? throw new InvalidOperationException("The picker was not inspected.");
+    }
 
     // ---- import errors, import notice, invalid save -------------------------------------------------------
 
@@ -303,6 +417,8 @@ public class SettingsWindowScreenshotTests
     [MemberData(nameof(Themes))]
     public void Window_InvalidSave_ShowsTheErrorsInline(UiTheme theme) => Sta(() =>
     {
+        // A forced state: the sliders snap and clamp, so the window can't reach these values.
+        // The view-model is set directly to show Save's backstop.
         using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.Active));
         shown.Model.ProjectFillOpacity = 5;
         shown.Model.FamilyBarWidth = 8;
@@ -310,7 +426,7 @@ public class SettingsWindowScreenshotTests
         shown.Model.SaveCommand.Execute(null);
 
         var bitmap = shown.Capture();
-        Screenshots.Save(bitmap, Name("settings-invalid-save", theme));
+        Screenshots.Save(bitmap, Name("settings-invalid-save-forced", theme));
 
         AssertWindowRender(bitmap, theme);
         Assert.Equal(before, File.ReadAllBytes(shown.SettingsPath));
@@ -458,6 +574,84 @@ public class SettingsWindowScreenshotTests
         shown.Dialogs.ConfirmResult = true;
     });
 
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void Window_OnASmallScreen_ScrollsThePanel_AndKeepsTheButtonsVisible(UiTheme theme) => Sta(() =>
+    {
+        // 1920 x 1080 at 150 % gives a work area of about 1280 x 688 DIPs; this one is shorter still.
+        var area = new Rect(0, 0, 1280, 560);
+        using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.BlockedByPyRevit), workArea: area);
+        var bad = shown.Folder.File("from-a-colleague.json");
+        File.WriteAllText(bad, """
+            { "format": "splash-it-settings", "schemaVersion": 1, "projectColors": ["x"], "familyColors": [],
+              "projectFillOpacity": 5, "familyBarWidth": 12, "familyBarOpacity": 0 }
+            """);
+        shown.Dialogs.OpenResult = bad;
+        shown.Model.ImportCommand.Execute(null);
+
+        var bitmap = shown.Capture();
+        Screenshots.Save(bitmap, Name("settings-small-screen", theme));
+
+        Assert.Equal(area.Height, shown.Window.MaxHeight);
+        Assert.True(shown.Window.ActualHeight <= area.Height + 0.5, $"window is {shown.Window.ActualHeight} tall");
+        var scroller = shown.ById<ScrollViewer>("Settings.PanelScroller");
+        Assert.True(scroller.ScrollableHeight > 0, "the panel should scroll on a short screen");
+        // Save, Close and the whole error banner stay inside the client area.
+        foreach (var id in new[] { "Settings.Save", "Settings.Close", "Settings.Export" })
+        {
+            var button = shown.ById<Button>(id);
+            var bottom = button.TranslatePoint(new Point(0, button.ActualHeight), shown.Root).Y;
+            Assert.True(bottom <= shown.Root.ActualHeight, $"{id} ends at {bottom}, the client is {shown.Root.ActualHeight}");
+        }
+        Assert.True(shown.ById<TextBlock>("Settings.ErrorHeading").IsVisible);
+        Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 2, 2));
+    });
+
+    [Fact]
+    public void Launcher_WithARealOwnerWindow_IsOwnedByIt_AndModal() => Sta(() =>
+    {
+        // Stands in for Revit's main window: a real top-level HWND.
+        var revit = new Window { Width = 800, Height = 600, Title = "Owner" };
+        WindowCapture.ShowOffScreen(revit);
+        var owner = new WindowInteropHelper(revit).Handle;
+        Assert.NotEqual(IntPtr.Zero, owner);
+
+        using var folder = new TempFolder();
+        var path = folder.File("settings.json");
+        IntPtr ownerSeen = IntPtr.Zero, nativeOwner = IntPtr.Zero;
+        var ownerEnabled = true;
+        var attempts = 0;
+        void InspectAndClose()
+        {
+            var window = PresentationSource.CurrentSources.OfType<HwndSource>()
+                .Select(s => s.RootVisual).OfType<SettingsWindow>().FirstOrDefault(w => w.IsLoaded);
+            if (window is null)
+            {
+                if (++attempts > 500) throw new TimeoutException("The settings window never loaded.");
+                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, InspectAndClose);
+                return;
+            }
+            var helper = new WindowInteropHelper(window);
+            ownerSeen = helper.Owner;
+            nativeOwner = GetWindow(helper.Handle, GwOwner);
+            ownerEnabled = IsWindowEnabled(owner);
+            window.Close();
+        }
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, InspectAndClose);
+        try
+        {
+            SettingsLauncher.Show(owner, new FakeHost(), UiTheme.Light, path);
+        }
+        finally
+        {
+            revit.Close();
+        }
+
+        Assert.Equal(owner, ownerSeen);
+        Assert.Equal(owner, nativeOwner);
+        Assert.False(ownerEnabled, "a modal window disables its owner while it is open");
+    });
+
     [Fact]
     public void Launcher_ReadsTheSettings_AppliesTheTheme_AndShowsTheWindowModally() => Sta(() =>
     {
@@ -497,6 +691,15 @@ public class SettingsWindowScreenshotTests
         Assert.True(wasModal);
         Assert.Empty(host.Applied);
     });
+
+    private const uint GwOwner = 4;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowEnabled(IntPtr hwnd);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);

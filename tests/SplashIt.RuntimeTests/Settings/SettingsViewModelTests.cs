@@ -122,6 +122,58 @@ public class SettingsViewModelTests
     });
 
     [Fact]
+    public void Save_DoubleClick_WritesAndAppliesOnce() => Sta(rig =>
+    {
+        rig.Model.ProjectFillOpacity = 70;
+        Assert.True(rig.Model.SaveCommand.CanExecute(null));
+
+        rig.Model.SaveCommand.Execute(null);
+        var written = File.ReadAllBytes(rig.Path);
+        var stamp = File.GetLastWriteTimeUtc(rig.Path);
+        Assert.False(rig.Model.SaveCommand.CanExecute(null));
+        rig.Model.SaveCommand.Execute(null); // the double-click's second click
+
+        Assert.Single(rig.Host.Applied);
+        Assert.Equal(written, File.ReadAllBytes(rig.Path));
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(rig.Path));
+
+        // The next change turns Save back on.
+        rig.Model.ProjectFillOpacity = 75;
+        Assert.True(rig.Model.SaveCommand.CanExecute(null));
+        rig.Model.SaveCommand.Execute(null);
+        Assert.Equal(2, rig.Host.Applied.Count);
+    });
+
+    [Fact]
+    public void Save_WhileSaving_IsIgnored() => Sta(rig =>
+    {
+        var canSaveDuringApply = true;
+        rig.Host.OnApply = () =>
+        {
+            canSaveDuringApply = rig.Model.SaveCommand.CanExecute(null);
+            rig.Model.SaveCommand.Execute(null);
+            Assert.False(rig.Model.Save());
+        };
+        rig.Model.FamilyBarWidth = 4;
+
+        rig.Model.SaveCommand.Execute(null);
+
+        Assert.False(canSaveDuringApply);
+        Assert.Single(rig.Host.Applied);
+        Assert.Equal(UiStrings.Settings_Saved, rig.Model.Notice);
+    });
+
+    [Fact]
+    public void Save_BeforeAnyChange_IsAllowedOnce_ToReapplyTheStoredSettings() => Sta(rig =>
+    {
+        Assert.False(rig.Model.IsDirty);
+        Assert.True(rig.Model.SaveCommand.CanExecute(null));
+        rig.Model.SaveCommand.Execute(null);
+        Assert.Equal(rig.Stored, Assert.Single(rig.Host.Applied));
+        Assert.False(rig.Model.SaveCommand.CanExecute(null));
+    });
+
+    [Fact]
     public void Save_Disable_WritesOff_AndRereadsTheStatus() => Sta(rig =>
     {
         rig.Host.StatusAfterApply = s => new SettingsStatus(s.Enabled ? SettingsStatusKind.Active : SettingsStatusKind.Off);
@@ -437,6 +489,45 @@ public class SettingsViewModelTests
         Assert.Equal([Green, Red, Blue], list.Colors);
         Assert.Equal([1, 2, 3], list.Chips.Select(c => c.Number));
     });
+
+    [Fact]
+    public void SelectingAChip_WithoutThePicker_TargetsRemoveAndMove() => Sta(rig =>
+    {
+        // What keyboard focus and a right-click do in the window.
+        var list = rig.Model.ProjectColors;
+        list.Chips[6].Select();
+        Assert.Same(list.Chips[6], list.Selected);
+        Assert.True(list.Chips[6].IsSelected);
+        Assert.False(list.Chips[0].IsSelected);
+        Assert.Empty(rig.Dialogs.PickCalls);
+
+        list.MoveLeftCommand.Execute(null);
+        Assert.Equal(SplashItDefaults.ProjectColors[6], list.Colors[5]);
+        list.RemoveCommand.Execute(null);
+        Assert.DoesNotContain(SplashItDefaults.ProjectColors[6], list.Colors);
+        Assert.Empty(rig.Dialogs.PickCalls);
+    });
+
+    [Fact]
+    public void AnEdit_ClearsTheLastMessages() => Sta(rig =>
+    {
+        var bad = rig.Folder.File("bad.json");
+        File.WriteAllText(bad, """{ "format": "nope" }""");
+        rig.Dialogs.OpenResult = bad;
+        rig.Model.ImportCommand.Execute(null);
+        Assert.True(rig.Model.HasErrors);
+
+        rig.Model.ProjectColors.Chips[1].Select();
+        Assert.True(rig.Model.HasErrors); // selecting is not an edit
+        rig.Model.ProjectFillOpacity = 50;
+        Assert.False(rig.Model.HasErrors);
+        Assert.Empty(rig.Model.Errors);
+
+        rig.Model.SaveCommand.Execute(null);
+        Assert.Equal(UiStrings.Settings_Saved, rig.Model.Notice);
+        rig.Model.FamilyColors.Add();
+        Assert.Null(rig.Model.Notice);
+    }, stored: SplashItSettings.Default with { FamilyColors = [Red] });
 
     [Fact]
     public void ClickingAChip_EditsItInThePicker_WithItsListsPalette() => Sta(rig =>
