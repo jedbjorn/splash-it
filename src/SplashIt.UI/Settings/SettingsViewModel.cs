@@ -35,6 +35,8 @@ public sealed class SettingsViewModel : ObservableObject
     private IReadOnlyList<string> _errors = [];
     private bool _closeConfirmed;
     private bool _loading;
+    private bool _saving;
+    private bool _savedHere;
 
     /// <param name="settings">The settings as read from <paramref name="settingsPath"/> (the baseline for unsaved changes).</param>
     /// <param name="settingsPath">Where Save writes (<see cref="SplashItSettings.DefaultPath"/> in Revit).</param>
@@ -59,7 +61,7 @@ public sealed class SettingsViewModel : ObservableObject
         FamilyColors.Changed += OnChanged;
         LoadValues(settings);
 
-        SaveCommand = new RelayCommand(() => Save());
+        SaveCommand = new RelayCommand(() => Save(), () => CanSave);
         CloseCommand = new RelayCommand(Close);
         ExportCommand = new RelayCommand(Export);
         ImportCommand = new RelayCommand(Import);
@@ -219,6 +221,14 @@ public sealed class SettingsViewModel : ObservableObject
 
     public ICommand ResetAssignmentsCommand { get; }
 
+    /// <summary>
+    /// Save is off while a Save runs, and after a successful Save until the next change, so a
+    /// double-click writes and applies once (the command checks this before it runs). Before the
+    /// first Save in this window it is on even with no changes, so Save can re-apply the stored
+    /// settings (and re-run the Revit side's checks).
+    /// </summary>
+    public bool CanSave => !_saving && (IsDirty || !_savedHere);
+
     /// <summary>Reset assignments needs a running colorizer.</summary>
     public bool CanResetAssignments => Status.Kind == SettingsStatusKind.Active;
 
@@ -227,6 +237,22 @@ public sealed class SettingsViewModel : ObservableObject
     /// Invalid values show every problem and write nothing. True when the file was written.
     /// </summary>
     public bool Save()
+    {
+        if (_saving) return false;
+        _saving = true;
+        RaiseCanSave();
+        try
+        {
+            return SaveCore();
+        }
+        finally
+        {
+            _saving = false;
+            RaiseCanSave();
+        }
+    }
+
+    private bool SaveCore()
     {
         ClearMessages();
         var settings = Current;
@@ -249,6 +275,7 @@ public sealed class SettingsViewModel : ObservableObject
         }
 
         _saved = settings;
+        _savedHere = true;
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(Saved));
 
@@ -368,8 +395,17 @@ public sealed class SettingsViewModel : ObservableObject
     {
         if (_loading) return;
         _closeConfirmed = false;
+        // An edit makes the last Save's, Import's or Export's message stale.
+        ClearMessages();
         OnPropertyChanged(nameof(Current));
         OnPropertyChanged(nameof(IsDirty));
+        RaiseCanSave();
+    }
+
+    private void RaiseCanSave()
+    {
+        OnPropertyChanged(nameof(CanSave));
+        RelayCommand.Refresh();
     }
 
     private SettingsStatus ReadStatus()

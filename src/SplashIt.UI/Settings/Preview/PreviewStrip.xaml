@@ -7,7 +7,8 @@
     <!--
         The settings window's Preview (spec #1, Settings window): plain WPF TabItems — two
         projects (Tower selected, plus a second Tower view), one family and one .rte
-        template — styled through PreviewStrip.Styler from the window's unsaved values.
+        template — styled through PreviewStrip.Styler from the window's unsaved values. With
+        "Color document tabs" off, every tab keeps the native style and a note says so.
     -->
     <UserControl.Resources>
         <ResourceDictionary>
@@ -62,6 +63,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
+    <StackPanel>
     <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" ClipToBounds="True">
         <TabControl x:Name="Strip" Template="{StaticResource StripTemplate}" IsHitTestVisible="False" Focusable="False">
             <TabItem x:Name="Tower1Tab" AutomationProperties.AutomationId="Settings.Preview.Tower1" />
@@ -71,4 +73,8 @@
             <TabItem x:Name="TemplateTab" AutomationProperties.AutomationId="Settings.Preview.Template" />
         </TabControl>
     </Border>
+    <!-- With coloring off, every tab is native and this says why. -->
+    <TextBlock x:Name="OffNote" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0" Visibility="Collapsed"
+               AutomationProperties.AutomationId="Settings.Preview.OffNote" />
+    </StackPanel>
 </UserControl>

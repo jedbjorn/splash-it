@@ -11,7 +11,7 @@ namespace SplashIt.UI.Settings.Preview;
 /// A sample tab strip that shows the settings as tabs: Tower (two views, the first selected)
 /// takes project color 1, Annex project color 2, the Door family family color 1, and the
 /// template stays native. Restyles whenever <see cref="Settings"/> changes, so it follows the
-/// window's unsaved values live.
+/// window's unsaved values live; with coloring off, every tab is native.
 /// </summary>
 public partial class PreviewStrip : UserControl
 {
@@ -48,6 +48,16 @@ public partial class PreviewStrip : UserControl
     {
         var s = Settings ?? SplashItSettings.Default;
         var baseStyle = (Style)FindResource("PreviewTabBase");
+
+        // Off: what the user will see is Revit's own tabs.
+        OffNote.Text = UiStrings.Preview_Off;
+        OffNote.Visibility = s.Enabled ? Visibility.Collapsed : Visibility.Visible;
+        if (!s.Enabled)
+        {
+            foreach (var tab in new[] { Tower1Tab, Tower2Tab, AnnexTab, FamilyTab, TemplateTab }) tab.Style = baseStyle;
+            return;
+        }
+
         var backdrop = SplashItTheme.IsDark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
 
         // The window may hold out-of-range values until Save rejects them; draw the nearest valid ones.

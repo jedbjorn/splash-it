@@ -17,13 +17,22 @@ public sealed class ColorChipViewModel : ObservableObject
     private int _number;
     private bool _isSelected;
 
-    internal ColorChipViewModel(Rgb color, int number, Func<int, string> nameFor, string automationPrefix)
+    private readonly Action<ColorChipViewModel> _select;
+
+    internal ColorChipViewModel(Rgb color, int number, Func<int, string> nameFor, string automationPrefix, Action<ColorChipViewModel> select)
     {
         _color = color;
         _number = number;
         _nameFor = nameFor;
+        _select = select;
         AutomationPrefix = automationPrefix;
     }
+
+    /// <summary>
+    /// Makes this the selected chip (the target of Remove and Move) without opening the
+    /// picker: the window calls it when the chip gets keyboard focus or is right-clicked.
+    /// </summary>
+    public void Select() => _select(this);
 
     private string AutomationPrefix { get; }
 
@@ -144,7 +153,10 @@ public sealed class ColorListViewModel : ObservableObject
 
     public ObservableCollection<ColorChipViewModel> Chips { get; }
 
-    /// <summary>The chip that Remove and Move act on: the last one clicked, else the first.</summary>
+    /// <summary>
+    /// The chip that Remove and Move act on: the last one clicked, focused with the keyboard
+    /// or right-clicked; the first when the list loads.
+    /// </summary>
     public ColorChipViewModel? Selected
     {
         get => _selected;
@@ -191,10 +203,15 @@ public sealed class ColorListViewModel : ObservableObject
     {
         Chips.Clear();
         foreach (var color in colors)
-            Chips.Add(new ColorChipViewModel(color, Chips.Count + 1, _nameFor, _automationPrefix));
+            Chips.Add(new ColorChipViewModel(color, Chips.Count + 1, _nameFor, _automationPrefix, SelectChip));
         _selected = null;
         Selected = Chips.FirstOrDefault();
         ListChanged();
+    }
+
+    private void SelectChip(ColorChipViewModel chip)
+    {
+        if (Chips.Contains(chip)) Selected = chip;
     }
 
     /// <summary>Selects <paramref name="chip"/> and edits it in the color picker; a cancelled picker changes nothing.</summary>
@@ -213,7 +230,7 @@ public sealed class ColorListViewModel : ObservableObject
         if (!CanAdd) return;
         var colors = Colors;
         var next = _defaults.Cast<Rgb?>().FirstOrDefault(d => !colors.Contains(d!.Value)) ?? _defaults[Count % _defaults.Count];
-        var chip = new ColorChipViewModel(next, Count + 1, _nameFor, _automationPrefix);
+        var chip = new ColorChipViewModel(next, Count + 1, _nameFor, _automationPrefix, SelectChip);
         Chips.Add(chip);
         Selected = chip;
         ListChanged();
