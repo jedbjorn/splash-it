@@ -41,33 +41,50 @@ public static class TabTitleMatcher
 
     /// <summary>
     /// The document whose title is the longest match for <paramref name="tabTitle"/>;
-    /// <paramref name="documentTitles"/>[i] lists document i's titles.
+    /// <paramref name="documentTitles"/>[i] lists document i's current titles, and
+    /// <paramref name="keptTitles"/>[i] (optional) the titles it had before a Save As.
+    /// At the same length a current title outranks a kept one (re-review r1: Save As "Tower"
+    /// as "Tower v2", then reopen Tower.rvt: the reopened file's current "Tower" wins over the
+    /// first file's kept "Tower"). Two documents tying on current titles, or on kept titles
+    /// with no current one at that length, is still a tie.
     /// </summary>
-    public static TitleMatch Find(string tabTitle, IReadOnlyList<IReadOnlyList<string>> documentTitles)
+    public static TitleMatch Find(string tabTitle, IReadOnlyList<IReadOnlyList<string>> documentTitles,
+        IReadOnlyList<IReadOnlyList<string>>? keptTitles = null)
     {
         ArgumentNullException.ThrowIfNull(documentTitles);
         var best = -1;
         var bestLength = 0;
+        var bestCurrent = false;
         var tied = false;
         for (var i = 0; i < documentTitles.Count; i++)
         {
-            var longest = 0;
-            foreach (var title in documentTitles[i])
-                if (title.Length > longest && Matches(tabTitle, title)) longest = title.Length;
+            var current = Longest(tabTitle, documentTitles[i]);
+            var kept = keptTitles is not null && i < keptTitles.Count ? Longest(tabTitle, keptTitles[i]) : 0;
+            var isCurrent = current >= kept;
+            var longest = Math.Max(current, kept);
             if (longest == 0) continue;
-            if (longest > bestLength)
+            if (longest > bestLength || (longest == bestLength && isCurrent && !bestCurrent))
             {
                 best = i;
                 bestLength = longest;
+                bestCurrent = isCurrent;
                 tied = false;
             }
-            else if (longest == bestLength)
+            else if (longest == bestLength && isCurrent == bestCurrent)
             {
                 tied = true;
             }
         }
         if (best < 0) return TitleMatch.None;
         return tied ? new TitleMatch(-1, bestLength, true) : new TitleMatch(best, bestLength, false);
+    }
+
+    private static int Longest(string tabTitle, IReadOnlyList<string> titles)
+    {
+        var longest = 0;
+        foreach (var title in titles)
+            if (title.Length > longest && Matches(tabTitle, title)) longest = title.Length;
+        return longest;
     }
 
     /// <summary>
