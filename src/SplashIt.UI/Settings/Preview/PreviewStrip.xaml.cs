@@ -56,9 +56,10 @@ public partial class PreviewStrip : UserControl
             return;
         }
 
-        // What the tabs sit on: the strip's window color. Text contrast is measured against it.
-        var well = UiPalette.For(SplashItTheme.Current)[UiPalette.Window];
-        var backdrop = new Rgb(well.R, well.G, well.B);
+        // What a project fill is blended over: the tab's own color, which the template lays under the
+        // fill so the fade (#30) ends on it. Text and × contrast are measured against it.
+        var tabColor = UiPalette.For(SplashItTheme.Current)[UiPalette.Hover];
+        var backdrop = new Rgb(tabColor.R, tabColor.G, tabColor.B);
 
         // The window may hold out-of-range values until Save rejects them; draw the nearest valid ones.
         var fill = Math.Clamp(s.ProjectFillOpacity, SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity);
