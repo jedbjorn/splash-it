@@ -21,6 +21,7 @@ public sealed class SettingsExchangeTests : IDisposable
         ProjectColors = [Rgb.Parse("#102030"), Rgb.Parse("#405060")],
         FamilyColors = [Rgb.Parse("#A0B0C0"), Rgb.Parse("#D0E0F0"), Rgb.Parse("#123456")],
         ProjectFillOpacity = 45,
+        ProjectUnselectedOpacity = 35,
         FamilyBarWidth = 5,
         FamilyBarOpacity = 80,
     };
@@ -35,6 +36,7 @@ public sealed class SettingsExchangeTests : IDisposable
             ["projectColors"] = "[\"#102030\", \"#405060\"]",
             ["familyColors"] = "[\"#A0B0C0\"]",
             ["projectFillOpacity"] = "45",
+            ["projectUnselectedOpacity"] = "35",
             ["familyBarWidth"] = "5",
             ["familyBarOpacity"] = "80",
         };
@@ -62,8 +64,10 @@ public sealed class SettingsExchangeTests : IDisposable
         using var doc = JsonDocument.Parse(SettingsExchange.Export(Mine));
         var names = doc.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
         Assert.Equal(
-            ["format", "schemaVersion", "projectColors", "familyColors", "projectFillOpacity", "familyBarWidth", "familyBarOpacity"],
+            ["format", "schemaVersion", "projectColors", "familyColors", "projectFillOpacity", "projectUnselectedOpacity",
+             "familyBarWidth", "familyBarOpacity"],
             names);
+        Assert.Equal(35, doc.RootElement.GetProperty("projectUnselectedOpacity").GetInt32());
         Assert.Equal("splash-it-settings", doc.RootElement.GetProperty("format").GetString());
         Assert.Equal(1, doc.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(["#A0B0C0", "#D0E0F0", "#123456"],
@@ -104,6 +108,20 @@ public sealed class SettingsExchangeTests : IDisposable
         Assert.True(result.Succeeded, string.Join(" | ", result.Errors));
         Assert.Equal(Mine, result.Settings);
         Assert.Equal(["team-colors.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
+    }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(50)]
+    [InlineData(100)]
+    public void RoundTrip_CarriesTheUnselectedOpacity(int share)
+    {
+        var json = SettingsExchange.Export(Mine with { ProjectUnselectedOpacity = share });
+        var result = SettingsExchange.Import(json, SplashItSettings.Default);
+        Assert.True(result.Succeeded, string.Join(" | ", result.Errors));
+        Assert.Equal(share, result.Settings!.ProjectUnselectedOpacity);
+        Assert.Equal(share, SettingsExchange.Import(ExportWith("projectUnselectedOpacity", $"{share}"), SplashItSettings.Default)
+            .Settings!.ProjectUnselectedOpacity);
     }
 
     [Fact]
@@ -225,6 +243,10 @@ public sealed class SettingsExchangeTests : IDisposable
     [InlineData("projectFillOpacity", "101", "Project fill opacity must be from 10 to 100; it is 101.")]
     [InlineData("projectFillOpacity", "50.5", "Project fill opacity must be a whole number.")]
     [InlineData("projectFillOpacity", "\"50\"", "Project fill opacity must be a whole number.")]
+    [InlineData("projectUnselectedOpacity", "9", "Unselected tab opacity must be from 10 to 100; it is 9.")]
+    [InlineData("projectUnselectedOpacity", "101", "Unselected tab opacity must be from 10 to 100; it is 101.")]
+    [InlineData("projectUnselectedOpacity", "50.5", "Unselected tab opacity must be a whole number.")]
+    [InlineData("projectUnselectedOpacity", null, "The file has no \"projectUnselectedOpacity\".")]
     [InlineData("familyBarWidth", "0", "Family bar width must be from 1 to 6; it is 0.")]
     [InlineData("familyBarWidth", "7", "Family bar width must be from 1 to 6; it is 7.")]
     [InlineData("familyBarWidth", "1e12", "Family bar width must be from 1 to 6; it is 1e12.")]
@@ -306,6 +328,7 @@ public sealed class SettingsExchangeTests : IDisposable
             "Family colors, color 1: \"#GGGGGG\" is not a #RRGGBB color.",
             "Family colors, color 3: \"\" is not a #RRGGBB color.",
             "Project fill opacity must be from 10 to 100; it is 5.",
+            "The file has no \"projectUnselectedOpacity\".",
             "Family bar width must be a whole number.",
             "The file has no \"familyBarOpacity\".",
         ], result.Errors);

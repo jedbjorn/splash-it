@@ -22,6 +22,7 @@ internal static class CoreStrings
     internal static string Field_ProjectColors => Get(nameof(Field_ProjectColors));
     internal static string Field_FamilyColors => Get(nameof(Field_FamilyColors));
     internal static string Field_ProjectFillOpacity => Get(nameof(Field_ProjectFillOpacity));
+    internal static string Field_ProjectUnselectedOpacity => Get(nameof(Field_ProjectUnselectedOpacity));
     internal static string Field_FamilyBarWidth => Get(nameof(Field_FamilyBarWidth));
     internal static string Field_FamilyBarOpacity => Get(nameof(Field_FamilyBarOpacity));
 

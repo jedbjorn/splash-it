@@ -1,0 +1,24 @@
+// Copied from gantt-it src/GanttIt.Revit/UI/Mvvm/ObservableObject.cs (gantt-it commit aa83f35, MIT, same owner).
+// Changes: namespaces; comments cite gantt-it's spec sections as "gantt-it §".
+
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
+namespace SplashIt.UI.Mvvm;
+
+/// <summary>Plain <see cref="INotifyPropertyChanged"/> base for the view-models (gantt-it §8: no MVVM packages).</summary>
+public abstract class ObservableObject : INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        OnPropertyChanged(propertyName);
+        return true;
+    }
+}

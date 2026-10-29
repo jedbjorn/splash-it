@@ -25,6 +25,13 @@ public static class SplashItDefaults
     /// <summary>Project fill opacity, percent.</summary>
     public const int ProjectFillOpacity = 100;
 
+    /// <summary>
+    /// Unselected tab opacity (decision #23), percent of <see cref="ProjectFillOpacity"/>: a
+    /// project's unselected tabs show its color at fill × this share; the selected tab at the full
+    /// fill. Also the value read when an older settings file has no such field.
+    /// </summary>
+    public const int ProjectUnselectedOpacity = 50;
+
     /// <summary>Family bar width, device-independent pixels.</summary>
     public const int FamilyBarWidth = 3;
 

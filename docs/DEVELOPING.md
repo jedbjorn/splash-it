@@ -13,7 +13,9 @@ src/
   SplashIt.Core/         net8.0;net10.0 — settings and their defaults, export/import,
                          file-kind classification, color allocation, color math.
                          No Revit, no WPF, no NuGet packages.
-    Colors/              Rgb, ColorMath, ColorAllocator<TKey>
+    Colors/              Rgb, ColorMath, ColorAllocator<TKey>, RecentColors
+    Theming/, Picking/   UiPalette (light and dark window palettes, WCAG-checked) and
+                         ScreenSampling, vendored from gantt-it
     Files/               FileKind, FileKindClassifier
     Settings/            SplashItSettings (Read/Write/Validate), SplashItDefaults,
                          SettingsExchange (export/import), the shared JSON reader
@@ -22,8 +24,14 @@ src/
                          the tab style factory, the colorizer engine (against
                          ITabSurface and a document-info abstraction), the settings
                          window and view-models, the vendored theme and color picker.
-                         Theme detection reaches it as an input. Holds only a
-                         placeholder type until the colorizer and window lanes land.
+                         Theme detection reaches it as an input.
+    Theme.xaml, Theming/ gantt-it's theme (vendored); SplashItTheme.Apply(theme) sets
+                         the light or dark palette for windows opened after it
+    Mvvm/, Dialogs/,     gantt-it's MVVM base, dialogs and color picker (vendored),
+    Swatches/            strings in Resources/UiStrings.resx
+    Settings/            SettingsWindow + SettingsViewModel, ISettingsHost (the
+                         Revit-facing calls), SettingsLauncher.Show(owner, host),
+                         Preview/ (the sample tab strip)
   SplashIt.Revit/        the add-in (net8.0-windows for 2025 and 2026,
                          net10.0-windows for 2027): App, the command, the Revit tab
                          surface, Revit event and theme adapters, logger wiring.
@@ -107,6 +115,14 @@ both default color lists on the light and dark theme surfaces and checks the PNG
 blank. `UiProjectTests` checks that `SplashIt.UI` loads here and references no Revit
 assembly.
 
+`Settings/SettingsViewModelTests` drive the settings view-model against a fake
+`ISettingsHost` and a fake `IDialogService` (`Support/Fakes`). `Settings/SettingsWindowScreenshotTests`
+show the real windows off-screen (`Support/WindowCapture`: shown at -32000 without
+activation, client area only, so the DWM title bar is not in the PNG) and render every
+status state, a 12-color list, the color picker on a chip, import errors and the preview
+strip, in light and dark. Tests that open windows share the `WpfThemeCollection`, which
+runs them one at a time because `SplashItTheme.Current` is process-wide.
+
 Runtime tests reference `SplashIt.UI` and `SplashIt.Core`, never `SplashIt.Revit`.
 
 ## CI
@@ -180,6 +196,7 @@ as `SplashItSettings.Read` does.
   "projectColors": ["#4F8EF7", "..."],
   "familyColors": ["#D447BD", "..."],
   "projectFillOpacity": 100,
+  "projectUnselectedOpacity": 50,
   "familyBarWidth": 3,
   "familyBarOpacity": 100
 }
@@ -189,6 +206,11 @@ Opacities are whole percents (10–100) and the bar width whole pixels (1–6). 
 or corrupt file reads as the defaults (enabled); a value out of range is clamped when
 read from disk, and rejected by `Validate` everywhere else. An export has
 `"format": "splash-it-settings"` first and never `enabled`.
+
+`projectUnselectedOpacity` (decision #23) is a share of `projectFillOpacity`: a project's
+unselected tabs show its color at fill × share, the selected tab at the full fill. It was
+added within schema 1 (v1 had not shipped), so a settings file without it reads 50; an
+import must carry it, like every other field.
 
 A string that can't be decoded (an escaped lone surrogate such as `"\ud800"`, legal
 JSON) counts as a bad value: dropped when reading the settings file, reported when
