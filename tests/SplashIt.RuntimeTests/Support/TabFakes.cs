@@ -89,11 +89,18 @@ public sealed class FakeDocuments : IDocumentInfo
     /// <summary>Whether the document is registered: open, and announced or listed since.</summary>
     public bool IsRegistered(object key) => Open.Contains(key) && !Unannounced.Contains(key);
 
+    /// <summary>Applied by the next listing (Revit re-reads each known document's title and kind there); returns how many changed.</summary>
+    public Func<int>? OnNextListing { get; set; }
+
     /// <summary>Lists the open documents; listing registers the unannounced ones, as Revit's adapter does.</summary>
-    public void GetOpenDocuments(List<object> into)
+    public void GetOpenDocuments(List<object> into) => GetOpenDocuments(into, out _);
+
+    public void GetOpenDocuments(List<object> into, out int changed)
     {
         Listings++;
         Unannounced.Clear();
+        changed = OnNextListing?.Invoke() ?? 0;
+        OnNextListing = null;
         into.Clear();
         into.AddRange(Open);
     }

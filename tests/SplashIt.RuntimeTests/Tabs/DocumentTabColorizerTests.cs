@@ -759,7 +759,7 @@ public class DocumentTabColorizerTests
             rig.Events.Scan();
             Assert.Equal(0, changes.Count);
             Assert.Equal(invalidations, rig.Surface.Invalidations);
-            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("document scan"));
+            Assert.Contains(rig.Log.Lines, l => l.Contains("document scan registered 0 documents") && l.Contains("0 changed title or kind, 0 reclassified; 0 no longer open; 1 unresolved."));
 
             // P1 closed with no event: the scan forgets it, so P3 takes colour 1.
             rig.Strip.Items.RemoveAt(1);
@@ -798,6 +798,41 @@ public class DocumentTabColorizerTests
             sink.OnDocumentScan();
             Assert.Equal(listings, rig.Documents.Listings);
             Assert.Equal(0, rig.Colorizer.StyledTabCount);
+        });
+    }
+
+    /// <summary>
+    /// Review m1: a scan that finds a known document's kind changed (a Save As no event reported)
+    /// handles it like a Save As: an .rte goes native and frees its colour.
+    /// </summary>
+    [Fact]
+    public void AScan_ThatFindsAKindChanged_ReclassifiesLikeASaveAs()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.Start();
+            Assert.True(TabStyleFactory.IsDerived(rig.Tab(2).Style));
+
+            rig.Documents.OnNextListing = () =>
+            {
+                rig.Documents.Kinds[rig.P2] = FileKind.Other; // saved as .rte, no event
+                return 1;
+            };
+            rig.Events.Scan();
+
+            Assert.Same(rig.Original, rig.Tab(2).Style);
+            Assert.True(TabStyleFactory.IsDerived(rig.Tab(0).Style));
+            Assert.Contains(rig.Log.Lines, l => l.Contains("1 changed title or kind, 1 reclassified"));
+
+            // P2's colour is free again: a new project takes colour 2.
+            var p3 = new DocKey("P3");
+            rig.Documents.Add(p3, FileKind.Project);
+            var tab = new TabItem { Header = "P3 - L1", Style = rig.Original };
+            rig.Strip.Items.Add(tab);
+            rig.Surface.Bind(tab, p3);
+            rig.Events.Sink!.OnDocumentOpened(p3);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), ((SolidColorBrush)tab.Background).Color);
         });
     }
 }

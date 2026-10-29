@@ -467,20 +467,33 @@ public sealed class DocumentTabColorizer
     }
 
     /// <summary>
-    /// The fallback scan (SC-004): registers every open document no event announced, and
-    /// forgets those no longer open. Runs where the source allows the document list to be read.
+    /// The fallback scan (SC-004): registers every open document no event announced, takes a
+    /// changed kind of a known one like a Save As (review m1), and forgets those no longer open.
+    /// When anything changed, including only a title, the surface forgets its resolutions (a tab
+    /// that matched nothing may match now) and the tabs are restyled. Each scan is logged with
+    /// what it found and the unresolved tabs left. Runs where the source allows the document
+    /// list to be read.
     /// </summary>
     private void OnDocumentScan()
     {
         if (!_running) return;
         try
         {
-            _documents.GetOpenDocuments(_keys);
-            int projects = 0, families = 0, others = 0;
+            _documents.GetOpenDocuments(_keys, out var retitled);
+            int projects = 0, families = 0, others = 0, rekinded = 0;
             foreach (var key in _keys)
             {
-                if (_kinds.ContainsKey(key)) continue;
                 var kind = Classify(key);
+                if (_kinds.TryGetValue(key, out var old))
+                {
+                    if (old == kind) continue;
+                    // A kind no event reported (a missed Save As): as OnDocumentSavedAs.
+                    Forget(key);
+                    _kinds[key] = kind;
+                    AllocatorFor(kind)?.Assign(key);
+                    rekinded++;
+                    continue;
+                }
                 _kinds[key] = kind;
                 AllocatorFor(kind)?.Assign(key);
                 switch (kind)
@@ -498,13 +511,13 @@ public sealed class DocumentTabColorizer
             _keys.Clear();
 
             var added = projects + families + others;
-            if (added + gone > 0)
+            if (added + gone + retitled + rekinded > 0)
             {
-                _log.Info(Inv($"colorizer: a document scan registered {added} documents no event announced ({projects} project, {families} family, {others} other); {gone} no longer open."));
                 _surface.Invalidate(); // tabs that resolved to nothing resolve again
                 _signatureValid = false;
                 Pass(force: true);
             }
+            _log.Info(Inv($"colorizer: a document scan registered {added} documents no event announced ({projects} project, {families} family, {others} other); {retitled} changed title or kind, {rekinded} reclassified; {gone} no longer open; {_unresolvedTabs} unresolved."));
             _consecutiveFaults = 0;
         }
         catch (Exception ex)

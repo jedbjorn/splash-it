@@ -317,4 +317,56 @@ public class TreeTabSurfaceTests
             Assert.Equal(ColorizerStatus.Active, colorizer.Status);
         });
     }
+
+    /// <summary>
+    /// Review m1, against the real surface and its cache of "matches nothing": a family
+    /// registered under a title its tabs don't show (Edit Family announced before Revit settled
+    /// its title) stays native until a scan re-reads the title; the scan reports the change, the
+    /// cache is dropped, and the tab gets the family's marks. The log then shows 0 unresolved.
+    /// </summary>
+    [Fact]
+    public void RealSurface_ATitleThatChangesAfterRegistration_IsPickedUpByTheScan()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var (root, pane) = RevitLikeTree();
+            var titles = new Dictionary<string, string> { ["P1"] = "Project1", ["F1"] = "Family1-temp" }; // stale
+            object? ByTitle(TabItem tab, string title)
+            {
+                foreach (var (key, doc) in titles)
+                    if (title.StartsWith(doc + " - ", StringComparison.Ordinal)) return key;
+                return null;
+            }
+            long now = 10_000;
+            var surface = new TreeTabSurface(r => r.Add(root), () => true, ByTitle, clockMs: () => now);
+            var documents = new FakeDocuments();
+            documents.Add("P1", SplashIt.Core.Files.FileKind.Project);
+            documents.Add("F1", SplashIt.Core.Files.FileKind.Family);
+            var events = new FakeEvents();
+            var log = new ListLog();
+            var colorizer = new DocumentTabColorizer(surface, documents, events, new TabStyleFactory(), log: log, clockMs: () => now);
+            colorizer.Start();
+            var family = (TabItem)pane.Items[2]!;
+            Assert.False(TabStyleFactory.IsDerived(family.Style));   // matches nothing: native
+            Assert.True(events.ScanRequests > 0);
+
+            // Rediscovery alone does not drop the cached "matches nothing".
+            now += 2500;
+            events.Layout();
+            Assert.False(TabStyleFactory.IsDerived(family.Style));
+
+            // The scan (the next Idling) re-reads F1's title: now "Family1".
+            documents.OnNextListing = () =>
+            {
+                titles["F1"] = "Family1";
+                return 1;
+            };
+            events.Scan();
+
+            Assert.True(TabStyleFactory.IsDerived(family.Style));
+            Assert.NotNull(TabDecoration.GetDecoration(family)?.LeftBar);
+            Assert.Contains(log.Lines, l => l.Contains("1 changed title or kind, 0 reclassified; 0 no longer open; 0 unresolved."));
+            Assert.Contains(log.Lines, l => l.Contains("3 tabs: 2 project, 1 family, 0 other, 0 unresolved"));
+        });
+    }
 }
