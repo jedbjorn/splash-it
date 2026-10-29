@@ -263,11 +263,15 @@ title's last column (Revit leaves 12 px between a title and its ×, so a title t
 ends 10.5 px into the 24 px fade, at about 44 % of the opacity); the × is black or white against
 the backdrop alone. The backdrop is what actually shows through the fade's transparent end and
 under the ×: whatever is behind the tab, since the fill replaces the tab's own background. The
-colorizer finds it with `TabBackdrop`: it walks the tab's visual parents to the first panel or
-border with an opaque `SolidColorBrush` background (Revit's strip or pane), blending translucent
-ones on the way. It does this once per pane (the tabs' parent), logs what it found ("tabs sit on
-#RRGGBB (Border, 3 levels up)"), and again after a theme change, so the per-pass hot path is
-untouched. With nothing solid behind the tab (or before the tab is in a tree), it falls back to
+colorizer finds it with `TabBackdrop`: a hit test at the centre of the tabs' panel that skips
+every tab, taking the first border or panel background (or shape fill) under them that is an
+opaque `SolidColorBrush`, with translucent ones above it blended over it. When that finds nothing,
+it walks the tab's visual parents to the first panel or border with an opaque solid background.
+(On Revit 2026 the strip behind the tabs, `#CCCCCC` in light, is not an ancestor's background:
+the nearest solid ancestor is `#EEEEEE`, so the ancestor walk alone picked the wrong color.) It
+does this once per laid-out pane (the tabs' parent), logs what it found and what each method gave
+("tabs sit on #RRGGBB (…) [hit test: …; ancestors: …]"), and again after a theme change, so the
+per-pass hot path is untouched. With nothing solid behind the tab (or before the tab is in a tree), it falls back to
 the tab's original background, then to the theme surface. Over every default color, fill,
 unselected share and state, one of black and white reaches 3:1 at both points on each candidate
 strip. The settings preview passes its tab color, which its template lays under the fill. The

@@ -91,6 +91,15 @@ public sealed class DocumentTabColorizer
     /// </summary>
     private readonly Dictionary<DependencyObject, Brush?> _backdrops = new();
 
+    /// <summary>A project tab was styled while its pane was not laid out, so its backdrop is still to find.</summary>
+    private bool _backdropPending;
+
+    /// <summary>Passes repeated so far to find a backdrop (bounded by <see cref="MaxBackdropRetries"/>; reset with the cache).</summary>
+    private int _backdropRetries;
+
+    /// <summary>The most passes repeated to wait for a pane's layout.</summary>
+    private const int MaxBackdropRetries = 20;
+
     /// <summary>Above this many panes the backdrop cache starts over (a safety bound).</summary>
     private const int MaxBackdrops = 64;
     private readonly List<SurfaceTab> _read = new();
@@ -469,6 +478,7 @@ public sealed class DocumentTabColorizer
             Theme = theme;
             RestoreAll();           // originals back on every tab...
             _backdrops.Clear();     // ...what is behind the tabs found again...
+            _backdropRetries = 0;
             _styles.ClearCache();   // ...styles rebuilt for the new backdrop...
             _signatureValid = false;
             Pass(force: true);      // ...originals recaptured, contrast recomputed, reapplied.
@@ -690,6 +700,11 @@ public sealed class DocumentTabColorizer
         var pane = VisualTreeHelper.GetParent(tab);
         if (pane is null) return state.OriginalBackground;
         if (_backdrops.TryGetValue(pane, out var cached)) return cached ?? state.OriginalBackground;
+        if (pane is not FrameworkElement { ActualWidth: > 0 })
+        {
+            _backdropPending = true; // not laid out yet: not cached; look again on the next pass
+            return state.OriginalBackground;
+        }
 
         Brush? brush = null;
         if (TabBackdrop.Behind(tab) is { } behind)
@@ -698,11 +713,11 @@ public sealed class DocumentTabColorizer
             var solid = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
             solid.Freeze();
             brush = solid;
-            _log.Info(Inv($"colorizer: tabs sit on {c.ToHex()} ({behind.Source}); project text and × are chosen against it."));
+            _log.Info(Inv($"colorizer: tabs sit on {c.ToHex()} ({behind.Source}); project text and x are chosen against it. [{TabBackdrop.Explain(tab)}]"));
         }
         else
         {
-            _log.Info("colorizer: nothing solid behind the tabs; project text and × are chosen against each tab's own background, else the theme surface.");
+            _log.Info("colorizer: nothing solid behind the tabs; project text and x are chosen against each tab's own background, else the theme surface.");
         }
         if (_backdrops.Count >= MaxBackdrops) _backdrops.Clear();
         _backdrops[pane] = brush;
@@ -840,7 +855,10 @@ public sealed class DocumentTabColorizer
         _signature.Clear();
         foreach (var entry in _read)
             _signature.Add(new Signature(entry.Tab, entry.Title, entry.IsSelected, entry.DocumentKey, entry.Tab.Style));
-        _signatureValid = true;
+        // A pane not laid out yet had no backdrop to find: pass again on the next layout, a bounded
+        // number of times (a pane that never lays out must not keep the hot path busy).
+        _signatureValid = !(_backdropPending && _backdropRetries++ < MaxBackdropRetries);
+        _backdropPending = false;
     }
 
     // ---- status, faults, logging ----
