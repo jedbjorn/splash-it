@@ -25,7 +25,7 @@ namespace SplashIt.UI.Tabs;
 public sealed class PyRevitGuard : IForeignColorizerGuard
 {
     /// <summary>Assembly-name prefixes taken as pyRevit's (case-insensitive).</summary>
-    public static readonly IReadOnlyList<string> AssemblyPrefixes = ["pyRevit", "PyRevitLabs"];
+    public static readonly IReadOnlyList<string> AssemblyPrefixes = ["pyRevit"]; // covers pyRevitLabs.* (case-insensitive)
 
     /// <summary>Type-name fragment of pyRevit's tab-coloring support.</summary>
     public const string TypeFragment = "DocumentTab";
@@ -86,16 +86,18 @@ public sealed class PyRevitGuard : IForeignColorizerGuard
     /// <summary>The name of a static bool state member on <paramref name="type"/> that is true; else null.</summary>
     private static string? ReadOn(Type type)
     {
+        // Fields first: reading a field runs no code of pyRevit's. A property getter is only
+        // read when no field answers (review n2).
+        foreach (var field in type.GetFields(StaticMembers))
+        {
+            if (field.FieldType != typeof(bool) || !IsStateName(field.Name)) continue;
+            if (TryRead(() => field.GetValue(null))) return field.Name;
+        }
         foreach (var property in type.GetProperties(StaticMembers))
         {
             if (property.PropertyType != typeof(bool) || property.GetIndexParameters().Length > 0 || !IsStateName(property.Name)) continue;
             if (property.GetGetMethod(nonPublic: true) is null) continue;
             if (TryRead(() => property.GetValue(null))) return property.Name;
-        }
-        foreach (var field in type.GetFields(StaticMembers))
-        {
-            if (field.FieldType != typeof(bool) || !IsStateName(field.Name)) continue;
-            if (TryRead(() => field.GetValue(null))) return field.Name;
         }
         return null;
     }

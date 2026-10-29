@@ -84,7 +84,21 @@ public static class TabDecoration
         if (d is UIElement element) Refresh(element);
     }
 
+    /// <summary>Adds, updates or removes the adorner. Never throws (it runs from WPF callbacks, review m6).</summary>
     private static void Refresh(UIElement element)
+    {
+        try
+        {
+            RefreshCore(element);
+        }
+        catch (Exception)
+        {
+            // Never into Revit's dispatcher: drop the drawing rather than fail.
+            if (element.GetValue(StateProperty) is State state) state.Detach();
+        }
+    }
+
+    private static void RefreshCore(UIElement element)
     {
         var spec = GetDecoration(element);
         var state = element.GetValue(StateProperty) as State;
@@ -205,15 +219,43 @@ public static class TabDecoration
 
         private void OnLoaded(object sender, RoutedEventArgs e) => Refresh(element);
 
-        private void OnUnloaded(object sender, RoutedEventArgs e) => Detach();
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Detach();
+            }
+            catch (Exception)
+            {
+                Adorner = null;
+                Layer = null;
+            }
+        }
 
-        private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateVisibility();
+        private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            try
+            {
+                UpdateVisibility();
+            }
+            catch (Exception)
+            {
+                // Visibility is cosmetic; keep going.
+            }
+        }
 
         private void OnLayoutUpdated(object? sender, EventArgs e)
         {
-            if (AdornerLayer.GetAdornerLayer(element) is null) return;
-            StopWaiting();
-            Refresh(element);
+            try
+            {
+                if (AdornerLayer.GetAdornerLayer(element) is null) return;
+                StopWaiting();
+                Refresh(element);
+            }
+            catch (Exception)
+            {
+                StopWaiting();
+            }
         }
     }
 }
@@ -247,6 +289,18 @@ public sealed class TabDecorationAdorner : Adorner
     }
 
     protected override void OnRender(DrawingContext drawingContext)
+    {
+        try
+        {
+            RenderCore(drawingContext);
+        }
+        catch (Exception)
+        {
+            // A failed draw leaves the tab undecorated; it never reaches the dispatcher.
+        }
+    }
+
+    private void RenderCore(DrawingContext drawingContext)
     {
         var element = AdornedElement;
         var size = element.RenderSize;

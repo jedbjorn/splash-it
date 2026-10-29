@@ -258,4 +258,63 @@ public class TreeTabSurfaceTests
             Assert.Equal(TreeTabSurface.NoPaneReason, colorizer.StatusDetail);
         });
     }
+
+    /// <summary>Review m1: a read that throws on every pass walks the tree at most once per RetryAfter.</summary>
+    [Fact]
+    public void AReadThatThrowsEveryPass_WalksAtMostOncePerRetryPeriod()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var (root, _) = RevitLikeTree();
+            long now = 0;
+            var surface = new TreeTabSurface(r => r.Add(root), () => true, (_, _) => throw new InvalidOperationException("title"),
+                clockMs: () => now) { RetryAfter = TimeSpan.FromSeconds(1) };
+            var tabs = new List<SurfaceTab>();
+
+            for (var i = 0; i < 100; i++)
+            {
+                Assert.False(surface.Read(tabs).IsAvailable);
+                now += 50; // 100 layout passes over 5 s
+            }
+
+            Assert.InRange(surface.WalkCount, 1, 6);
+        });
+    }
+
+    /// <summary>
+    /// Review m7: the real surface, under the colorizer, allocates nothing on unchanged passes,
+    /// including the periodic rediscovery walks that find the same panes.
+    /// </summary>
+    [Fact]
+    public void RealSurface_UnchangedPasses_AllocateNothing_EvenAcrossRediscoveries()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var (root, _) = RevitLikeTree();
+            long now = 10_000;
+            var surface = new TreeTabSurface(r => r.Add(root), () => true, ByTitlePrefix, clockMs: () => now);
+            var documents = new FakeDocuments();
+            documents.Add("P1", SplashIt.Core.Files.FileKind.Project);
+            documents.Add("F1", SplashIt.Core.Files.FileKind.Family);
+            var events = new FakeEvents();
+            var colorizer = new DocumentTabColorizer(surface, documents, events, new TabStyleFactory());
+            colorizer.Start();
+            for (var i = 0; i < 20; i++) events.Layout();
+            now += 2500;
+            for (var i = 0; i < 20; i++) events.Layout(); // warm the rediscovery path too
+            var walks = surface.WalkCount;
+
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 500; i++)
+            {
+                events.Layout();
+                if (i % 100 == 99) now += 2500; // a rediscovery walk every 100 passes
+            }
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.True(surface.WalkCount >= walks + 4, $"rediscoveries ran: {surface.WalkCount - walks}");
+            Assert.Equal(0, allocated);
+            Assert.Equal(ColorizerStatus.Active, colorizer.Status);
+        });
+    }
 }
