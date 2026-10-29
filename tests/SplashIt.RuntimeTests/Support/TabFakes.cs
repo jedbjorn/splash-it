@@ -31,6 +31,12 @@ public sealed class FakeSurface : ITabSurface
     /// <summary>When set, <see cref="Read"/> throws it (a broken surface; the contract says never, the colorizer guards anyway).</summary>
     public Exception? Throw { get; set; }
 
+    /// <summary>
+    /// When set, a bound key reads as null unless this says the documents know it: like the real
+    /// surface, a tab of a document that is not registered resolves to nothing (SC-004).
+    /// </summary>
+    public Func<object, bool>? IsKnown { get; set; }
+
     public void Bind(TabItem tab, object key) => _keys[tab] = key;
 
     public void Unbind(TabItem tab) => _keys.Remove(tab);
@@ -46,6 +52,7 @@ public sealed class FakeSurface : ITabSurface
         {
             var tab = (TabItem)items[i]!;
             _keys.TryGetValue(tab, out var key);
+            if (key is not null && IsKnown is { } known && !known(key)) key = null;
             into.Add(new SurfaceTab(tab, (string)tab.Header, tab.IsSelected, key));
         }
         return TabSurfaceResult.Available;
@@ -67,8 +74,26 @@ public sealed class FakeDocuments : IDocumentInfo
         if (!Open.Contains(key)) Open.Add(key);
     }
 
+    /// <summary>Open, but no event announced them: not registered until the next listing (SC-004).</summary>
+    public HashSet<object> Unannounced { get; } = new();
+
+    public int Listings { get; private set; }
+
+    /// <summary>A document Revit opened without raising an "opened" event.</summary>
+    public void AddUnannounced(object key, FileKind kind)
+    {
+        Add(key, kind);
+        Unannounced.Add(key);
+    }
+
+    /// <summary>Whether the document is registered: open, and announced or listed since.</summary>
+    public bool IsRegistered(object key) => Open.Contains(key) && !Unannounced.Contains(key);
+
+    /// <summary>Lists the open documents; listing registers the unannounced ones, as Revit's adapter does.</summary>
     public void GetOpenDocuments(List<object> into)
     {
+        Listings++;
+        Unannounced.Clear();
         into.Clear();
         into.AddRange(Open);
     }
@@ -104,7 +129,15 @@ public sealed class FakeEvents : IColorizerEventSource
         Sink = null;
     }
 
+    /// <summary>How many times the colorizer asked for a document scan (SC-004).</summary>
+    public int ScanRequests { get; private set; }
+
+    public void RequestDocumentScan() => ScanRequests++;
+
     public void Layout() => Sink?.OnLayoutUpdated();
+
+    /// <summary>The scan the request asked for (in Revit, on the next Idling).</summary>
+    public void Scan() => Sink?.OnDocumentScan();
 }
 
 public sealed class FakeGuard(bool running) : IForeignColorizerGuard

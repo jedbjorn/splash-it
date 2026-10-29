@@ -12,7 +12,14 @@ namespace SplashIt.Revit.Tabs;
 /// Revit's side of the colorizer's events (spec, DocumentTabColorizer): DocumentOpened and
 /// DocumentCreated (→ opened), DocumentClosing then DocumentClosed (→ closed, only when the
 /// close succeeded), DocumentSavedAs (and DocumentSaved when it changed the title or kind), the UI <c>ThemeChanged</c>, and layout passes through a
-/// <see cref="LayoutPulse"/>. Linked documents are ignored. Subscriptions exist only between
+/// <see cref="LayoutPulse"/>. Linked documents are ignored.
+/// <para>
+/// <b>The fallback scan</b> (SC-004): a layout pass runs outside Revit's API context, so when
+/// the colorizer asks for a document scan (<see cref="RequestDocumentScan"/>, from a layout
+/// pass) only a flag is set; the scan runs on the next <c>Idling</c>, which is in API context,
+/// where the colorizer lists <c>Application.Documents</c> through <see cref="RevitDocuments"/>.
+/// The Idling handler does nothing else, and returns at once when no scan is pending.
+/// </para> Subscriptions exist only between
 /// <see cref="Subscribe"/> and <see cref="Unsubscribe"/>, so turning the colorizer off leaves
 /// none behind. The document handlers run in Revit's API context and keep
 /// <see cref="RevitDocuments"/> current there. Every handler catches its own exceptions.
@@ -24,6 +31,8 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
     private readonly ILog _log;
     private readonly LayoutPulse _pulse = new();
     private IColorizerEventSink? _sink;
+    private bool _idling;
+    private bool _scanRequested;
 
     public RevitColorizerEvents(UIControlledApplication application, RevitDocuments documents, ILog? log = null)
     {
@@ -47,6 +56,11 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         app.DocumentSavedAs += OnSavedAs;
         app.DocumentSaved += OnSaved;
         _application.ThemeChanged += OnThemeChanged;
+        if (!_idling)
+        {
+            _application.Idling += OnIdling;
+            _idling = true;
+        }
         _pulse.Start(OnLayoutUpdated);
     }
 
@@ -63,6 +77,57 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         app.DocumentSavedAs -= OnSavedAs;
         app.DocumentSaved -= OnSaved;
         _application.ThemeChanged -= OnThemeChanged;
+        _scanRequested = false;
+        StopIdling();
+    }
+
+    /// <summary>A layout pass found unresolved tabs: scan on the next Idling (API context). Sets a flag only.</summary>
+    public void RequestDocumentScan()
+    {
+        if (_sink is not null) _scanRequested = true;
+    }
+
+    private void OnIdling(object? sender, IdlingEventArgs e)
+    {
+        if (!_scanRequested)
+        {
+            // Unsubscribed outside the API context (a fault in a layout pass): leave now.
+            if (_sink is null) StopIdling();
+            return;
+        }
+        _scanRequested = false;
+        try
+        {
+            if (_sink is not { } sink) return;
+            _documents.ListingSource = "fallback";
+            sink.OnDocumentScan();
+        }
+        catch (Exception ex)
+        {
+            _log.Error("events: the document scan failed (" + ex.GetType().Name + ").");
+        }
+        finally
+        {
+            _documents.ListingSource = "start";
+        }
+    }
+
+    /// <summary>
+    /// Removes the Idling handler. Outside the API context Revit may refuse; the handler then
+    /// stays inert (no sink) and removes itself on the next Idling.
+    /// </summary>
+    private void StopIdling()
+    {
+        if (!_idling) return;
+        try
+        {
+            _application.Idling -= OnIdling;
+            _idling = false;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("events: removing the Idling handler failed (" + ex.GetType().Name + "); it is removed on the next Idling.");
+        }
     }
 
     private void OnOpened(object? sender, DocumentOpenedEventArgs e)

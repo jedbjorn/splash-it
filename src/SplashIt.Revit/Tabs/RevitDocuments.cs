@@ -32,6 +32,13 @@ public sealed class RevitDocumentKey
 /// read the cache. <see cref="Find"/> compares <see cref="Document"/> objects (reference
 /// first, then Revit's <c>Document.Equals</c>), which reads no model data.
 /// </para>
+/// <para>
+/// <b>Registration log</b> (SC-004): each document is logged once, when first registered, with
+/// how it was found (<c>event</c>: an open, create or save event; <c>start</c>: listed when the
+/// colorizer started; <c>fallback</c>: listed by the scan its unresolved tabs asked for), its
+/// kind and the rule that decided it (<c>api</c> or <c>template-ext</c>), and the count open.
+/// Never a title or a path.
+/// </para>
 /// UI thread only.
 /// </summary>
 public sealed class RevitDocuments : IDocumentInfo
@@ -44,6 +51,12 @@ public sealed class RevitDocuments : IDocumentInfo
     private readonly List<IReadOnlyList<string>> _kept = new();
     private int _serial;
 
+    /// <summary>
+    /// How <see cref="GetOpenDocuments"/> registers a document it finds for the first time, in the
+    /// log: "start" unless the event source is running the fallback scan ("fallback").
+    /// </summary>
+    internal string ListingSource { get; set; } = "start";
+
     public RevitDocuments(Func<RevitApplication?> application, ILog? log = null)
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
@@ -53,8 +66,11 @@ public sealed class RevitDocuments : IDocumentInfo
     /// <summary>The number of open documents known (cached; no Revit call).</summary>
     public int Count => _entries.Count;
 
-    /// <summary>API context. The key for <paramref name="document"/>, registering it (title and kind) when new.</summary>
-    public RevitDocumentKey Register(Document document)
+    /// <summary>
+    /// API context. The key for <paramref name="document"/>, registering it (title and kind) when
+    /// new; <paramref name="source"/> says how it was found, for the log.
+    /// </summary>
+    public RevitDocumentKey Register(Document document, string source = "event")
     {
         if (Find(document) is { } existing)
         {
@@ -64,6 +80,7 @@ public sealed class RevitDocuments : IDocumentInfo
         var entry = new Entry(document, new RevitDocumentKey(++_serial));
         entry.Read();
         _entries.Add(entry);
+        _log.Info($"documents: {entry.Key} registered by {source}: {entry.Kind} (rule {FileKindClassifier.NameOf(entry.Rule)}); {_entries.Count} open.");
         return entry.Key;
     }
 
@@ -117,7 +134,7 @@ public sealed class RevitDocuments : IDocumentInfo
                 foreach (Document document in app.Documents)
                 {
                     if (document.IsLinked) continue;
-                    var key = Register(document);
+                    var key = Register(document, ListingSource);
                     open.Add(_entries.First(e => ReferenceEquals(e.Key, key)));
                 }
                 _entries.RemoveAll(e => !open.Contains(e));
@@ -211,6 +228,9 @@ public sealed class RevitDocuments : IDocumentInfo
 
         public FileKind Kind { get; private set; } = FileKind.Other;
 
+        /// <summary>The rule that decided <see cref="Kind"/> (logged at registration).</summary>
+        public FileKindRule Rule { get; private set; }
+
         /// <summary>
         /// API context: caches the title and classifies the document (spec, Behavior: file
         /// kinds). True when the title or the kind changed.
@@ -218,7 +238,7 @@ public sealed class RevitDocuments : IDocumentInfo
         public bool Read()
         {
             var current = TabTitleMatcher.TitleForms(Document.Title ?? "", Document.PathName);
-            var kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud);
+            var kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud, out var rule);
             var changed = kind != Kind || Titles.Count == 0 || !string.Equals(Titles[0], current.Count > 0 ? current[0] : "", StringComparison.Ordinal);
             var kept = new List<string>();
             foreach (var old in Titles.Concat(KeptTitles))
@@ -227,6 +247,7 @@ public sealed class RevitDocuments : IDocumentInfo
             Titles = current;
             KeptTitles = kept;
             Kind = kind;
+            Rule = rule;
             return changed;
         }
     }
