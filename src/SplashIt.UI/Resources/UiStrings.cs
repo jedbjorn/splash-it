@@ -129,6 +129,10 @@ public static class UiStrings
 
     public static string Settings_FillOpacity => Get(nameof(Settings_FillOpacity));
 
+    public static string Settings_UnselectedOpacity => Get(nameof(Settings_UnselectedOpacity));
+
+    public static string Settings_UnselectedOpacityTip => Get(nameof(Settings_UnselectedOpacityTip));
+
     public static string Settings_BarWidth => Get(nameof(Settings_BarWidth));
 
     public static string Settings_BarOpacity => Get(nameof(Settings_BarOpacity));

@@ -37,7 +37,7 @@
                                                    Foreground="{TemplateBinding Foreground}" />
                                     </DockPanel>
                                 </Border>
-                                <Rectangle VerticalAlignment="Top" Height="2"
+                                <Rectangle VerticalAlignment="Top" Height="3"
                                            Fill="{Binding (preview:PreviewTab.AccentBrush), RelativeSource={RelativeSource TemplatedParent}}" />
                                 <Rectangle HorizontalAlignment="Left"
                                            Width="{Binding (preview:PreviewTab.BarWidth), RelativeSource={RelativeSource TemplatedParent}}"

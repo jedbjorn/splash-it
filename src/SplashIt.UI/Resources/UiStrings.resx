@@ -145,13 +145,13 @@
     <value>Project colors</value>
   </data>
   <data name="Settings_ProjectColorsHint" xml:space="preserve">
-    <value>Solid tab fill. Each project you open takes the first free color.</value>
+    <value>Tab fill; each project takes the first free color.</value>
   </data>
   <data name="Settings_FamilyColors" xml:space="preserve">
     <value>Family colors</value>
   </data>
   <data name="Settings_FamilyColorsHint" xml:space="preserve">
-    <value>A bar on the tab's left edge. Each family you open takes the first free color.</value>
+    <value>Left-edge bar; each family takes the first free color.</value>
   </data>
   <data name="Settings_ProjectColorN" xml:space="preserve">
     <value>Project color {0}</value>
@@ -193,6 +193,12 @@
   </data>
   <data name="Settings_FillOpacity" xml:space="preserve">
     <value>Fill opacity</value>
+  </data>
+  <data name="Settings_UnselectedOpacity" xml:space="preserve">
+    <value>Unselected tab opacity</value>
+  </data>
+  <data name="Settings_UnselectedOpacityTip" xml:space="preserve">
+    <value>A share of the fill opacity: the project's other tabs show its color at fill × this share; the selected tab shows the full fill.</value>
   </data>
   <data name="Settings_BarWidth" xml:space="preserve">
     <value>Bar width</value>
