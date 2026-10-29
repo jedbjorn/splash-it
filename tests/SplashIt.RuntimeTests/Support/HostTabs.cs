@@ -21,7 +21,8 @@ public static class HostTabs
     /// (shared/evidence/lane-b/vm/&lt;year&gt;/diag-&lt;year&gt;.txt): a Grid holding a Border
     /// whose Background is the TabItem's Background, the header (icon placeholder and
     /// title in the TabItem's Foreground) and a close glyph with its own fixed grey
-    /// (#A2A6B0, as in Revit). Like Revit's, the style is a local style on the tab, and
+    /// (#A2A6B0, set by the button's own style as in Revit, so the tab's Foreground does
+    /// not reach it; the button is named mDocumentCloseButton, as in Revit). Like Revit's, the style is a local style on the tab, and
     /// sets its own selected and unselected backgrounds (selected: the theme's surface;
     /// unselected: transparent over the strip).
     /// </summary>
@@ -46,7 +47,20 @@ public static class HostTabs
                     <Grid x:Name="mGrid" Height="20" Margin="0,0,1,0">
                       <Border x:Name="mBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" />
                       <DockPanel Margin="4,2,4,2">
-                        <TextBlock x:Name="mClose" DockPanel.Dock="Right" Text="×" Foreground="#FFA2A6B0" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        <Button x:Name="mDocumentCloseButton" DockPanel.Dock="Right" Content="×" Margin="8,0,0,0" VerticalAlignment="Center" Focusable="False">
+                          <Button.Style>
+                            <Style TargetType="Button">
+                              <Setter Property="Foreground" Value="#FFA2A6B0" />
+                              <Setter Property="Template">
+                                <Setter.Value>
+                                  <ControlTemplate TargetType="Button">
+                                    <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                                  </ControlTemplate>
+                                </Setter.Value>
+                              </Setter>
+                            </Style>
+                          </Button.Style>
+                        </Button>
                         <Border Width="12" Height="12" Margin="0,0,5,0" BorderThickness="1" BorderBrush="{TemplateBinding Foreground}" Opacity="0.5" />
                         <ContentPresenter ContentSource="Header" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
                       </DockPanel>
@@ -62,6 +76,9 @@ public static class HostTabs
             """;
         return (Style)XamlReader.Parse(xaml);
     }
+
+    /// <summary>The close button's own grey, as Revit's light theme sets it (a style setter on the button).</summary>
+    public static readonly Color CloseGrey = Color.FromRgb(0xA2, 0xA6, 0xB0);
 
     /// <summary>The strip behind the tabs (Revit's tab well), per theme.</summary>
     public static Rgb Well(ThemeKind theme) => theme == ThemeKind.Dark ? Rgb.Parse("#3B4453") : Rgb.Parse("#D5D9DE");

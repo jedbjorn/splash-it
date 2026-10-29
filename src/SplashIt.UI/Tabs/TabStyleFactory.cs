@@ -30,27 +30,30 @@ public interface ITabStyleFactory
     void ClearCache();
 }
 
-/// <summary>The colors a project fill shows in each state, all opaque RGB.</summary>
-/// <param name="Fill">The fill color; drawn at <paramref name="Opacity"/>.</param>
-/// <param name="Opacity">The fill opacity, 0.1 to 1.</param>
-/// <param name="Text">Text and close glyph over the fill as shown (black or white).</param>
-/// <param name="Hover">The hover fill (lighter); drawn at <paramref name="Opacity"/>.</param>
-/// <param name="HoverText">Text over the hover fill as shown.</param>
-/// <param name="Selected">The selected tab's fill, drawn at full opacity.</param>
-/// <param name="SelectedText">Text over the selected fill.</param>
-/// <param name="Accent">The selected tab's 2 px top accent (darker).</param>
+/// <summary>The colors a project fill shows in each state (spec, Shapes and settings, #22).</summary>
+/// <param name="Fill">The project color: an unselected tab draws it at <paramref name="MutedOpacity"/>.</param>
+/// <param name="Opacity">The fill opacity (0.1 to 1): what the selected tab draws.</param>
+/// <param name="MutedOpacity">The unselected tabs' opacity: the Unselected tab opacity share of <paramref name="Opacity"/> (#23).</param>
+/// <param name="Text">Text and close glyph on an unselected tab, over the fill as shown (black or white).</param>
+/// <param name="Hover">The hover fill (lighter); drawn at <paramref name="MutedOpacity"/>.</param>
+/// <param name="HoverText">Text and close glyph over the hover fill as shown.</param>
+/// <param name="Selected">The selected tab's fill color, drawn at <paramref name="Opacity"/>.</param>
+/// <param name="SelectedText">Text and close glyph over the selected fill as shown.</param>
+/// <param name="Accent">The selected tab's 3 px top line (darker, opaque).</param>
 public readonly record struct TabFillColors(
-    Rgb Fill, double Opacity, Rgb Text, Rgb Hover, Rgb HoverText, Rgb Selected, Rgb SelectedText, Rgb Accent);
+    Rgb Fill, double Opacity, double MutedOpacity, Rgb Text, Rgb Hover, Rgb HoverText, Rgb Selected, Rgb SelectedText, Rgb Accent);
 
 /// <summary>
 /// The tab style factory (spec, Shapes and settings).
 /// <list type="bullet">
-/// <item><b>Project fill</b>: the background is the color at the fill opacity; text and the
-/// close glyph (<c>Foreground</c>) are black or white, whichever has the higher WCAG contrast
-/// against the fill as shown (blended over the tab's own solid background, else over the
-/// theme surface). Hover lightens the fill by <see cref="HoverLighten"/>. The selected tab
-/// shows the color at full opacity with a <see cref="AccentHeight"/> px accent, darker by
-/// <see cref="AccentDarken"/>, along its top edge.</item>
+/// <item><b>Project fill</b> (FnB decisions #22 and #23): the selected tab shows the color at the
+/// fill opacity with a <see cref="AccentHeight"/> px line, darker by <see cref="AccentDarken"/>,
+/// along its top edge; the project's other tabs show the same color at the Unselected tab
+/// opacity (<see cref="TabTreatment.UnselectedPercent"/> of the fill opacity, default 50 %), so
+/// the active view stands out. At 100 % only the top line marks the selected tab. Text and the close glyph are black or
+/// white, whichever has the higher WCAG contrast against the fill as shown in that state
+/// (blended over the tab's own solid background, else over the theme surface). Hover lightens
+/// an unselected tab's fill by <see cref="HoverLighten"/>.</item>
 /// <item><b>Family bar</b>: a bar of the bar width on the left edge at the bar opacity, full
 /// height. Nothing else changes, so selection and hover stay native.</item>
 /// </list>
@@ -74,6 +77,11 @@ public readonly record struct TabFillColors(
 /// <c>tabs-aero2-*</c> screenshots show the result.</item>
 /// <item>The family bar and the selected tab's top accent are drawn by
 /// <see cref="TabDecoration"/>, an adorner that does not depend on the template at all.</item>
+/// <item>The close glyph: Revit's close button (<c>mDocumentCloseButton</c>, inside
+/// AvalonDock's <c>LayoutDocumentTabItem</c>) has its own fixed grey and does not follow the
+/// tab's <c>Foreground</c>, so the same black or white is also set through
+/// <see cref="TabCloseGlyph.ForegroundProperty"/>, per state, which recolors that button and
+/// puts its own color back when the property clears (the original style is restored).</item>
 /// </list>
 /// The mechanism sits behind <see cref="ITabStyleFactory"/>, and the decoration behind one
 /// attached property, so either can be swapped after AC11 without touching the colorizer.
@@ -92,8 +100,8 @@ public sealed class TabStyleFactory : ITabStyleFactory
     /// <summary>How far the selected tab's top accent moves the fill toward black.</summary>
     public const double AccentDarken = 0.35;
 
-    /// <summary>The selected tab's top accent height, pixels.</summary>
-    public const double AccentHeight = 2;
+    /// <summary>The selected tab's top line height, pixels (#22).</summary>
+    public const double AccentHeight = 3;
 
     /// <summary>Above this many cached styles the cache starts over (a safety bound).</summary>
     public const int MaxCached = 1024;
@@ -128,18 +136,26 @@ public sealed class TabStyleFactory : ITabStyleFactory
     }
 
     /// <summary>The colors a project fill of <paramref name="color"/> shows over <paramref name="backdrop"/>.</summary>
-    public static TabFillColors FillColors(Rgb color, int opacityPercent, Rgb backdrop)
+    public static TabFillColors FillColors(Rgb color, int opacityPercent, Rgb backdrop,
+        int unselectedPercent = TabTreatment.DefaultUnselectedPercent) =>
+        FillColors(TabTreatment.ProjectFill(color, opacityPercent, unselectedPercent), backdrop);
+
+    /// <summary>The colors a project <paramref name="treatment"/> shows over <paramref name="backdrop"/>.</summary>
+    public static TabFillColors FillColors(TabTreatment treatment, Rgb backdrop)
     {
-        var opacity = TabTreatment.ProjectFill(color, opacityPercent).Opacity;
+        var color = treatment.Color;
+        var opacity = treatment.Opacity;
+        var muted = treatment.UnselectedOpacity;
         var hover = ColorMath.Lighten(color, HoverLighten);
         return new TabFillColors(
             Fill: color,
             Opacity: opacity,
-            Text: ColorMath.TextColorFor(color, opacity, backdrop),
+            MutedOpacity: muted,
+            Text: ColorMath.TextColorFor(color, muted, backdrop),
             Hover: hover,
-            HoverText: ColorMath.TextColorFor(hover, opacity, backdrop),
+            HoverText: ColorMath.TextColorFor(hover, muted, backdrop),
             Selected: color,
-            SelectedText: ColorMath.TextColorFor(color),
+            SelectedText: ColorMath.TextColorFor(color, opacity, backdrop),
             Accent: ColorMath.Darken(color, AccentDarken));
     }
 
@@ -168,39 +184,43 @@ public sealed class TabStyleFactory : ITabStyleFactory
 
     private static void AddProjectFill(Style style, TabTreatment treatment, Rgb backdrop)
     {
-        var colors = FillColors(treatment.Color, treatment.OpacityPercent, backdrop);
-        var fill = Brush(colors.Fill, colors.Opacity);
+        var colors = FillColors(treatment, backdrop);
+        var fill = Brush(colors.Fill, colors.MutedOpacity);
         var text = Brush(colors.Text);
-        var hover = Brush(colors.Hover, colors.Opacity);
+        var hover = Brush(colors.Hover, colors.MutedOpacity);
         var hoverText = Brush(colors.HoverText);
-        var selected = Brush(colors.Selected);
+        var selected = Brush(colors.Selected, colors.Opacity);
         var selectedText = Brush(colors.SelectedText);
         var accent = new TabDecorationSpec(null, 0, Brush(colors.Accent), AccentHeight);
 
         // Plain setters: the state before any trigger applies.
-        style.Setters.Add(new Setter(Control.BackgroundProperty, fill));
-        style.Setters.Add(new Setter(Control.ForegroundProperty, text));
+        AddState(style.Setters, fill, text);
 
-        // 1. Not selected: the fill. A trigger, so it outranks the base style's triggers.
+        // 1. Not selected: the muted fill. A trigger, so it outranks the base style's triggers.
         var normal = new Trigger { Property = TabItem.IsSelectedProperty, Value = false };
-        normal.Setters.Add(new Setter(Control.BackgroundProperty, fill));
-        normal.Setters.Add(new Setter(Control.ForegroundProperty, text));
+        AddState(normal.Setters, fill, text);
         style.Triggers.Add(normal);
 
         // 2. Hover, not selected: lighter.
         var hoverTrigger = new MultiTrigger();
         hoverTrigger.Conditions.Add(new Condition(UIElement.IsMouseOverProperty, true));
         hoverTrigger.Conditions.Add(new Condition(TabItem.IsSelectedProperty, false));
-        hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, hover));
-        hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, hoverText));
+        AddState(hoverTrigger.Setters, hover, hoverText);
         style.Triggers.Add(hoverTrigger);
 
-        // 3. Selected: full opacity and the darker top accent.
+        // 3. Selected: the fill opacity and the darker top line.
         var selectedTrigger = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
-        selectedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, selected));
-        selectedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, selectedText));
+        AddState(selectedTrigger.Setters, selected, selectedText);
         selectedTrigger.Setters.Add(new Setter(TabDecoration.DecorationProperty, accent));
         style.Triggers.Add(selectedTrigger);
+    }
+
+    /// <summary>One state's fill, text, and close glyph (the glyph follows the text, #22).</summary>
+    private static void AddState(SetterBaseCollection setters, Brush fill, Brush text)
+    {
+        setters.Add(new Setter(Control.BackgroundProperty, fill));
+        setters.Add(new Setter(Control.ForegroundProperty, text));
+        setters.Add(new Setter(TabCloseGlyph.ForegroundProperty, text));
     }
 
     private static void AddFamilyBar(Style style, TabTreatment treatment)
