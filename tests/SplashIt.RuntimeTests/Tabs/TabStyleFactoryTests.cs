@@ -232,22 +232,25 @@ public class TabStyleFactoryTests
             var bar = (TabDecorationSpec)setter.Value;
             Assert.Equal(width, bar.LeftBarWidth);
             Assert.Equal(Argb(Magenta, opacity), Solid(bar.LeftBar!));
-            // #27: the top bar, 2 px whatever the side bar's width, 90 % of the tab, same color and opacity.
+            // #27/#29: the top bar, 2 px whatever the side bar's width, 95 % of the tab, same color and
+            // opacity, its last 15 % fading from that color to transparent.
             Assert.Equal(Argb(Magenta, opacity), Solid(bar.TopAccent!));
             Assert.Equal(2, bar.TopAccentHeight);
-            Assert.Equal(0.9, bar.TopAccentWidth);
-            Assert.Equal(0, bar.TopAccentFade);
-            Assert.Null(bar.TopAccentFadeBrush);
+            Assert.Equal(0.95, bar.TopAccentWidth);
+            Assert.Equal(0.15, bar.TopAccentFade);
+            var fade = Assert.IsType<LinearGradientBrush>(bar.TopAccentFadeBrush);
+            Assert.Equal(Argb(Magenta, opacity), fade.GradientStops[0].Color);
+            Assert.Equal(0, fade.GradientStops[1].Color.A);
         });
     }
 
-    /// <summary>#27, option A is the default; the other options the FnB saw differ only in the shape's numbers.</summary>
+    /// <summary>#29: the default is option D at 95 %; every option the FnB saw differs only in the shape's numbers.</summary>
     [Fact]
-    public void FamilyTopBar_DefaultIsOptionA_AndTheShapeIsAParameter()
+    public void FamilyTopBar_DefaultIsOptionDAt95_AndTheShapeIsAParameter()
     {
         Screenshots.RunSta(() =>
         {
-            Assert.Equal(new FamilyTopBarShape(2, 0.9, 1, 0, false), FamilyTopBarShape.Default);
+            Assert.Equal(new FamilyTopBarShape(2, 0.95, 1, 0.15, false), FamilyTopBarShape.Default);
             Assert.Equal(FamilyTopBarShape.Default, new TabStyleFactory().FamilyTopBar);
 
             var matched = new TabStyleFactory(new FamilyTopBarShape(2, 0.9, MatchSideBar: true));
@@ -277,8 +280,21 @@ public class TabStyleFactoryTests
     [InlineData(80, 1.0, 80)]
     [InlineData(80.5, 1.0, 80.5)] // full width is the width itself
     [InlineData(0, 0.9, 0)]
+    [InlineData(100, 0.95, 95)]   // #29
+    [InlineData(150, 0.95, 143)]  // 142.5 → 143
+    [InlineData(157, 0.95, 149)]  // 149.15 → 149
     public void TopBarWidth_IsTheShareOfTheTab_Rounded(double tabWidth, double share, double expected) =>
         Assert.Equal(expected, TabDecorationAdorner.TopAccentWidthFor(tabWidth, share));
+
+    /// <summary>#29: the fade covers the bar's last 15 %, from a whole pixel.</summary>
+    [Theory]
+    [InlineData(95, 0.15, 81)]    // 80.75 → 81
+    [InlineData(143, 0.15, 122)]  // 121.55 → 122
+    [InlineData(100, 0.15, 85)]
+    [InlineData(100, 0, 100)]
+    [InlineData(0, 0.15, 0)]
+    public void TopBarFade_StartsAtTheLast15Percent_Rounded(double length, double fade, double expected) =>
+        Assert.Equal(expected, TabDecorationAdorner.TopAccentFadeStartFor(length, fade));
 
     [Fact]
     public void Styles_AreCachedPerOriginalAndTreatment()

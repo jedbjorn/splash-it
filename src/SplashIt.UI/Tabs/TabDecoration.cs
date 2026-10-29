@@ -343,7 +343,7 @@ public sealed class TabDecorationAdorner : Adorner
         // The side bar already covers the corner: the top bar starts where it ends, so a
         // translucent L is one even color, not darker where the two overlap.
         var start = Math.Min(left, top.Right);
-        var fadeStart = _spec.TopAccentFadeBrush is null ? top.Right : Math.Round(top.Right * (1 - _spec.TopAccentFade), MidpointRounding.AwayFromZero);
+        var fadeStart = _spec.TopAccentFadeBrush is null ? top.Right : TopAccentFadeStartFor(top.Right, _spec.TopAccentFade);
         fadeStart = Math.Max(start, fadeStart);
         if (fadeStart > start) DrawSnapped(drawingContext, accent, new Rect(start, top.Top, fadeStart - start, top.Height));
         if (_spec.TopAccentFadeBrush is { } fade && top.Right > fadeStart)
@@ -359,6 +359,17 @@ public sealed class TabDecorationAdorner : Adorner
         ArgumentNullException.ThrowIfNull(spec);
         if (spec.TopAccent is null || size.Width <= 0 || size.Height <= 0) return Rect.Empty;
         return new Rect(0, 0, TopAccentWidthFor(size.Width, spec.TopAccentWidth), Math.Min(spec.TopAccentHeight, size.Height));
+    }
+
+    /// <summary>
+    /// Where the top bar's fade begins, for a bar <paramref name="length"/> long whose last
+    /// <paramref name="fade"/> share fades: a whole pixel (half away from zero). From there to
+    /// the bar's end the color runs from its own opacity to transparent.
+    /// </summary>
+    public static double TopAccentFadeStartFor(double length, double fade)
+    {
+        if (length <= 0 || double.IsNaN(length)) return 0;
+        return Math.Round(length * (1 - Math.Clamp(fade, 0, 1)), MidpointRounding.AwayFromZero);
     }
 
     /// <summary>
