@@ -26,11 +26,15 @@ public readonly record struct DocumentPaneLookup(IReadOnlyList<IDocumentPane> Pa
 /// <item><see cref="TabGrouper"/> groups each pane, keyed by the map from step 2. A pane item
 /// with no tab, or a tab the surface left unresolved, has no key and goes last.</item>
 /// </list>
+/// Call it only while documents are open (the command checks): then finding no tab at all means
+/// the tab strip isn't where it is expected, which is <see cref="TabGroupOutcome.Unavailable"/>
+/// on the first click, not a silent no-op (review m2; the surface's own grace period for tabs
+/// that lag a document's open event is for the colorizer's passes, not for a click).
 /// Never throws. UI thread only.
 /// </summary>
 public static class GroupTabsRunner
 {
-    public const string NoTabsMessage = "group tabs: no document tabs found; nothing to group.";
+    public const string NoTabsReason = "Documents are open, but no document tab was found.";
 
     public static TabGroupResult Run(
         ITabSurface surface,
@@ -45,11 +49,7 @@ public static class GroupTabsRunner
             var tabs = new List<SurfaceTab>();
             var read = surface.Read(tabs);
             if (!read.IsAvailable) return Unavailable(read.Reason ?? "The tabs could not be read.", log);
-            if (tabs.Count == 0)
-            {
-                log.Info(NoTabsMessage);
-                return new TabGroupResult(TabGroupOutcome.AlreadyGrouped, 0, 0, null);
-            }
+            if (tabs.Count == 0) return Unavailable(NoTabsReason, log);
 
             var keys = new Dictionary<object, object?>(ReferenceEqualityComparer.Instance);
             var models = new List<object>(tabs.Count);
@@ -74,7 +74,7 @@ public static class GroupTabsRunner
 
     private static TabGroupResult Unavailable(string reason, ILog log)
     {
-        log.Warn("group tabs: unavailable. " + reason);
+        log.Warn("group tabs: unavailable; nothing moved. " + reason);
         return TabGroupResult.Unavailable(reason);
     }
 }
