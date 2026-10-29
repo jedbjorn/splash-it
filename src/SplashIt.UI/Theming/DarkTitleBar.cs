@@ -1,5 +1,5 @@
 // Copied from gantt-it src/GanttIt.Revit/UI/Theming/DarkTitleBar.cs (gantt-it commit aa83f35, MIT, same owner).
-// Changes: namespaces; reads SplashItTheme.
+// Changes: namespaces; comments (and messages) say Splash-It for Gantt-It; comments cite gantt-it's spec sections as "gantt-it §"; reads SplashItTheme where gantt-it reads GanttItTheme.
 
 using System.Runtime.InteropServices;
 using System.Windows;

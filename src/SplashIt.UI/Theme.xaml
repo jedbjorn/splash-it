@@ -1,6 +1,6 @@
 <!--
     Copied from gantt-it src/GanttIt.Revit/UI/Theme.xaml (gantt-it commit aa83f35, MIT, same owner).
-    Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; the date-field calendar styles are left out (Splash-It has no dates); a flat Slider style (not in gantt-it) is added at the end.
+    Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; comments say Splash-It for Gantt-It; the date-field calendar styles are left out (Splash-It has no dates); a flat Slider style (not in gantt-it) is added at the end; the palette comment names SplashItTheme; the text box menu comment cites decision #8 instead of gantt-it's UI-language section.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

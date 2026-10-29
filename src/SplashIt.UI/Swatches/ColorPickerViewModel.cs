@@ -1,5 +1,5 @@
 // Copied from gantt-it src/GanttIt.Revit/UI/Swatches/ColorPickerViewModel.cs (gantt-it commit aa83f35, MIT, same owner).
-// Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing.
+// Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; comments cite gantt-it's spec sections as "gantt-it §"; the two Core usings (Model, Editing) become one (SplashIt.Core.Colors).
 
 using System.Windows.Input;
 using System.Windows.Media;

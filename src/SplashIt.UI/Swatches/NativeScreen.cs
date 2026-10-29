@@ -1,5 +1,5 @@
 // Copied from gantt-it src/GanttIt.Revit/UI/Swatches/NativeScreen.cs (gantt-it commit aa83f35, MIT, same owner).
-// Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing.
+// Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; comments (and messages) say Splash-It for Gantt-It.
 
 using System.ComponentModel;
 using System.Runtime.InteropServices;

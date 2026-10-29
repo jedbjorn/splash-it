@@ -1,5 +1,5 @@
 // Copied from gantt-it src/GanttIt.Revit/UI/Swatches/ColorPickerDialog.xaml.cs (gantt-it commit aa83f35, MIT, same owner).
-// Changes: namespaces; takes a title; recent colors from PickerSession.
+// Changes: namespaces; comments (and messages) say Splash-It for Gantt-It; the constructor takes the window title; recent colors come from PickerSession (GanttItSession in gantt-it); the summary says chip for section swatch.
 
 using System.Windows;
 using System.Windows.Interop;

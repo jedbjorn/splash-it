@@ -151,6 +151,8 @@ public static class UiStrings
 
     public static string Preview_Template => Get(nameof(Preview_Template));
 
+    public static string Preview_Off => Get(nameof(Preview_Off));
+
     public static string Settings_Export => Get(nameof(Settings_Export));
 
     public static string Settings_ExportTip => Get(nameof(Settings_ExportTip));
