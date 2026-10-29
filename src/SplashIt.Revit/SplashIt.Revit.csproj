@@ -10,6 +10,10 @@
     Directory.Packages.props). ExcludeAssets=runtime keeps RevitAPI*.dll out of
     the output: Revit supplies them at runtime.
 
+    It holds only the Revit-facing parts (App, commands, the tab surface, event
+    and theme adapters); the WPF engine and window live in SplashIt.UI, which
+    has no Revit references (spec #1, Project split).
+
     Adapted from gantt-it src/GanttIt.Revit/GanttIt.Revit.csproj (gantt-it commit 1e27832).
   -->
 
@@ -31,6 +35,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SplashIt.Core\SplashIt.Core.csproj" />
+    <!-- SplashIt.UI targets net8.0-windows;net10.0-windows: R25/R26 get its
+         net8.0-windows build, R27 its net10.0-windows build. -->
+    <ProjectReference Include="..\SplashIt.UI\SplashIt.UI.csproj" />
   </ItemGroup>
 
   <!-- The manifest ships alongside the DLL folder. Ribbon icons

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Runtime tests: WPF without Revit, run on windows-latest in CI (they cannot
+    Runtime tests: SplashIt.UI and WPF without Revit, run on windows-latest in CI (they cannot
     run on Linux; EnableWindowsTargeting only lets the project build there).
     net8.0-windows in every configuration. The tests render WPF off-screen to
     PNG under <repo>/TestResults/screenshots/ (or $SPLASHIT_SCREENSHOTS), which
@@ -32,6 +32,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\SplashIt.Core\SplashIt.Core.csproj" />
+    <!-- The WPF engine and window (net8.0-windows build), without Revit (spec #1, Project split). -->
+    <ProjectReference Include="..\..\src\SplashIt.UI\SplashIt.UI.csproj" />
   </ItemGroup>
 
 </Project>
