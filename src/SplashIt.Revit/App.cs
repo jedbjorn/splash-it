@@ -109,6 +109,7 @@ public sealed class App : IExternalApplication
         {
             var stopwatch = Stopwatch.StartNew();
             var settings = SplashItSettings.Read(SplashItSettings.DefaultPath, Log.AsAction());
+            var settingsMs = stopwatch.ElapsedMilliseconds;
             var revit = sender as RevitApplication;
             var documents = new RevitDocuments(() => revit, Log);
             var ui = _application!;
@@ -117,7 +118,7 @@ public sealed class App : IExternalApplication
             Colorizer = new DocumentTabColorizer(surface, documents, events, new TabStyleFactory(), new PyRevitGuard(log: Log), Log);
             Colorizer.Apply(settings);
             stopwatch.Stop();
-            Log.Info($"colorizer: start took {stopwatch.ElapsedMilliseconds} ms (enabled {settings.Enabled}, status {Colorizer.Status}).");
+            Log.Info($"colorizer: start took {stopwatch.ElapsedMilliseconds} ms (settings read {settingsMs} ms; enabled {settings.Enabled}, status {Colorizer.Status}).");
         }
         catch (Exception ex)
         {
