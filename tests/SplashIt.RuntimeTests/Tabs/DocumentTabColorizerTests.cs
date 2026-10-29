@@ -31,7 +31,7 @@ public class DocumentTabColorizerTests
         public readonly TabStyleFactory Styles = new();
         public readonly DocumentTabColorizer Colorizer;
 
-        public Rig(bool openAll = true)
+        public Rig(bool openAll = true, Func<long>? clock = null)
         {
             Strip = HostTabs.Strip(Original, UiTheme.Light,
                 "P1 - L1", "P1 - L2", "P2 - L1", "F1 - Ref. Level", "T1 - L1", "Unresolved - L1");
@@ -51,7 +51,7 @@ public class DocumentTabColorizerTests
                 Documents.Add(F1, FileKind.Family);
                 Documents.Add(T1, FileKind.Other);
             }
-            Colorizer = new DocumentTabColorizer(Surface, Documents, Events, Styles, Guard, Log);
+            Colorizer = new DocumentTabColorizer(Surface, Documents, Events, Styles, Guard, Log, clock);
         }
 
         public TabItem Tab(int i) => HostTabs.Tab(Strip, i);
@@ -595,6 +595,209 @@ public class DocumentTabColorizerTests
             Assert.Same(local.GetType(), close.ReadLocalValue(Control.ForegroundProperty).GetType()); // still the resource reference
             Assert.Same(grey, close.Foreground);
             Assert.NotEqual(DependencyProperty.UnsetValue, close.ReadLocalValue(Control.ForegroundProperty));
+        });
+    }
+
+    // ---- SC-004: the registration fallback (FnB decision #26) ----
+
+    /// <summary>
+    /// A family opened with no "opened" event (Edit Family in the rc.1 report): its tab first
+    /// resolves to nothing; the pass asks for a scan; the scan (the next Idling in Revit)
+    /// registers it, and its tab gets the family bar.
+    /// </summary>
+    [Fact]
+    public void ADocumentNoEventAnnounced_IsRegisteredByTheScan_AndItsTabsGetColored()
+    {
+        Screenshots.RunSta(() =>
+        {
+            long now = 0;
+            var rig = new Rig(clock: () => now);
+            rig.Surface.IsKnown = rig.Documents.IsRegistered;
+            rig.Colorizer.Start();
+            now += DocumentTabColorizer.DocumentScanIntervalMs;
+            var requestsAtStart = rig.Events.ScanRequests;
+
+            // Revit opens a second family and raises no event: only its tab appears.
+            var f2 = new DocKey("F2");
+            rig.Documents.AddUnannounced(f2, FileKind.Family);
+            var tab = new TabItem { Header = "F2 - Ref. Level", Style = rig.Original };
+            rig.Strip.Items.Add(tab);
+            rig.Surface.Bind(tab, f2);
+            rig.Events.Layout();
+
+            Assert.Same(rig.Original, tab.Style);                         // unresolved: left alone...
+            Assert.Equal(requestsAtStart + 1, rig.Events.ScanRequests);   // ...and a scan is asked for
+            var invalidations = rig.Surface.Invalidations;
+
+            rig.Events.Scan();
+
+            Assert.True(TabStyleFactory.IsDerived(tab.Style));
+            var bar = TabDecoration.GetDecoration(tab);
+            Assert.NotNull(bar);
+            Assert.Equal(Opaque(SplashItDefaults.FamilyColors[1]), ((SolidColorBrush)bar!.LeftBar!).Color); // F1 holds colour 1
+            Assert.Equal(SplashItDefaults.FamilyBarWidth, bar.LeftBarWidth);
+            Assert.True(rig.Surface.Invalidations > invalidations);
+            Assert.Contains(rig.Log.Lines, l => l.Contains("document scan registered 1 documents no event announced (0 project, 1 family, 0 other)"));
+            Assert.True(TabStyleFactory.IsDerived(rig.Tab(0).Style)); // the others keep theirs
+            Assert.Equal(ColorizerStatus.Active, rig.Colorizer.Status);
+        });
+    }
+
+    /// <summary>A project no event announced is registered by the scan too, and takes the next free project colour.</summary>
+    [Fact]
+    public void AProjectNoEventAnnounced_TakesTheNextFreeColor()
+    {
+        Screenshots.RunSta(() =>
+        {
+            long now = 0;
+            var rig = new Rig(clock: () => now);
+            rig.Surface.IsKnown = rig.Documents.IsRegistered;
+            rig.Colorizer.Start();
+            now += DocumentTabColorizer.DocumentScanIntervalMs;
+
+            var p3 = new DocKey("P3");
+            rig.Documents.AddUnannounced(p3, FileKind.Project);
+            var tab = new TabItem { Header = "P3 - L1", Style = rig.Original };
+            rig.Strip.Items.Add(tab);
+            rig.Surface.Bind(tab, p3);
+            rig.Events.Layout();
+            rig.Events.Scan();
+
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[2]), ((SolidColorBrush)tab.Background).Color);
+        });
+    }
+
+    /// <summary>
+    /// Scans are asked for only while tabs are unresolved, at most once per second, and at most
+    /// <see cref="DocumentTabColorizer.MaxScansPerChange"/> times until the tabs change.
+    /// </summary>
+    [Fact]
+    public void ScanRequests_AreThrottled_AndOnlyWhileTabsAreUnresolved()
+    {
+        Screenshots.RunSta(() =>
+        {
+            long now = 100_000;
+            var rig = new Rig(clock: () => now);
+            rig.Colorizer.Start();          // tab 5 never resolves (no document has its title)
+            Assert.Equal(1, rig.Events.ScanRequests);
+
+            for (var i = 0; i < 50; i++) rig.Events.Layout(); // same second: no more
+            Assert.Equal(1, rig.Events.ScanRequests);
+
+            now += DocumentTabColorizer.DocumentScanIntervalMs;
+            rig.Events.Layout();
+            Assert.Equal(2, rig.Events.ScanRequests);
+            rig.Events.Scan();              // finds nothing new: no pass, nothing restyled
+            now += DocumentTabColorizer.DocumentScanIntervalMs;
+            rig.Events.Layout();
+            Assert.Equal(3, rig.Events.ScanRequests);
+            for (var s = 0; s < 5; s++)
+            {
+                now += DocumentTabColorizer.DocumentScanIntervalMs;
+                rig.Events.Layout();
+            }
+            Assert.Equal(DocumentTabColorizer.MaxScansPerChange, rig.Events.ScanRequests); // the budget is spent
+
+            // The tabs change (another tab selected): the unresolved tab may ask again.
+            rig.Tab(0).IsSelected = true;
+            now += DocumentTabColorizer.DocumentScanIntervalMs;
+            rig.Events.Layout();
+            Assert.Equal(DocumentTabColorizer.MaxScansPerChange + 1, rig.Events.ScanRequests);
+
+            // Every tab resolved: no request, however long it runs.
+            rig.Surface.Bind(rig.Tab(5), rig.T1);
+            rig.Events.Layout();
+            var settled = rig.Events.ScanRequests;
+            for (var s = 0; s < 10; s++)
+            {
+                now += DocumentTabColorizer.DocumentScanIntervalMs;
+                rig.Events.Layout();
+            }
+            Assert.Equal(settled, rig.Events.ScanRequests);
+        });
+    }
+
+    /// <summary>The unchanged hot path with an unresolved tab still allocates nothing, scan requests included.</summary>
+    [Fact]
+    public void UnchangedSignature_WithAnUnresolvedTab_AllocatesNothing_EvenWhenAskingForScans()
+    {
+        Screenshots.RunSta(() =>
+        {
+            long now = 0;
+            var rig = new Rig(clock: () => now);
+            rig.Colorizer.Start();
+            for (var i = 0; i < 20; i++) rig.Events.Layout();
+            now += 10 * DocumentTabColorizer.DocumentScanIntervalMs;
+            rig.Tab(0).IsSelected = true;   // a change: the budget is refilled
+            rig.Events.Layout();
+            var requests = rig.Events.ScanRequests;
+
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 500; i++)
+            {
+                now += 10;                  // 5 s in all: the throttle lets requests through
+                rig.Events.Layout();
+            }
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.True(rig.Events.ScanRequests > requests);
+            Assert.Equal(0, allocated);
+        });
+    }
+
+    /// <summary>A scan that finds nothing new restyles nothing; one that finds a document gone forgets it and frees its colour.</summary>
+    [Fact]
+    public void AScan_WithNothingNew_ChangesNothing_AndForgetsDocumentsNoLongerOpen()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.Start();
+            using var changes = new StyleChangeCounter(rig.Tabs);
+            var invalidations = rig.Surface.Invalidations;
+
+            rig.Events.Scan();
+            Assert.Equal(0, changes.Count);
+            Assert.Equal(invalidations, rig.Surface.Invalidations);
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("document scan"));
+
+            // P1 closed with no event: the scan forgets it, so P3 takes colour 1.
+            rig.Strip.Items.RemoveAt(1);
+            rig.Strip.Items.RemoveAt(0);
+            rig.Documents.Open.Remove(rig.P1);
+            rig.Events.Scan();
+            Assert.Contains(rig.Log.Lines, l => l.Contains("1 no longer open"));
+            var p3 = new DocKey("P3");
+            rig.Documents.Add(p3, FileKind.Project);
+            var tab = new TabItem { Header = "P3 - L1", Style = rig.Original };
+            rig.Strip.Items.Add(tab);
+            rig.Surface.Bind(tab, p3);
+            rig.Events.Sink!.OnDocumentOpened(p3);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
+        });
+    }
+
+    /// <summary>A scan that throws counts as a fault (never escapes), and a scan after Stop does nothing.</summary>
+    [Fact]
+    public void AScanThatFails_IsAFault_AndAScanAfterStop_DoesNothing()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.Start();
+            var sink = rig.Events.Sink!;
+            rig.Surface.Throw = new InvalidOperationException("tree");
+            var p3 = new DocKey("P3");
+            rig.Documents.AddUnannounced(p3, FileKind.Project);
+            sink.OnDocumentScan();          // the pass after it throws
+            Assert.Contains(rig.Log.Lines, l => l.Contains("document scan failed") && l.Contains("fault 1 of 3"));
+            rig.Surface.Throw = null;
+
+            rig.Colorizer.Stop();
+            var listings = rig.Documents.Listings;
+            sink.OnDocumentScan();
+            Assert.Equal(listings, rig.Documents.Listings);
+            Assert.Equal(0, rig.Colorizer.StyledTabCount);
         });
     }
 }
