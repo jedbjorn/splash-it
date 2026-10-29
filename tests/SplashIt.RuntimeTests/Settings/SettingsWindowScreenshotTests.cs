@@ -228,10 +228,10 @@ public class SettingsWindowScreenshotTests
         else
         {
             Assert.Equal(Visibility.Collapsed, note.Visibility);
-            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over what the
-            // tabs sit on (the strip's window color), drawn by the colorizer's TabStyleFactory.
-            var well = Palette(theme, UiPalette.Window);
-            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, new Rgb(well.R, well.G, well.B)));
+            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over the tab's own
+            // color (laid under the fill, #30), drawn by the colorizer's TabStyleFactory.
+            var tabColor = Palette(theme, UiPalette.Hover);
+            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, new Rgb(tabColor.R, tabColor.G, tabColor.B)));
             Assert.True(Distance(expected, tower2Pixel) <= 3, $"preview tab is {tower2Pixel}, expected {expected}");
         }
     });
@@ -510,10 +510,8 @@ public class SettingsWindowScreenshotTests
         Screenshots.Save(bitmap, Name("preview-matrix", theme));
         Assert.True(Screenshots.DistinctPixels(bitmap) > 60, "the render looks blank");
 
-        // The tabs sit on the strip's window color; the project fills (the colorizer's TabStyleFactory
-        // since the Lane B integration) are translucent over it.
-        var windowColor = UiPalette.For(theme)[UiPalette.Window];
-        var surface = new Rgb(windowColor.R, windowColor.G, windowColor.B);
+        // The project fills (the colorizer's TabStyleFactory since the Lane B integration) are translucent
+        // over the tab's own color, which the preview's template lays under them (#30: the fade ends on it).
         var tabBackground = UiPalette.For(theme)[UiPalette.Hover];
         var tabRgb = new Rgb(tabBackground.R, tabBackground.G, tabBackground.B);
         var border = UiPalette.For(theme)[UiPalette.Border];
@@ -541,16 +539,39 @@ public class SettingsWindowScreenshotTests
             var unselected = opacity / 100.0 * (share / 100.0);
             // The selected project tab: its color at the fill opacity (below its top line, left of its
             // text), and a 3 px darker line along its top.
-            AssertNear(ToColor(ColorMath.Blend(project1, opacity / 100.0, surface)), At(tower1, 4, tower1.ActualHeight - 3),
+            AssertNear(ToColor(ColorMath.Blend(project1, opacity / 100.0, tabRgb)), At(tower1, 4, tower1.ActualHeight - 3),
                 $"Tower selected, {width}/{opacity}/{share}");
             var line = ColorMath.Darken(project1, SplashIt.UI.Tabs.TabStyleFactory.AccentDarken);
             AssertNear(ToColor(line), At(tower1, 6, 0.5), $"Tower top line, row 1, {width}/{opacity}/{share}");
             AssertNear(ToColor(line), At(tower1, 6, 2.5), $"Tower top line, row 3, {width}/{opacity}/{share}");
             // The project's other tab, and the other project: fill × the unselected share (decision #23).
-            AssertNear(ToColor(ColorMath.Blend(project1, unselected, surface)), At(tower2, 4, tower2.ActualHeight - 3),
+            AssertNear(ToColor(ColorMath.Blend(project1, unselected, tabRgb)), At(tower2, 4, tower2.ActualHeight - 3),
                 $"Tower unselected, {width}/{opacity}/{share}");
-            AssertNear(ToColor(ColorMath.Blend(project2, unselected, surface)), At(annex, 4, annex.ActualHeight - 3),
+            AssertNear(ToColor(ColorMath.Blend(project2, unselected, tabRgb)), At(annex, 4, annex.ActualHeight - 3),
                 $"Annex, {width}/{opacity}/{share}");
+
+            // #30/#31 (review M2, m2): each project tab's fade ends 2 px before its measured × slot, the
+            // tab's own color shows past it, and the title's end reaches 3:1 at its worst point.
+            var shape = SplashIt.UI.Tabs.ProjectFillShape.Default;
+            foreach (var (tab, color, tabOpacity) in new[] { (tower1, project1, opacity / 100.0), (tower2, project1, unselected), (annex, project2, unselected) })
+            {
+                var close = WindowCapture.Descendants<ContentControl>(tab).Single(c => c.Name == "PART_CloseButton");
+                var closeLeft = close.TranslatePoint(new Point(0, 0), tab).X;
+                var fade = Assert.IsType<LinearGradientBrush>(tab.Background);
+                Assert.Equal(closeLeft - shape.Gap, fade.EndPoint.X);
+                Assert.Equal(shape.FadeWidth, fade.EndPoint.X - fade.StartPoint.X);
+                AssertNear(ToColor(tabRgb), At(tab, fade.EndPoint.X + 0.5, tab.ActualHeight - 3), $"past the fade, {tab.Header} {width}/{opacity}/{share}");
+
+                var title = WindowCapture.Descendants<TextBlock>(tab).Single(t => t.Text == (string)tab.Header);
+                var titleRight = title.TranslatePoint(new Point(title.ActualWidth, 0), tab).X;
+                Assert.True(closeLeft - titleRight >= shape.TitleGap - 0.5, $"the preview's title gap is Revit's: {closeLeft - titleRight}");
+                var endShare = Math.Clamp((fade.EndPoint.X - (titleRight - 0.5)) / shape.FadeWidth, 0, 1);
+                var titleColor = ((SolidColorBrush)tab.Foreground).Color;
+                var textRgb = new Rgb(titleColor.R, titleColor.G, titleColor.B);
+                var solid = ColorMath.ContrastRatio(textRgb, ColorMath.Blend(color, tabOpacity, tabRgb));
+                var atEnd = ColorMath.ContrastRatio(textRgb, ColorMath.Blend(color, tabOpacity * endShare, tabRgb));
+                Assert.True(Math.Min(solid, atEnd) >= 3, $"{tab.Header} {width}/{opacity}/{share}: {solid:0.00}:1 solid, {atEnd:0.00}:1 at the title's end");
+            }
             // The family bar: inside it, the family color at the bar opacity over what is beneath (the
             // tab's 1 px left border in column 0, its background after that); just right of it, the tab.
             var barX = width / 2;
