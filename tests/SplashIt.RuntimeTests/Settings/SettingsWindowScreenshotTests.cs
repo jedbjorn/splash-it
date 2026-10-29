@@ -291,7 +291,6 @@ public class SettingsWindowScreenshotTests
         // The real chain: the chip's EditCommand, the real DialogService, the real ColorPickerDialog.
         using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.Active), realDialogs: true);
         foreach (var recent in new[] { "#2E86AB", "#C0392B", "#7D3C98" }) PickerSession.RecentColors.Add(Rgb.Parse(recent));
-        var window = shown.Capture();
 
         var project3 = shown.Model.ProjectColors.Chips[2];
         var projectPicker = OpenPickerFrom(shown.Model.ProjectColors, project3);
@@ -303,6 +302,8 @@ public class SettingsWindowScreenshotTests
         Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(projectPicker.Image, 1, 1));
         Assert.Same(project3, shown.Model.ProjectColors.Selected);
         Assert.False(shown.Model.IsDirty); // cancelled
+        // The window as it stands with the picker open: chip 3 selected (the click selected it).
+        var window = shown.Capture();
 
         // The family list's picker offers the family palette.
         var family2 = shown.Model.FamilyColors.Chips[1];
