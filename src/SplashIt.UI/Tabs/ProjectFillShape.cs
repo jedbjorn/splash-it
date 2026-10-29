@@ -27,10 +27,26 @@ namespace SplashIt.UI.Tabs;
 /// <param name="FadeWidth">The fade's width, pixels (24: about 15 % of a typical 155 px tab, as on the option sheet).</param>
 /// <param name="Gap">Pixels between the fade's end and the close button's left edge.</param>
 /// <param name="CloseSlot">Pixels from the tab's right edge to the close button's left edge when the button has no slot to measure.</param>
-public readonly record struct ProjectFillShape(double FadeWidth, double Gap, double CloseSlot)
+/// <param name="TitleGap">Pixels from a title's end to the close button's left edge in Revit's template (12): how far
+/// into the fade a title that fills its tab reaches (#31).</param>
+public readonly record struct ProjectFillShape(double FadeWidth, double Gap, double CloseSlot, double TitleGap = 12)
 {
-    /// <summary>The shape in use, FnB decision #30: a 24 px fade ending 2 px before the ×; Revit's × slot is 18 px.</summary>
-    public static ProjectFillShape Default { get; } = new(FadeWidth: 24, Gap: 2, CloseSlot: 18);
+    /// <summary>The shape in use, FnB decisions #30 and #31: a 24 px fade ending 2 px before the ×; Revit's × slot is 18 px, 12 px after the title.</summary>
+    public static ProjectFillShape Default { get; } = new(FadeWidth: 24, Gap: 2, CloseSlot: 18, TitleGap: 12);
+
+    /// <summary>
+    /// The share of the fill's opacity under a title's last pixel column (#31): its centre is
+    /// <see cref="TitleGap"/> - <see cref="Gap"/> + 0.5 px before the fade's end (10.5 of 24 px, about 44 %).
+    /// 1 when the title ends before the fade starts.
+    /// </summary>
+    public double TitleEndShare
+    {
+        get
+        {
+            if (FadeWidth <= 0 || double.IsNaN(FadeWidth)) return 1;
+            return Math.Clamp((TitleGap - Gap + 0.5) / FadeWidth, 0, 1);
+        }
+    }
 
     /// <summary>
     /// Where the fill ends (fully transparent) on a tab <paramref name="tabWidth"/> wide whose close

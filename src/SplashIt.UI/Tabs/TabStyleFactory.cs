@@ -36,11 +36,11 @@ public interface ITabStyleFactory
 /// <param name="Fill">The project color: an unselected tab draws it at <paramref name="MutedOpacity"/>.</param>
 /// <param name="Opacity">The fill opacity (0.1 to 1): what the selected tab draws.</param>
 /// <param name="MutedOpacity">The unselected tabs' opacity: the Unselected tab opacity share of <paramref name="Opacity"/> (#23).</param>
-/// <param name="Text">Text on an unselected tab, over the fill as shown (black or white).</param>
+/// <param name="Text">Text on an unselected tab: black or white, by its worst case over the solid part and the title's end in the fade (#31).</param>
 /// <param name="Hover">The hover fill (lighter); drawn at <paramref name="MutedOpacity"/>.</param>
-/// <param name="HoverText">Text over the hover fill as shown.</param>
+/// <param name="HoverText">Text over the hover fill, chosen as <paramref name="Text"/>.</param>
 /// <param name="Selected">The selected tab's fill color, drawn at <paramref name="Opacity"/>.</param>
-/// <param name="SelectedText">Text over the selected fill as shown.</param>
+/// <param name="SelectedText">Text over the selected fill, chosen as <paramref name="Text"/>.</param>
 /// <param name="Accent">The selected tab's 3 px top line (darker, opaque).</param>
 /// <param name="Glyph">The close glyph in every state (#30): the fill ends before it, so it is black or
 /// white against what is under it there, the tab's own background (else the theme surface), not the fill.</param>
@@ -82,9 +82,12 @@ public readonly record struct FamilyTopBarShape(double Height, double Width, dou
 /// the line take <see cref="ProjectFill"/>'s shape (#30): solid from the left edge, then a fixed
 /// 24 px fade that ends just before the close button, so the × sits on Revit's own strip. The
 /// text is black or white, whichever has the higher WCAG contrast against the fill as shown in
-/// that state (blended over the tab's own solid background, else over the theme surface); the
-/// close glyph is chosen the same way against that background alone, the strip it sits on. Hover
-/// lightens an unselected tab's fill by <see cref="HoverLighten"/>.</item>
+/// that state at its worst over two points, the solid part and the fade under a title's last
+/// column (#31), both blended over the tab's original background when that is a solid brush,
+/// else over the theme surface; the close glyph is black or white against that background alone.
+/// What actually shows through the fade's end is whatever is behind the tab (the fill replaces
+/// the tab's own background), which these choices assume is close to it. Hover lightens an
+/// unselected tab's fill by <see cref="HoverLighten"/>.</item>
 /// <item><b>Family marks</b> (#27): a bar of the bar width on the left edge at the bar opacity,
 /// full height, plus a fixed top bar (<see cref="FamilyTopBarShape.Default"/>: 2 px high, from
 /// the left edge, 95 % of the tab's width, fading out over its last 15 %, #29) in the same color
@@ -192,22 +195,31 @@ public sealed class TabStyleFactory : ITabStyleFactory
         int unselectedPercent = TabTreatment.DefaultUnselectedPercent) =>
         FillColors(TabTreatment.ProjectFill(color, opacityPercent, unselectedPercent), backdrop);
 
-    /// <summary>The colors a project <paramref name="treatment"/> shows over <paramref name="backdrop"/>.</summary>
-    public static TabFillColors FillColors(TabTreatment treatment, Rgb backdrop)
+    /// <summary>
+    /// The colors a project <paramref name="treatment"/> shows over <paramref name="backdrop"/>, in
+    /// <paramref name="shape"/> (<see cref="ProjectFillShape.Default"/> when null). Each state's text
+    /// is black or white by its worst case over two points (#31): the solid part, and the fade under
+    /// a title's last column (<see cref="ProjectFillShape.TitleEndShare"/> of the opacity), both
+    /// blended over <paramref name="backdrop"/>.
+    /// </summary>
+    public static TabFillColors FillColors(TabTreatment treatment, Rgb backdrop, ProjectFillShape? shape = null)
     {
         var color = treatment.Color;
         var opacity = treatment.Opacity;
         var muted = treatment.UnselectedOpacity;
         var hover = ColorMath.Lighten(color, HoverLighten);
+        var end = (shape ?? ProjectFillShape.Default).TitleEndShare;
+        Rgb Text(Rgb c, double o) =>
+            ColorMath.TextColorForAll(ColorMath.Blend(c, o, backdrop), ColorMath.Blend(c, o * end, backdrop));
         return new TabFillColors(
             Fill: color,
             Opacity: opacity,
             MutedOpacity: muted,
-            Text: ColorMath.TextColorFor(color, muted, backdrop),
+            Text: Text(color, muted),
             Hover: hover,
-            HoverText: ColorMath.TextColorFor(hover, muted, backdrop),
+            HoverText: Text(hover, muted),
             Selected: color,
-            SelectedText: ColorMath.TextColorFor(color, opacity, backdrop),
+            SelectedText: Text(color, opacity),
             Accent: ColorMath.Darken(color, AccentDarken),
             Glyph: ColorMath.TextColorFor(backdrop));
     }
@@ -238,7 +250,7 @@ public sealed class TabStyleFactory : ITabStyleFactory
     private void AddProjectFill(Style style, TabTreatment treatment, Rgb backdrop)
     {
         var shape = ProjectFill;
-        var colors = FillColors(treatment, backdrop);
+        var colors = FillColors(treatment, backdrop, shape);
         var fill = ProjectFillConverter.Binding(colors.Fill, colors.MutedOpacity, shape);
         var text = Brush(colors.Text);
         var hover = ProjectFillConverter.Binding(colors.Hover, colors.MutedOpacity, shape);

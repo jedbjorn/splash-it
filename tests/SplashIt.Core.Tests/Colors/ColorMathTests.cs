@@ -102,6 +102,29 @@ public class ColorMathTests
         Assert.Equal(ColorMath.White, ColorMath.TextColorFor(navy, 0.2, Rgb.Parse("#2A2F37")));
     }
 
+    /// <summary>
+    /// Text that crosses several colors (#31: a title whose last letters sit in the fade) takes the
+    /// color whose worst contrast over all of them is higher, not the better one over the first.
+    /// </summary>
+    [Fact]
+    public void TextColorForAll_MaximizesTheMinimumContrast()
+    {
+        var blue = Rgb.Parse("#4F8EF7");
+        var dark = Rgb.Parse("#2A2F37");
+        var faded = ColorMath.Blend(blue, 0.4375, dark);
+        // Over the solid blue alone black wins (6.5:1 vs 3.3:1), but black over the faded end is
+        // below 3:1, so the worst case is better with white.
+        Assert.Equal(ColorMath.Black, ColorMath.TextColorFor(blue));
+        Assert.True(ColorMath.ContrastRatio(ColorMath.Black, faded) < 3);
+        Assert.Equal(ColorMath.White, ColorMath.TextColorForAll(blue, faded));
+        // One color: the same as TextColorFor; none: black.
+        foreach (var c in new[] { blue, dark, ColorMath.White, Rgb.Parse("#EDC948") })
+            Assert.Equal(ColorMath.TextColorFor(c), ColorMath.TextColorForAll(c));
+        Assert.Equal(ColorMath.Black, ColorMath.TextColorForAll());
+        // A tie goes to black.
+        Assert.Equal(ColorMath.Black, ColorMath.TextColorForAll(ColorMath.Black, ColorMath.White));
+    }
+
     [Fact]
     public void TextColorFor_ATie_GoesToBlack()
     {
