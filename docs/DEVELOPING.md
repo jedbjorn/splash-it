@@ -261,20 +261,26 @@ tab too narrow for the fade fades from its left edge. Contrast (#31): the text i
 whichever has the higher *minimum* contrast over two points, the solid part and the fade under a
 title's last column (Revit leaves 12 px between a title and its ×, so a title that fills its tab
 ends 10.5 px into the 24 px fade, at about 44 % of the opacity); the × is black or white against
-the backdrop alone. Both are measured against the tab's *original* background (blended over the
-theme surface; Revit's tab backgrounds are transparent, so in practice the theme surface). What
-actually shows through the fade's transparent end, and under the ×, is whatever is behind the tab
-(the fill replaces the tab's own background): Revit's tab strip. The two are close in Revit's
-themes, but the choice does not see the strip itself; AC11 samples it. The family marks (#27: the
+the backdrop alone. The backdrop is what actually shows through the fade's transparent end and
+under the ×: whatever is behind the tab, since the fill replaces the tab's own background. The
+colorizer finds it with `TabBackdrop`: it walks the tab's visual parents to the first panel or
+border with an opaque `SolidColorBrush` background (Revit's strip or pane), blending translucent
+ones on the way. It does this once per pane (the tabs' parent), logs what it found ("tabs sit on
+#RRGGBB (Border, 3 levels up)"), and again after a theme change, so the per-pass hot path is
+untouched. With nothing solid behind the tab (or before the tab is in a tree), it falls back to
+the tab's original background, then to the theme surface. Over every default color, fill,
+unselected share and state, one of black and white reaches 3:1 at both points on each candidate
+strip. The settings preview passes its tab color, which its template lays under the fill. The
+family marks (#27: the
 side bar of the bar width, plus a fixed 2 px top bar from the left edge over 95 % of the tab,
 fading out over its last 15 % (#29), `FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
 (`TabDecoration`), so they do not depend on Revit's template, follow a resize, and go with
 the original style.
 Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
 (`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
-AvalonDock theme), so `TabCloseGlyph` sets it to black or white (since #30, chosen against the
-tab's original background, see above) and puts the button's own value back when the original
-style returns. All of this was checked in Revit
+AvalonDock theme), so `TabCloseGlyph` sets it to black or white (since #30, chosen against what
+is behind the tab, see above) and puts the button's own value back when the original style
+returns. All of this was checked in Revit
 2026 and 2027 on the VM (`shared/evidence/lane-b/vm/`).
 
 - Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and
