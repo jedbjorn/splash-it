@@ -17,7 +17,7 @@ internal interface IPreviewTabStyler
     /// A project tab (spec, Shapes and settings; decision #23): the selected tab shows
     /// <paramref name="color"/> at <paramref name="fillOpacity"/> percent over <paramref name="backdrop"/>
     /// with a 3 px darker line along its top; the project's other tabs show it at fill ×
-    /// <paramref name="unselectedShare"/> percent, fading out before the close glyph (#30). Text and
+    /// <paramref name="unselectedShare"/> percent, fading through the close glyph to half that at the edge (#36). Text and
     /// the close glyph are black or white, whichever reads better (#31) over <paramref name="backdrop"/>,
     /// the color the fill is drawn over. <see cref="Style.BasedOn"/> is <paramref name="baseStyle"/>.
     /// </summary>

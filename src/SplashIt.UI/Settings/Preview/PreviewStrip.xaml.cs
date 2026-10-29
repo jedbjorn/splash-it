@@ -57,7 +57,7 @@ public partial class PreviewStrip : UserControl
         }
 
         // What a project fill is blended over: the tab's own color, which the template lays under the
-        // fill so the fade (#30) ends on it. Text and × contrast are measured against it.
+        // fill so the fade (#36) shows it through. Text and × contrast are measured against it.
         var tabColor = UiPalette.For(SplashItTheme.Current)[UiPalette.Hover];
         var backdrop = new Rgb(tabColor.R, tabColor.G, tabColor.B);
 
