@@ -140,13 +140,13 @@
     <value>Project colors</value>
   </data>
   <data name="Settings_ProjectColorsHint" xml:space="preserve">
-    <value>Solid tab fill. Each opening project takes the first free color.</value>
+    <value>Solid tab fill. Each project you open takes the first free color.</value>
   </data>
   <data name="Settings_FamilyColors" xml:space="preserve">
     <value>Family colors</value>
   </data>
   <data name="Settings_FamilyColorsHint" xml:space="preserve">
-    <value>A bar on the tab's left edge. Each opening family takes the first free color.</value>
+    <value>A bar on the tab's left edge. Each family you open takes the first free color.</value>
   </data>
   <data name="Settings_ProjectColorN" xml:space="preserve">
     <value>Project color {0}</value>
@@ -207,26 +207,26 @@
     <value>Preview</value>
   </data>
   <data name="Settings_PreviewHint" xml:space="preserve">
-    <value>Two projects (Tower selected), a family and a template, with the settings above.</value>
+    <value>Two projects (Tower, two views, the first selected; Annex), a family (Door) and a template, drawn with the settings above.</value>
   </data>
   <data name="Preview_Tower1" xml:space="preserve">
-    <value>Tower - Level 1</value>
+    <value>Tower - Plan</value>
     <comment>Sample tab: project Tower, selected.</comment>
   </data>
   <data name="Preview_Tower2" xml:space="preserve">
-    <value>Tower - 3D View</value>
+    <value>Tower - 3D</value>
     <comment>Sample tab: project Tower, second view.</comment>
   </data>
   <data name="Preview_Annex" xml:space="preserve">
-    <value>Annex - Level 1</value>
+    <value>Annex - Plan</value>
     <comment>Sample tab: a second project.</comment>
   </data>
   <data name="Preview_Family" xml:space="preserve">
-    <value>Door - Ref. Level</value>
+    <value>Door - Front</value>
     <comment>Sample tab: a family.</comment>
   </data>
   <data name="Preview_Template" xml:space="preserve">
-    <value>Template - Level 1</value>
+    <value>Template - 3D</value>
     <comment>Sample tab: a .rte template, never colored.</comment>
   </data>
   <data name="Settings_Export" xml:space="preserve">

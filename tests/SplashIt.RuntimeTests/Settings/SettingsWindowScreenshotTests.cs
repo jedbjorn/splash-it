@@ -123,7 +123,8 @@ public class SettingsWindowScreenshotTests
     private static void AssertWindowRender(BitmapSource bitmap, UiTheme theme)
     {
         Assert.InRange(bitmap.PixelWidth, 600, 700);
-        Assert.InRange(bitmap.PixelHeight, 450, 1000);
+        // Fits a 1366 x 768 laptop (and the 1024 x 768 CI desktop) with its title bar, errors included.
+        Assert.InRange(bitmap.PixelHeight, 450, 690);
         Assert.True(Screenshots.DistinctPixels(bitmap) > 300, "the render looks blank");
         Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, 2, 2));
         Assert.Equal(Palette(theme, UiPalette.Window), Screenshots.PixelAt(bitmap, bitmap.PixelWidth - 3, bitmap.PixelHeight - 3));
@@ -380,6 +381,8 @@ public class SettingsWindowScreenshotTests
         var surface = theme == UiTheme.Dark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
         var tabBackground = UiPalette.For(theme)[UiPalette.Hover];
         var tabRgb = new Rgb(tabBackground.R, tabBackground.G, tabBackground.B);
+        var border = UiPalette.For(theme)[UiPalette.Border];
+        var tabBorder = new Rgb(border.R, border.G, border.B);
         var project1 = SplashItDefaults.ProjectColors[0];
         var project2 = SplashItDefaults.ProjectColors[1];
         var family1 = SplashItDefaults.FamilyColors[0];
@@ -407,8 +410,11 @@ public class SettingsWindowScreenshotTests
                 $"Tower unselected, {width}/{opacity}");
             AssertNear(ToColor(ColorMath.Blend(project2, opacity / 100.0, surface)), At(annex, 4, annex.ActualHeight - 3),
                 $"Annex, {width}/{opacity}");
-            // The family bar: inside it, the family color at the bar opacity over the tab; just right of it, the tab.
-            AssertNear(ToColor(ColorMath.Blend(family1, opacity / 100.0, tabRgb)), At(family, width / 2.0, family.ActualHeight / 2),
+            // The family bar: inside it, the family color at the bar opacity over what is beneath (the
+            // tab's 1 px left border in column 0, its background after that); just right of it, the tab.
+            var barX = width / 2;
+            var beneath = barX == 0 ? tabBorder : tabRgb;
+            AssertNear(ToColor(ColorMath.Blend(family1, opacity / 100.0, beneath)), At(family, barX + 0.5, family.ActualHeight / 2),
                 $"Family bar, {width}/{opacity}");
             AssertNear(ToColor(tabRgb), At(family, width + 3, family.ActualHeight - 3), $"Family tab, {width}/{opacity}");
             // The template stays native.
