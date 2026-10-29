@@ -41,7 +41,7 @@ namespace SplashIt.UI.Tabs;
 /// to no document, the colorizer asks the event source for a document scan
 /// (<see cref="IColorizerEventSource.RequestDocumentScan"/>), at most once per
 /// <see cref="DocumentScanIntervalMs"/> and at most <see cref="MaxScansPerChange"/> times
-/// after each change of the tabs. The source runs it where the document list may be read
+/// after each change of the tabs (a pass a scan itself forces is not a change). The source runs it where the document list may be read
 /// (Revit: the next Idling, in API context), and the scan registers every open document the
 /// events did not announce, so its tabs are colored. With every tab resolved, the unchanged
 /// hot path only compares a counter.</item>
@@ -99,6 +99,7 @@ public sealed class DocumentTabColorizer
     private int _consecutiveFaults;
     private double _guardMs;
     private string _lastCounts = "";
+    private int _lastScanUnresolved = -1;
     private int _unresolvedTabs;
     private int _scansLeft;
     private long _lastScanRequestMs = long.MinValue / 2;
@@ -353,6 +354,7 @@ public sealed class DocumentTabColorizer
         _families.Clear();
         _signatureValid = false;
         _lastCounts = "";
+        _lastScanUnresolved = -1;
         _unresolvedTabs = 0;
         _scansLeft = 0;
         try
@@ -511,13 +513,21 @@ public sealed class DocumentTabColorizer
             _keys.Clear();
 
             var added = projects + families + others;
-            if (added + gone + retitled + rekinded > 0)
+            var found = added + gone + retitled + rekinded > 0;
+            if (found)
             {
                 _surface.Invalidate(); // tabs that resolved to nothing resolve again
                 _signatureValid = false;
-                Pass(force: true);
+                // The scan's own follow-up pass does not refill the scan budget (delta review d1):
+                // only a change of the tabs or a document event does, so scans stay bounded.
+                Pass(force: true, refillScans: false);
             }
-            _log.Info(Inv($"colorizer: a document scan registered {added} documents no event announced ({projects} project, {families} family, {others} other); {retitled} changed title or kind, {rekinded} reclassified; {gone} no longer open; {_unresolvedTabs} unresolved."));
+            // Logged when it found something, or when the unresolved count moved (delta review d3).
+            if (found || _unresolvedTabs != _lastScanUnresolved)
+            {
+                _lastScanUnresolved = _unresolvedTabs;
+                _log.Info(Inv($"colorizer: a document scan registered {added} documents no event announced ({projects} project, {families} family, {others} other); {retitled} changed title or kind, {rekinded} reclassified; {gone} no longer open; {_unresolvedTabs} unresolved."));
+            }
             _consecutiveFaults = 0;
         }
         catch (Exception ex)
@@ -537,7 +547,10 @@ public sealed class DocumentTabColorizer
 
     // ---- the pass ----
 
-    private void Pass(bool force)
+    /// <param name="force">Restyle even when the signature is unchanged.</param>
+    /// <param name="refillScans">Whether unresolved tabs after this pass refill the scan budget
+    /// (false for the pass a scan forces, delta review d1).</param>
+    private void Pass(bool force, bool refillScans = true)
     {
         var result = _surface.Read(_read);
         if (!result.IsAvailable)
@@ -595,7 +608,7 @@ public sealed class DocumentTabColorizer
         LogCounts(projects, families, others, unresolved);
 
         _unresolvedTabs = unresolved;
-        if (unresolved > 0) _scansLeft = MaxScansPerChange;
+        if (unresolved > 0 && refillScans) _scansLeft = MaxScansPerChange;
         MaybeRequestScan();
     }
 
