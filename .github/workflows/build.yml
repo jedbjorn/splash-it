@@ -5,11 +5,13 @@ name: build
 # off-host Windows seat: the host has no .NET SDK (local builds run in the
 # dotnet/sdk Docker image, docs/DEVELOPING.md).
 #
-# Delegates to the reusable _build.yml so a release workflow can build exactly
-# the same pipeline: Core tests, the six configuration builds (Debug R25/R26/R27
-# upload the SplashIt-Debug-R25 / -R26 / -R27 add-in artifacts), and the
-# Windows runtime tests (SplashIt-screenshots). Every job is required.
-# Push/PR builds carry the dev version (0.0.0-dev).
+# Delegates to the reusable _build.yml so release.yml builds exactly the same
+# pipeline: Core tests, the six configuration builds (Debug R25/R26/R27
+# upload the SplashIt-Debug-R25 / -R26 / -R27 add-in artifacts), the Windows
+# runtime tests (SplashIt-screenshots), the Windows MSI job (SplashIt-msi,
+# SplashIt-zips) and its detection test (SplashIt-detection). Every job is
+# required. Push/PR builds carry the dev version (0.0.0-dev; MSI
+# ProductVersion 0.0.0).
 
 on:
   push:
