@@ -8,6 +8,7 @@ Coordinates are in a unit square (0..1, y down) and scaled to any box.
     from glyph import draw_splash, tile
     draw_splash(draw, (x0, y0, x1, y1), fill=BLUE)   # the glyph alone, into any box
     tile(32)                                          # the icon: glyph on the rounded tile
+    tile(32, glyph=draw_group_tabs)                   # the Group Tabs icon (spec #2)
 
 Pillow only.
 """
@@ -82,6 +83,34 @@ def draw_splash(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float
         circle(bx + distance * math.cos(a), by + distance * math.sin(a), r)
 
 
+# The Group Tabs glyph (spec #2): a tab strip in two groups. Each file's two tabs (square
+# bottoms, rounded tops) stand side by side over a bar that joins them, and a wider gap
+# separates the two files. Unit square, y down.
+TAB_TOP, TAB_BOTTOM = 0.16, 0.58
+BAR_TOP, BAR_BOTTOM = 0.68, 0.84
+TAB_RADIUS = 0.08
+# Each file: its tabs as (left, right) spans; its bar runs under all of them.
+GROUPS = [
+    [(0.02, 0.205), (0.255, 0.44)],
+    [(0.56, 0.745), (0.795, 0.98)],
+]
+
+
+def draw_group_tabs(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float], fill) -> None:
+    """Draws the Group Tabs glyph filling `box` (x0, y0, x1, y1) in `fill`."""
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+
+    def rect(ax: float, ay: float, bx: float, by: float, r: float = 0.0) -> None:
+        draw.rounded_rectangle((x0 + ax * w, y0 + ay * h, x0 + bx * w, y0 + by * h), radius=r * w, fill=fill)
+
+    for group in GROUPS:
+        for left, right in group:
+            rect(left, TAB_TOP, right, TAB_BOTTOM, TAB_RADIUS)
+            rect(left, (TAB_TOP + TAB_BOTTOM) / 2, right, TAB_BOTTOM)  # square bottom corners
+        rect(group[0][0], BAR_TOP, group[-1][1], BAR_BOTTOM)
+
+
 SUPERSAMPLE = 8
 
 # Corner radius and glyph inset, in pixels, for the ribbon icon sizes; other sizes scale
@@ -92,14 +121,14 @@ TILE_SPECS = {
 }
 
 
-def tile(size: int, tile_color=TILE, glyph_color=BLUE) -> Image.Image:
-    """The glyph on a full-bleed rounded tile, `size` px square, RGBA with transparent
-    corners. Supersampled and box-filtered down, so the edges anti-alias (as gantt-it's
-    icons)."""
+def tile(size: int, tile_color=TILE, glyph_color=BLUE, glyph=draw_splash) -> Image.Image:
+    """The glyph (`draw_splash` by default, or `draw_group_tabs`) on a full-bleed rounded
+    tile, `size` px square, RGBA with transparent corners. Supersampled and box-filtered
+    down, so the edges anti-alias (as gantt-it's icons)."""
     radius, inset = TILE_SPECS.get(size, (3 * size / 32, 3 * size / 32))
     s = SUPERSAMPLE
     big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
     draw = ImageDraw.Draw(big)
     draw.rounded_rectangle((0, 0, size * s - 1, size * s - 1), radius=radius * s, fill=tile_color)
-    draw_splash(draw, (inset * s, inset * s, (size - inset) * s, (size - inset) * s), glyph_color)
+    glyph(draw, (inset * s, inset * s, (size - inset) * s, (size - inset) * s), glyph_color)
     return big.reduce(s)
