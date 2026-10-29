@@ -108,11 +108,18 @@ public class TabStyleFactoryTests
         });
     }
 
-    /// <summary>The text is the higher-contrast of black and white against the fill as shown.</summary>
+    /// <summary>
+    /// The higher-contrast of black and white at its worst over two points (#31): the fill as shown,
+    /// and the fade under a title's last column (<see cref="ProjectFillShape.TitleEndShare"/>).
+    /// </summary>
+    private static Rgb Expected(Rgb color, double opacity, Rgb backdrop) => ColorMath.TextColorForAll(
+        ColorMath.Blend(color, opacity, backdrop), ColorMath.Blend(color, opacity * ProjectFillShape.Default.TitleEndShare, backdrop));
+
+    /// <summary>The text is the higher-contrast of black and white at its worst over the solid fill and the title's end (#31).</summary>
     [Theory]
-    // fill, opacity, theme (surface), expected text over the fill as shown
-    [InlineData("#4F8EF7", 100, UiTheme.Light, "#000000")] // mid blue: black 6.4:1 beats white 3.3:1
-    [InlineData("#4F8EF7", 100, UiTheme.Dark, "#000000")]  // opaque: the backdrop does not matter
+    // fill, opacity, theme (surface), expected text
+    [InlineData("#4F8EF7", 100, UiTheme.Light, "#000000")] // mid blue: black 6.4:1 beats white 3.3:1, and the end fades lighter
+    [InlineData("#4F8EF7", 100, UiTheme.Dark, "#FFFFFF")]  // #31: black would drop to 2.98:1 where the fade darkens; white keeps 3.2:1
     [InlineData("#1A3D7C", 100, UiTheme.Light, "#FFFFFF")] // dark navy: white
     [InlineData("#1A3D7C", 30, UiTheme.Light, "#000000")]  // 30 % navy over white reads light: black
     [InlineData("#1A3D7C", 30, UiTheme.Dark, "#FFFFFF")]   // 30 % navy over #2A2F37 reads dark: white
@@ -130,16 +137,17 @@ public class TabStyleFactoryTests
             var text = Solid(SetterValue<Brush>(selected, Control.ForegroundProperty));
             Assert.Equal(HostTabs.ColorOf(Rgb.Parse(expected)), text);
 
-            // And it really is the better one, measured on the blend over the surface.
-            var shown = ColorMath.Blend(color, opacity / 100.0, theme.Surface());
+            // And it really is the better one at its worst over the two points.
+            var end = ProjectFillShape.Default.TitleEndShare;
+            var points = new[] { ColorMath.Blend(color, opacity / 100.0, theme.Surface()), ColorMath.Blend(color, opacity / 100.0 * end, theme.Surface()) };
             var chosen = Rgb.Parse(expected);
             var other = chosen == ColorMath.Black ? ColorMath.White : ColorMath.Black;
-            Assert.True(ColorMath.ContrastRatio(chosen, shown) >= ColorMath.ContrastRatio(other, shown));
+            Assert.True(points.Min(p => ColorMath.ContrastRatio(chosen, p)) >= points.Min(p => ColorMath.ContrastRatio(other, p)));
 
-            // An unselected tab: measured on its own (muted) fill as shown.
+            // An unselected tab: its own (muted) fill, the same two points.
             var muted = opacity / 100.0 * TabTreatment.DefaultUnselectedPercent / 100.0;
             Assert.Equal(
-                HostTabs.ColorOf(ColorMath.TextColorFor(color, muted, theme.Surface())),
+                HostTabs.ColorOf(Expected(color, muted, theme.Surface())),
                 Solid(SetterValue<Brush>(NormalTrigger(style).Setters, Control.ForegroundProperty)));
         });
     }
@@ -207,7 +215,7 @@ public class TabStyleFactoryTests
             Assert.Equal(Argb(lighter, 0.3), Fill(hover.Setters)); // 50 % of 60 %
             Assert.True(ColorMath.RelativeLuminance(lighter) > ColorMath.RelativeLuminance(Blue));
             Assert.Equal(
-                HostTabs.ColorOf(ColorMath.TextColorFor(lighter, 0.3, ColorMath.White)),
+                HostTabs.ColorOf(Expected(lighter, 0.3, ColorMath.White)),
                 Solid(SetterValue<Brush>(hover.Setters, Control.ForegroundProperty)));
         });
     }

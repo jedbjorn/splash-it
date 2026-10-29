@@ -1,7 +1,9 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using SplashIt.Core.Colors;
 using SplashIt.Core.Settings;
 using SplashIt.Core.Theming;
@@ -11,22 +13,27 @@ using SplashIt.UI.Tabs;
 namespace SplashIt.RuntimeTests.Tabs;
 
 /// <summary>
-/// #30: the project fill is solid from the left edge, then fades over a fixed 24 px that ends
-/// 2 px before the close button, so the × sits on the strip; the selected tab's top line takes the
-/// same shape. Geometry, the hover and narrow-tab edge cases, the text and × contrast, and restore.
+/// #30 and #31: the project fill is solid from the left edge, then fades over a fixed 24 px that
+/// ends 2 px before the close button's measured slot, so the × sits on the strip; the selected tab's
+/// top line takes the same shape. Geometry (including a button that is not where Revit's is), the
+/// hover and narrow-tab edge cases, the 3:1 floor at a title's end, the × color, and restore.
 /// </summary>
 public class ProjectFillShapeTests
 {
     private static readonly Rgb Blue = SplashItDefaults.ProjectColors[0];
+    private static readonly Rgb Orange = SplashItDefaults.ProjectColors[1];
     private static readonly ProjectFillShape Shape = ProjectFillShape.Default;
 
     public static TheoryData<UiTheme> Themes => new() { UiTheme.Light, UiTheme.Dark };
 
     [Fact]
-    public void Default_IsA24PxFade_Ending2PxBeforeThe18PxCloseSlot()
+    public void Default_IsA24PxFade_Ending2PxBeforeThe18PxCloseSlot_12PxAfterTheTitle()
     {
-        Assert.Equal(new ProjectFillShape(24, 2, 18), ProjectFillShape.Default);
+        Assert.Equal(new ProjectFillShape(24, 2, 18, 12), ProjectFillShape.Default);
         Assert.Equal(ProjectFillShape.Default, new TabStyleFactory().ProjectFill);
+        Assert.Equal(10.5 / 24, ProjectFillShape.Default.TitleEndShare, 10); // a title's last column: about 44 %
+        Assert.Equal(1, new ProjectFillShape(0, 2, 18).TitleEndShare);       // no fade: the title is on the solid part
+        Assert.Equal(1, new ProjectFillShape(8, 2, 18).TitleEndShare);       // the fade starts after the title
     }
 
     /// <summary>The anchor is the gap before the button's left edge; with no button slot, the 18 px slot from the right edge.</summary>
@@ -57,42 +64,49 @@ public class ProjectFillShapeTests
         Assert.True(fade.End >= fade.Start && fade.Start >= 0);
     }
 
-    /// <summary>Two Revit-like tabs of one project, <paramref name="width"/> px wide each, the first selected, laid out.</summary>
-    private static (FrameworkElement Root, TabItem Selected, TabItem Unselected, Style Original) Strip(UiTheme theme, double width, params string[] titles)
+    // ---- live tabs ---------------------------------------------------------------------------------
+
+    /// <summary>A strip of project tabs on <paramref name="original"/> (default: the Revit-like style), the first selected, laid out.</summary>
+    private static (FrameworkElement Root, TabItem Selected, TabItem Unselected) Strip(UiTheme theme, double width,
+        Rgb? color = null, Style? original = null, string[]? titles = null, int fill = 100)
     {
-        var original = HostTabs.RevitLikeStyle(theme);
-        var strip = HostTabs.Strip(original, theme, titles.Length > 0 ? titles : ["Tower - Floor Plan: L1", "Tower - Sheet: A101"]);
+        original ??= HostTabs.RevitLikeStyle(theme);
+        var strip = HostTabs.Strip(original, theme, titles ?? ["Tower - Floor Plan: L1", "Tower - Sheet: A101"]);
         var factory = new TabStyleFactory();
         foreach (TabItem tab in strip.Items)
         {
             if (!double.IsNaN(width)) tab.Width = width;
-            tab.Style = factory.Create(original, TabTreatment.ProjectFill(Blue, 100), tab.Background, theme);
+            tab.Style = factory.Create(original, TabTreatment.ProjectFill(color ?? Blue, fill), tab.Background, theme);
         }
         HostTabs.Tab(strip, 0).IsSelected = true;
         var root = HostTabs.Host(strip, theme.Surface(), padding: 12);
         HostTabs.Layout(root);
-        return (root, HostTabs.Tab(strip, 0), HostTabs.Tab(strip, 1), original);
+        return (root, HostTabs.Tab(strip, 0), HostTabs.Tab(strip, 1));
     }
 
-    private static double CloseLeft(TabItem tab)
+    /// <summary>The close button's left edge, measured independently of the code under test (TranslatePoint, not TransformToAncestor).</summary>
+    private static double MeasuredCloseLeft(TabItem tab, string name = "mDocumentCloseButton")
     {
-        var button = TabCloseGlyph.FindButton(tab)!;
-        return button.TransformToAncestor(tab).Transform(new Point(0, 0)).X;
+        var button = WindowCapture.Descendants<Button>(tab).Single(b => b.Name == name);
+        return button.TranslatePoint(new Point(0, 0), tab).X;
     }
 
-    private static Color Pixel(System.Windows.Media.Imaging.BitmapSource bitmap, FrameworkElement root, FrameworkElement tab, double x, double y)
+    private static Color Pixel(BitmapSource bitmap, FrameworkElement root, FrameworkElement tab, double x, double y)
     {
         var p = tab.TransformToAncestor(root).Transform(new Point(x, y));
         return Screenshots.PixelAt(bitmap, (int)p.X, (int)p.Y);
     }
+
+    private static Color[] Row(BitmapSource bitmap, FrameworkElement root, FrameworkElement tab, double y) =>
+        Enumerable.Range(0, (int)tab.ActualWidth).Select(x => Pixel(bitmap, root, tab, x + 0.5, y)).ToArray();
 
     private static void Near(Color expected, Color actual, int tolerance, string what) =>
         Assert.True(Math.Abs(expected.R - actual.R) <= tolerance && Math.Abs(expected.G - actual.G) <= tolerance
                     && Math.Abs(expected.B - actual.B) <= tolerance, $"{what}: expected {expected}, got {actual}");
 
     /// <summary>
-    /// At 101, 155, 250 and 350 px the fill and the selected tab's line end at the anchor (2 px before
-    /// the button), and the fade is 24 px wide on every tab: drawn brushes, the adorner's extent and pixels.
+    /// At 101, 155, 250 and 350 px the fill and the selected tab's line end 2 px before the measured
+    /// button, and the fade is 24 px wide on every tab: drawn brushes, the adorner's extent and pixels.
     /// </summary>
     [Theory]
     [InlineData(101)]
@@ -104,15 +118,13 @@ public class ProjectFillShapeTests
         Screenshots.RunSta(() =>
         {
             var theme = UiTheme.Light;
-            var (root, selected, unselected, _) = Strip(theme, width);
+            var (root, selected, unselected) = Strip(theme, width);
             var bitmap = Screenshots.Render(root);
             var well = HostTabs.ColorOf(HostTabs.Well(theme));
             foreach (var tab in new[] { selected, unselected })
             {
                 Assert.Equal(width, tab.ActualWidth);
-                var closeLeft = CloseLeft(tab);
-                Assert.Equal(width - Shape.CloseSlot, closeLeft); // the stand-in's slot is Revit's
-                var anchor = closeLeft - Shape.Gap;
+                var anchor = MeasuredCloseLeft(tab) - Shape.Gap;
                 Assert.Equal(anchor, Shape.AnchorFor(tab));
 
                 var brush = Assert.IsType<LinearGradientBrush>(tab.Background);
@@ -122,21 +134,19 @@ public class ProjectFillShapeTests
                 Assert.Equal(Shape.FadeWidth, brush.EndPoint.X - brush.StartPoint.X);
                 Assert.Equal(0, brush.GradientStops[1].Color.A);
 
-                // Pixels at y 10: solid before the fade, about half way at its middle, the strip from its end.
+                // Pixels: solid before the fade, about half way at its middle, the strip from its end.
                 var opacity = tab.IsSelected ? 1.0 : 0.5;
-                var solid = HostTabs.ColorOf(ColorMath.Blend(Blue, opacity, HostTabs.Well(theme)));
-                Near(solid, Pixel(bitmap, root, tab, anchor - Shape.FadeWidth - 1.5, 10), 3, $"{width} solid");
+                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity, HostTabs.Well(theme))),
+                    Pixel(bitmap, root, tab, anchor - Shape.FadeWidth - 1.5, 10), 3, $"{width} solid");
                 Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity / 2, HostTabs.Well(theme))),
                     Pixel(bitmap, root, tab, anchor - Shape.FadeWidth / 2, 18.5), 8, $"{width} mid-fade");
                 Near(well, Pixel(bitmap, root, tab, anchor + 0.5, 10), 3, $"{width} past the fade");
-                Near(well, Pixel(bitmap, root, tab, width - 2.5, 18.5), 3, $"{width} under the ×");
             }
 
             // The selected tab's line: the same shape and end (#30).
             var adorner = TabDecoration.FindAdorner(selected)!;
             var (fadeStart, end) = TabDecorationAdorner.TopAccentExtent(selected, selected.RenderSize, adorner.Spec);
-            var lineAnchor = CloseLeft(selected) - Shape.Gap;
-            Assert.Equal(lineAnchor, end);
+            Assert.Equal(MeasuredCloseLeft(selected) - Shape.Gap, end);
             Assert.Equal(Shape.FadeWidth, end - fadeStart);
             var accent = HostTabs.ColorOf(ColorMath.Darken(Blue, TabStyleFactory.AccentDarken));
             Near(accent, Pixel(bitmap, root, selected, fadeStart - 1.5, 1.5), 3, $"{width} line before its fade");
@@ -146,26 +156,91 @@ public class ProjectFillShapeTests
     }
 
     /// <summary>
-    /// Revit shows the × only on the selected or hovered tab, but keeps its slot (Hidden): showing it
-    /// moves nothing. A collapsed button (no slot) falls back to the 18 px slot: the same anchor.
+    /// Review M2: a template whose close button is NOT at width - 18 (24 px wide, 7 px from the
+    /// edge, so its left edge is at width - 32). The fill and the line end 2 px before the measured
+    /// button, not where the right-edge fallback would put them.
+    /// </summary>
+    [Theory]
+    [InlineData(155)]
+    [InlineData(250)]
+    public void TheAnchor_IsMeasuredFromTheButton_NotTheRightEdge(double width)
+    {
+        Screenshots.RunSta(() =>
+        {
+            var theme = UiTheme.Dark;
+            var original = HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 7);
+            var (root, selected, unselected) = Strip(theme, width, original: original);
+            var bitmap = Screenshots.Render(root);
+            var well = HostTabs.ColorOf(HostTabs.Well(theme));
+            var fallback = width - Shape.CloseSlot - Shape.Gap;
+            foreach (var tab in new[] { selected, unselected })
+            {
+                var measured = MeasuredCloseLeft(tab);
+                Assert.Equal(width - 32, measured);
+                Assert.Equal(measured, ProjectFillShape.CloseButtonLeft(tab));
+                var brush = Assert.IsType<LinearGradientBrush>(tab.Background);
+                Assert.Equal(measured - Shape.Gap, brush.EndPoint.X);
+                Assert.NotEqual(fallback, brush.EndPoint.X);
+                Assert.Equal(Shape.FadeWidth, brush.EndPoint.X - brush.StartPoint.X);
+                // Between the measured anchor and the fallback the strip shows, not the fill.
+                Near(well, Pixel(bitmap, root, tab, measured - Shape.Gap + 0.5, 18.5), 3, "past the measured anchor");
+                Near(well, Pixel(bitmap, root, tab, fallback - 1.5, 18.5), 3, "where a right-edge fade would still be drawing");
+            }
+            var spec = TabDecoration.FindAdorner(selected)!.Spec;
+            var (_, end) = TabDecorationAdorner.TopAccentExtent(selected, selected.RenderSize, spec);
+            Assert.Equal(MeasuredCloseLeft(selected) - Shape.Gap, end);
+        });
+    }
+
+    /// <summary>The right-edge fallback is used only when the tab has no close button to measure.</summary>
+    [Fact]
+    public void TheFallback_IsUsedOnlyWhenThereIsNoButton()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var theme = UiTheme.Light;
+            var noButton = HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 7, closeName: "SomethingElse");
+            var (_, selected, unselected) = Strip(theme, 155, original: noButton);
+            foreach (var tab in new[] { selected, unselected })
+            {
+                Assert.Null(TabCloseGlyph.FindButton(tab));
+                Assert.Null(ProjectFillShape.CloseButtonLeft(tab));
+                Assert.Equal(155 - Shape.CloseSlot - Shape.Gap, ((LinearGradientBrush)tab.Background).EndPoint.X);
+            }
+
+            var (_, other, _) = Strip(theme, 155, original: HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 7));
+            Assert.NotNull(ProjectFillShape.CloseButtonLeft(other));
+            Assert.NotEqual(155 - Shape.CloseSlot, ProjectFillShape.CloseButtonLeft(other));
+        });
+    }
+
+    /// <summary>
+    /// Revit shows the × only on the selected or hovered tab, but keeps its slot (Hidden). On one
+    /// unselected tab: show the × (what hover does), re-evaluate the fill and render; the fill's
+    /// pixels and the anchor are the same as before. A collapsed button falls back to the 18 px slot,
+    /// which on Revit's geometry is the same anchor.
     /// </summary>
     [Fact]
     public void TheFade_DoesNotMove_WhenTheCloseButtonAppears()
     {
         Screenshots.RunSta(() =>
         {
-            var (root, _, tab, _) = Strip(UiTheme.Light, 155);
+            var (root, _, tab) = Strip(UiTheme.Light, 155);
             var button = TabCloseGlyph.FindButton(tab)!;
             Assert.Equal(Visibility.Hidden, button.Visibility); // unselected: hidden, as in Revit
-            var before = (LinearGradientBrush)tab.Background;
             var anchor = Shape.AnchorFor(tab);
+            var before = Row(Screenshots.Render(root), root, tab, 18.5);
 
-            button.Visibility = Visibility.Visible; // what hover does
-            HostTabs.Layout(root);
-            Assert.Equal(anchor, Shape.AnchorFor(tab));
-            var after = (LinearGradientBrush)tab.Background;
-            Assert.Equal(before.StartPoint, after.StartPoint);
-            Assert.Equal(before.EndPoint, after.EndPoint);
+            foreach (var visibility in new[] { Visibility.Visible, Visibility.Hidden, Visibility.Visible })
+            {
+                button.Visibility = visibility;
+                HostTabs.Layout(root);
+                BindingOperations.GetMultiBindingExpression(tab, Control.BackgroundProperty)!.UpdateTarget(); // re-measure now
+                HostTabs.Layout(root);
+                Assert.Equal(anchor, Shape.AnchorFor(tab));
+                Assert.Equal(anchor, ((LinearGradientBrush)tab.Background).EndPoint.X);
+                Assert.Equal(before, Row(Screenshots.Render(root), root, tab, 18.5)); // the row under the ×, pixel for pixel
+            }
 
             button.Visibility = Visibility.Collapsed; // a template that collapses it: the fallback slot
             HostTabs.Layout(root);
@@ -184,7 +259,7 @@ public class ProjectFillShapeTests
     {
         Screenshots.RunSta(() =>
         {
-            var (root, selected, unselected, _) = Strip(UiTheme.Light, width);
+            var (root, selected, unselected) = Strip(UiTheme.Light, width);
             Screenshots.Render(root); // draws without throwing
             foreach (var tab in new[] { selected, unselected })
             {
@@ -211,49 +286,111 @@ public class ProjectFillShapeTests
         });
     }
 
+    // ---- the 3:1 floor at a title's end (#31) ------------------------------------------------------
+
+    private static readonly int[] Fills = [10, 20, 30, 40, 50, 60, 70, 80, 85, 90, 95, 100];
+
     /// <summary>
-    /// The text keeps the solid part's black or white, and the fade is anchored to the ×, so where it
-    /// meets the title's end does not depend on the tab's width: a 350 px tab with a long view name
-    /// has the same fill under its last letter as a short one (the share-of-width shape, P1, did not).
-    /// Contrast is measured at the title's last column, on both themes.
+    /// #31, review M1: for every default project color, fill 10 to 100 % (and 85, 95), Unselected tab
+    /// opacity 10 to 100 %, and each state (unselected, hover, selected), the factory's text color
+    /// reaches 3:1 both on the solid part and at a title's last column in the fade, each blended over
+    /// the backdrop the factory is given: the theme surface (Revit's tabs have a transparent background)
+    /// and the settings preview's tab color. Computed with the same blend and contrast math as the
+    /// factory; a handful of cases are checked against rendered pixels below. The worst cases, and
+    /// the same choices measured over the stand-in's strip and Revit's dark tab area, go to a .txt.
     /// </summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TheText_OnALong350PxTab_IsOnTheSameFillAsOnAShortTab(UiTheme theme)
+    public void TheTitleFloor_Holds_ForEveryDefaultColorFillShareAndState(UiTheme theme)
+    {
+        var palette = UiPalette.For(theme);
+        var previewTab = palette[UiPalette.Hover];
+        var backdrops = new (string Name, Rgb Color, bool Asserted)[]
+        {
+            ("theme surface (the factory's backdrop for Revit's transparent tabs)", theme.Surface(), true),
+            ("settings preview tab", new Rgb(previewTab.R, previewTab.G, previewTab.B), true),
+            ("stand-in strip (what renders under the stand-in's fade)", HostTabs.Well(theme), false),
+            ("Revit dark tab area #454F61 (Lane B capture; AC11 to confirm)", Rgb.Parse("#454F61"), false),
+        };
+        var end = Shape.TitleEndShare;
+        var log = new StringBuilder($"#31 title floor, {theme}: text chosen over the backdrop; min contrast over (solid, title end at {end:P1} of the opacity)\n");
+        var failures = new List<string>();
+        foreach (var (name, backdrop, asserted) in backdrops)
+        {
+            var chooseOver = asserted ? backdrop : theme.Surface(); // unasserted rows: the factory still chooses over the surface
+            var worst = (Value: double.MaxValue, What: "");
+            var below = 0;
+            var count = 0;
+            foreach (var color in SplashItDefaults.ProjectColors)
+            foreach (var fill in Fills)
+            for (var share = 10; share <= 100; share += 10)
+            {
+                var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, fill, share), chooseOver, Shape);
+                foreach (var (state, c, opacity, text) in new[]
+                         {
+                             ("unselected", colors.Fill, colors.MutedOpacity, colors.Text),
+                             ("hover", colors.Hover, colors.MutedOpacity, colors.HoverText),
+                             ("selected", colors.Selected, colors.Opacity, colors.SelectedText),
+                         })
+                {
+                    count++;
+                    var min = Math.Min(ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity, backdrop)),
+                        ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity * end, backdrop)));
+                    if (min < worst.Value) worst = (min, $"{color.ToHex()} fill {fill} % unselected {share} % {state}");
+                    if (min < 3)
+                    {
+                        below++;
+                        if (asserted) failures.Add($"{name}: {color.ToHex()} fill {fill} % unselected {share} % {state}: {min:0.00}:1");
+                    }
+                }
+            }
+            log.AppendLine($"{name} {backdrop.ToHex()}: worst {worst.Value:0.00}:1 ({worst.What}); below 3:1: {below} of {count}{(asserted ? "" : " (not asserted)")}");
+        }
+        System.IO.Directory.CreateDirectory(Screenshots.Folder);
+        System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, $"project-fill-title-floor-{theme.ToString().ToLowerInvariant()}.txt"), log.ToString());
+        Assert.True(failures.Count == 0, $"{failures.Count} below 3:1, e.g. {string.Join("; ", failures.Take(5))}");
+    }
+
+    /// <summary>
+    /// The analytic floor against rendered pixels: on a long-title tab (it fills its tab, so its last
+    /// column sits in the fade), the pixel under the title's last column (below the letters) is the
+    /// fill at <see cref="ProjectFillShape.TitleEndShare"/> blended over what is behind the tab, and
+    /// the title really ends <see cref="ProjectFillShape.TitleGap"/> px before the ×. Includes the
+    /// review's failing cases (red at 85 and 90 %, brown at 90 %, dark).
+    /// </summary>
+    [Theory]
+    [InlineData("#E15759", 90, UiTheme.Dark)]
+    [InlineData("#E15759", 85, UiTheme.Dark)]
+    [InlineData("#9C755F", 90, UiTheme.Dark)]
+    [InlineData("#4F8EF7", 100, UiTheme.Dark)]
+    [InlineData("#F28E2B", 100, UiTheme.Light)]
+    public void TheTitleEnd_RendersAsComputed(string hex, int fill, UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
-            const string longTitle = "Tower - Floor Plan: Level 01 - Architectural Coordination Model";
-            var (_, shortTab, _, _) = Strip(theme, double.NaN, "Tower - Floor Plan: L1", "Tower - Sheet: A101");
-            var (_, longTab, _, _) = Strip(theme, double.NaN, longTitle, "Tower - Sheet: A101");
-            Assert.InRange(longTab.ActualWidth, 330, 400);
+            var color = Rgb.Parse(hex);
+            const string title = "Tower - Floor Plan: Level 01 - Architectural Coordination Model";
+            var (root, tab, _) = Strip(theme, double.NaN, color, titles: [title, "Tower - Sheet: A101"], fill: fill);
+            var bitmap = Screenshots.Render(root);
+            var text = WindowCapture.Descendants<TextBlock>(tab).Single(t => t.Text == title);
+            var textRight = text.TranslatePoint(new Point(text.ActualWidth, 0), tab).X;
+            var anchor = Shape.AnchorFor(tab);
+            Assert.Equal(MeasuredCloseLeft(tab) - Shape.TitleGap, textRight, 0); // the stand-in's title gap is Revit's
 
-            var shares = new List<double>();
-            var log = new System.Text.StringBuilder("#30: the selected blue tab at fill 100 %, its title's contrast\n");
-            foreach (var tab in new[] { shortTab, longTab })
-            {
-                var text = WindowCapture.Descendants<TextBlock>(tab).Single(t => t.Text == (string)tab.Header);
-                var textRight = text.TransformToAncestor(tab).Transform(new Point(text.ActualWidth, 0)).X;
-                var (start, end) = Shape.FadeFor(Shape.AnchorFor(tab));
-                var share = Math.Clamp((end - textRight) / (end - start), 0, 1);
-                shares.Add(share);
+            var opacity = fill / 100.0;
+            var share = (anchor - (textRight - 0.5)) / Shape.FadeWidth;
+            Assert.Equal(Shape.TitleEndShare, share, 2);
+            var expected = ColorMath.Blend(color, opacity * share, HostTabs.Well(theme));
+            var under = Pixel(bitmap, root, tab, textRight - 0.5, 18.5);
+            Near(HostTabs.ColorOf(expected), under, 4, $"{hex} {fill} % under the title's last column");
 
-                // The text's color is the solid fill's choice; record the contrast at its last column.
-                var under = ColorMath.Blend(Blue, share, HostTabs.Well(theme));
-                var textColor = ((SolidColorBrush)tab.Foreground).Color;
-                var chosen = new Rgb(textColor.R, textColor.G, textColor.B);
-                Assert.Equal(ColorMath.TextColorFor(Blue, 1, theme.Surface()), chosen);
-                var atEnd = ColorMath.ContrastRatio(chosen, under);
-                var onSolid = ColorMath.ContrastRatio(chosen, ColorMath.Blend(Blue, 1, HostTabs.Well(theme)));
-                log.AppendLine($"{theme}\t{tab.ActualWidth} px\ttext {(chosen == ColorMath.Black ? "black" : "white")}\ton the solid fill {onSolid:0.00}:1\t"
-                               + $"at the title's last column {atEnd:0.00}:1 (fill {share:P0} there)");
-                Assert.True(atEnd >= 3, $"{theme} {tab.ActualWidth} px: {atEnd:0.00}:1 at the title's end");
-            }
-            System.IO.Directory.CreateDirectory(Screenshots.Folder);
-            System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, $"project-fill-text-contrast-{theme.ToString().ToLowerInvariant()}.txt"), log.ToString());
-            Assert.Equal(shares[0], shares[1], 2); // width-independent
+            var chosen = ((SolidColorBrush)tab.Foreground).Color;
+            var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, fill), theme.Surface(), Shape);
+            Assert.Equal(HostTabs.ColorOf(colors.SelectedText), chosen);
         });
     }
+
+    // ---- the × and restore -------------------------------------------------------------------------
 
     /// <summary>The × sits on the strip in every state: black on the light strip, white on the dark one, never Revit's grey.</summary>
     [Theory]
@@ -262,14 +399,14 @@ public class ProjectFillShapeTests
     {
         Screenshots.RunSta(() =>
         {
-            var (root, selected, unselected, _) = Strip(theme, 155);
+            var (root, selected, unselected) = Strip(theme, 155, Orange);
             var bitmap = Screenshots.Render(root);
             foreach (var tab in new[] { selected, unselected })
             {
                 var button = TabCloseGlyph.FindButton(tab)!;
                 var glyph = ((SolidColorBrush)button.Foreground).Color;
                 Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(theme.Surface())), glyph);
-                var centre = CloseLeft(tab) + button.ActualWidth / 2;
+                var centre = MeasuredCloseLeft(tab) + button.ActualWidth / 2;
                 var under = Pixel(bitmap, root, tab, centre, 18.5);
                 Near(HostTabs.ColorOf(HostTabs.Well(theme)), under, 3, "the strip under the ×");
                 var underRgb = new Rgb(under.R, under.G, under.B);
@@ -277,9 +414,12 @@ public class ProjectFillShapeTests
                 var other = ColorMath.ContrastRatio(glyph == Colors.Black ? ColorMath.White : ColorMath.Black, underRgb);
                 Assert.True(mine > other, $"{theme}: {mine:0.00}:1 vs {other:0.00}:1");
             }
-            // Dark theme: the selected blue tab's text is black, its × white.
+            // Dark theme: the selected orange tab's text is black, its × white.
             if (theme == UiTheme.Dark)
-                Assert.NotEqual(((SolidColorBrush)selected.Foreground).Color, ((SolidColorBrush)TabCloseGlyph.FindButton(selected)!.Foreground).Color);
+            {
+                Assert.Equal(Colors.Black, ((SolidColorBrush)selected.Foreground).Color);
+                Assert.Equal(Colors.White, ((SolidColorBrush)TabCloseGlyph.FindButton(selected)!.Foreground).Color);
+            }
         });
     }
 
@@ -330,7 +470,7 @@ public class ProjectFillShapeTests
         });
     }
 
-    private static byte[] Pixels(System.Windows.Media.Imaging.BitmapSource bitmap)
+    private static byte[] Pixels(BitmapSource bitmap)
     {
         var stride = bitmap.PixelWidth * 4;
         var pixels = new byte[stride * bitmap.PixelHeight];
