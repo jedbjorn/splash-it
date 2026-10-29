@@ -28,4 +28,23 @@
     <value>The Splash-It settings window could not open ({0}). The log in %LocalAppData%\SplashIt\logs has the details.</value>
     <comment>{0} the error's type name.</comment>
   </data>
+
+  <data name="GroupTabs_ButtonText" xml:space="preserve">
+    <value>Group Tabs</value>
+  </data>
+  <data name="GroupTabs_Tooltip" xml:space="preserve">
+    <value>Group tabs by File</value>
+  </data>
+  <data name="GroupTabs_Unavailable" xml:space="preserve">
+    <value>Splash-It can't group tabs on this Revit build.</value>
+  </data>
+  <data name="GroupTabs_UnavailableDetail" xml:space="preserve">
+    <value>Nothing was moved. The log in %LocalAppData%\SplashIt\logs has the reason.</value>
+  </data>
+  <data name="GroupTabs_Stopped" xml:space="preserve">
+    <value>Splash-It stopped grouping tabs partway.</value>
+  </data>
+  <data name="GroupTabs_StoppedDetail" xml:space="preserve">
+    <value>Some tabs moved, and the rest kept their place. Only the order changed: every view is still open. The log in %LocalAppData%\SplashIt\logs has the reason.</value>
+  </data>
 </root>

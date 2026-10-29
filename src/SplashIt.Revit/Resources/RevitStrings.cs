@@ -22,4 +22,10 @@ internal static class RevitStrings
     internal static string Ribbon_ButtonText => Get(nameof(Ribbon_ButtonText));
     internal static string Ribbon_Tooltip => Get(nameof(Ribbon_Tooltip));
     internal static string Command_CouldNotOpen(object? detail) => Format(nameof(Command_CouldNotOpen), detail);
+    internal static string GroupTabs_ButtonText => Get(nameof(GroupTabs_ButtonText));
+    internal static string GroupTabs_Tooltip => Get(nameof(GroupTabs_Tooltip));
+    internal static string GroupTabs_Unavailable => Get(nameof(GroupTabs_Unavailable));
+    internal static string GroupTabs_UnavailableDetail => Get(nameof(GroupTabs_UnavailableDetail));
+    internal static string GroupTabs_Stopped => Get(nameof(GroupTabs_Stopped));
+    internal static string GroupTabs_StoppedDetail => Get(nameof(GroupTabs_StoppedDetail));
 }
