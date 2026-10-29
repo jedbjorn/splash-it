@@ -1,11 +1,10 @@
 name: _build (reusable)
 
 # Adapted from gantt-it .github/workflows/_build.yml (gantt-it commit 1e27832),
-# with the R25 legs from gantt-it's Revit 2025 work. The MSI job arrives with
-# the installer lane.
+# with the R25 legs from gantt-it's Revit 2025 work.
 #
-# The one build pipeline, shared by build.yml (every PR and push to main) and,
-# later, release.yml (v* tags), so a release builds exactly what CI builds.
+# The one build pipeline, shared by build.yml (every PR and push to main) and
+# release.yml (v* tags), so a release builds exactly what CI builds.
 # Leading underscore = internal, not triggered directly.
 #
 #   • test     — SplashIt.Core.Tests on net8.0 and net10.0 (AC1–AC3).
@@ -20,6 +19,22 @@ name: _build (reusable)
 #                no Revit). The runtime tests render WPF off-screen to PNG under
 #                TestResults/screenshots/, uploaded as SplashIt-screenshots:
 #                  gh run download <run-id> -n SplashIt-screenshots
+#   • msi      — Windows runner (WiX emits MSIs on Windows only), from gantt-it
+#                _build.yml's msi job (gantt-it commit aa83f35). Builds
+#                Release R25 + R26 + R27, stages each with installer/stage.sh,
+#                builds the per-user installer/SplashIt.Installer.wixproj
+#                (installs only the Revit years it finds on the computer),
+#                checks it with installer/inspect-msi.ps1 (AC9) and uploads:
+#                  SplashIt-msi   SplashIt-<version>.msi
+#                  SplashIt-zips  SplashIt-<version>-Revit2025.zip / -Revit2026.zip /
+#                                 -Revit2027.zip (the Addins\<year>\ contents,
+#                                 for manual installs)
+#   • detect   — Windows runner (admin), after msi: installer/test-detection.ps1
+#                installs that MSI for real with msiexec /qn against fake Revit
+#                installs (uninstall entries in HKLM, Revit.exe dummies) and
+#                checks which Addins\<year>\ folders it fills (AC10, CI part).
+#                Uploads the per-case results and every msiexec log:
+#                  gh run download <run-id> -n SplashIt-detection
 #
 # Linux builds the net8.0-windows / net10.0-windows targets thanks to
 # EnableWindowsTargeting and the reference-only Nice3point Revit API packages.
@@ -151,4 +166,162 @@ jobs:
         with:
           name: SplashIt-screenshots
           path: TestResults/screenshots/*.png
+          if-no-files-found: error
+
+  # From gantt-it .github/workflows/_build.yml, msi job (gantt-it commit aa83f35).
+  msi:
+    name: MSI (Release R25 + R26 + R27)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Passed even when empty: Directory.Build.props falls back to the dev
+      # version (an empty global property cannot be reassigned, so it derives
+      # the local $(Version) instead).
+      SPLASHIT_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: dotnet build Release R25 + Release R26 + Release R27
+        run: |
+          set -euo pipefail
+          for cfg in "Release R25" "Release R26" "Release R27"; do
+            dotnet build src/SplashIt.Revit/SplashIt.Revit.csproj -c "$cfg" --nologo \
+              "-p:SplashItVersion=${SPLASHIT_VERSION}"
+          done
+
+      - name: Stage add-in (2025, 2026, 2027)
+        run: |
+          set -euo pipefail
+          bash installer/stage.sh 2025
+          bash installer/stage.sh 2026
+          bash installer/stage.sh 2027
+
+      - name: Build MSI
+        run: >-
+          dotnet build installer/SplashIt.Installer.wixproj -c Release --nologo
+          "-p:SplashItVersion=${SPLASHIT_VERSION}"
+
+      - name: Locate MSI
+        id: msi
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          found=(installer/bin/**/SplashIt-*.msi)
+          if [[ ${#found[@]} -ne 1 ]]; then
+            echo "::error::expected one SplashIt-*.msi, found ${#found[@]}: ${found[*]}"
+            exit 1
+          fi
+          # The version the build was asked for, independent of the build's
+          # outputs: the input, else the dev fallback of Directory.Build.props.
+          version="${SPLASHIT_VERSION:-0.0.0-dev}"
+          {
+            echo "path=${found[0]}"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "${found[0]} (expected version $version)"
+
+      # Checks the MSI against the requested version, not against itself: file
+      # name, ProductVersion and each year's SplashIt.Revit.dll ProductVersion
+      # (= InformationalVersion). Dev builds carry "+<commit>" build metadata,
+      # hence -AllowBuildMetadata. Also checks the Revit detection wiring
+      # (AppSearch, per-year component conditions, launch condition) and, with
+      # -Stage, that the staged folders hold exactly the files Product.wxs
+      # lists (AC9).
+      - name: Inspect MSI (identity, layout, detection, version stamps)
+        shell: powershell
+        env:
+          MSI_PATH: ${{ steps.msi.outputs.path }}
+          VERSION: ${{ steps.msi.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $extra = @{}
+          if (-not $env:SPLASHIT_VERSION) { $extra['AllowBuildMetadata'] = $true }
+          & ./installer/inspect-msi.ps1 -Msi $env:MSI_PATH -Version $env:VERSION -Stage installer/stage @extra
+          exit $LASTEXITCODE
+
+      - name: Zip add-in folders (manual install)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.msi.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path zips | Out-Null
+          foreach ($year in '2025', '2026', '2027') {
+            Compress-Archive -Path "installer/stage/$year/*" `
+              -DestinationPath "zips/SplashIt-$env:VERSION-Revit$year.zip" -Force
+          }
+          Get-ChildItem zips | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: SplashIt-msi
+          path: ${{ steps.msi.outputs.path }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: SplashIt-zips
+          path: zips/*.zip
+          if-no-files-found: error
+
+  # New in Splash-It (no gantt-it counterpart): AC10, CI part. Installs the
+  # MSI built above for real, silently, against fake Revit installs, and
+  # checks exactly which Addins\<year>\ folders it fills. GitHub's Windows
+  # runners run as an administrator, which the fake HKLM entries need.
+  detect:
+    name: MSI detection (silent installs, fake Revit)
+    needs: msi
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          name: SplashIt-msi
+          path: dist/
+      - uses: actions/download-artifact@v7
+        with:
+          name: SplashIt-zips
+          path: dist/
+
+      # The zips hold each year's staged Addins\<year>\ contents: the exact
+      # files an install of that year must create.
+      - name: Unzip the expected file sets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($year in '2025', '2026', '2027') {
+            $zip = @(Get-ChildItem dist -Filter "SplashIt-*-Revit$year.zip")
+            if ($zip.Count -ne 1) { throw "expected one SplashIt-*-Revit$year.zip, found $($zip.Count)" }
+            Expand-Archive -Path $zip[0].FullName -DestinationPath "expected/$year"
+          }
+          Get-ChildItem -Recurse -File expected | ForEach-Object { $_.FullName }
+
+      - name: Detection cases (msiexec /qn)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = @(Get-ChildItem dist -Filter 'SplashIt-*.msi')
+          if ($msi.Count -ne 1) { throw "expected one SplashIt-*.msi, found $($msi.Count)" }
+          & ./installer/test-detection.ps1 -Msi $msi[0].FullName -OutDir detection -Expected expected
+          exit $LASTEXITCODE
+
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path detection/results.md) { Get-Content detection/results.md >> $env:GITHUB_STEP_SUMMARY }
+
+      # Uploaded even when a case fails, so the msiexec logs can be read.
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: SplashIt-detection
+          path: detection/
           if-no-files-found: error

@@ -53,3 +53,7 @@ TestResults/
 
 ## Python
 __pycache__/
+
+## Installer: staged add-in trees (installer/stage.sh); WiX outputs are under bin/ and obj/
+## (from gantt-it .gitignore, commit aa83f35)
+/installer/stage/
