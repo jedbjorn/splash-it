@@ -250,15 +250,23 @@ finds a document handle on 2026 or 2027).
 Styles come from `TabStyleFactory` (decisions #22 and #23): the selected project tab shows the
 color at the fill opacity with a 3 px darker top line; the project's other tabs show it at the
 Unselected tab opacity (a share of the fill opacity, default 50 %). The fill is
-`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family marks (#27: the
+`Background`/`Foreground` setters plus `IsSelected`/hover triggers. Its shape (#30,
+`ProjectFillShape.Default`): solid from the left edge, then a fixed 24 px fade to transparent
+that ends 2 px before the close button's left edge, so the × sits on Revit's strip; the
+selected tab's top line takes the same shape. The `Background` value is a binding to the tab's
+width (`ProjectFillConverter`), because the fade's position depends on where that tab's close
+button is: the button's layout slot (Revit keeps it `Hidden`, not collapsed, on tabs that are
+not selected or hovered, so hovering moves nothing), else the tab's right edge less 18 px. A
+tab too narrow for the fade fades from its left edge. The text keeps the solid part's black or
+white; the × is chosen against the strip. The family marks (#27: the
 side bar of the bar width, plus a fixed 2 px top bar from the left edge over 95 % of the tab,
 fading out over its last 15 % (#29), `FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
 (`TabDecoration`), so they do not depend on Revit's template, follow a resize, and go with
 the original style.
 Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
 (`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
-AvalonDock theme), so `TabCloseGlyph` sets it to the text color per state and puts the
-button's own value back when the original style returns. All of this was checked in Revit
+AvalonDock theme), so `TabCloseGlyph` sets it to black or white (since #30, chosen against the
+strip it sits on) and puts the button's own value back when the original style returns. All of this was checked in Revit
 2026 and 2027 on the VM (`shared/evidence/lane-b/vm/`).
 
 - Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and
