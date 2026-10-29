@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SplashIt.Revit user-facing strings (English only in v1, decision #8).
+  Each entry has a matching accessor in RevitStrings.cs.
+-->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <data name="Ribbon_ButtonText" xml:space="preserve">
+    <value>Splash-It</value>
+  </data>
+  <data name="Ribbon_Tooltip" xml:space="preserve">
+    <value>Color each open file's tabs, and change the colors.</value>
+  </data>
+
+  <data name="Status_Title" xml:space="preserve">
+    <value>Splash-It</value>
+  </data>
+  <data name="Status_Heading" xml:space="preserve">
+    <value>Tab coloring: {0}</value>
+    <comment>{0} one of the Status_* texts.</comment>
+  </data>
+  <data name="Status_Active" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="Status_Off" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="Status_Unavailable" xml:space="preserve">
+    <value>Unavailable on this Revit build</value>
+  </data>
+  <data name="Status_BlockedByPyRevit" xml:space="preserve">
+    <value>Blocked by pyRevit</value>
+  </data>
+  <data name="Status_Faulted" xml:space="preserve">
+    <value>Stopped after error</value>
+  </data>
+  <data name="Status_NotStarted" xml:space="preserve">
+    <value>Not started yet</value>
+  </data>
+  <data name="Status_Details" xml:space="preserve">
+    <value>{0} tabs colored. The settings window arrives in a later build.</value>
+    <comment>{0} the number of tabs carrying a Splash-It style.</comment>
+  </data>
+</root>
