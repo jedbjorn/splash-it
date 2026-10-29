@@ -59,9 +59,7 @@ public sealed class GroupTabs : IExternalCommand
             return TabGroupResult.Unavailable(NotStartedReason);
         }
 
-        // API context: re-read the open documents' current titles (keeping earlier ones), as the
-        // colorizer's events would, in case coloring is off and no event has run.
-        documents.GetOpenDocuments(new List<object>());
+        Refresh(documents);
         if (documents.Count == 0)
         {
             App.Log.Info("group tabs: no document open; nothing to group.");
@@ -70,6 +68,24 @@ public sealed class GroupTabs : IExternalCommand
 
         var finder = _finder ??= new AvalonDockPane.Finder(App.Log);
         return GroupTabsRunner.Run(surface, finder.Find, App.Log);
+    }
+
+    /// <summary>
+    /// API context (a command): lists Revit's open documents through SC-004's registration path,
+    /// labelled <c>group-tabs</c> in the log (review m3), so the current and kept titles and the
+    /// kinds are up to date even with coloring off. While the colorizer runs, the listing is its
+    /// own document scan (review n3): a document added or dropped, or a title or kind changed,
+    /// reaches it as from the fallback scan (a reclassification like a Save As, then the tabs
+    /// resolve again and are restyled).
+    /// </summary>
+    private static void Refresh(RevitDocuments documents)
+    {
+        documents.ListAs(RevitDocuments.GroupTabsSource, () =>
+        {
+            if (App.Colorizer?.ScanDocuments() == true) return;
+            documents.GetOpenDocuments(new List<object>(), out var changed);
+            if (changed > 0) App.Log.Info($"group tabs: {changed} documents changed title or kind (the colorizer is not running).");
+        });
     }
 
     /// <summary>The short dialog (spec #2, Behavior 7). Never throws.</summary>
