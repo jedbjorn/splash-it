@@ -348,3 +348,9 @@ returns. All of this was checked in Revit
 - Ribbon icons: `python3 tools/make_icons.py` (Pillow) regenerates
   `src/SplashIt.Revit/Resources/icons/` (`splash_*` and the Group Tabs `group_*`). Both
   glyphs are in `tools/glyph.py`, on the same tiles.
+- Group Tabs (spec #2, decision #28) logs one line per click: `group tabs: <n> moves over
+  <t> tabs in <p> panes.` (INF), `group tabs: already grouped …` (INF), `group tabs:
+  unavailable; nothing moved. <reason>` (WRN) or `group tabs: stopped after <n> moves. …`
+  (ERR). The AvalonDock assembly version and whether `MoveChild` was found are logged once,
+  on the **first click** of a session (`group tabs: first click this session: …`), not at
+  startup.

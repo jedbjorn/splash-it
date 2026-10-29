@@ -42,14 +42,18 @@ Revit adds every new view tab at the end of the strip, so after a while one file
 are scattered among the others. Click **Group Tabs** on the **Add-Ins** tab (tooltip
 "Group tabs by File") to put each file's tabs next to each other:
 
-- Each file's tabs move to where that file's leftmost tab is now, so files keep their
-  order and nothing moves further than it has to.
+- The file you are working in (the one whose tab is selected) comes first. The other
+  files follow in the order of their leftmost tab, and tabs that are already in place
+  stay put.
 - A file's tabs keep their order among themselves.
 - Every kind of file is grouped, colored or not. A tab Splash-It can't match to an open
   file goes after the grouped tabs.
-- The selected tab and the active view stay the same.
-- With tiled or split views, each group of tabs is sorted on its own; no tab moves to
-  another tile. Views in floating windows are left alone.
+- The selected tab and the active view stay the same. When there are more tabs than fit,
+  Revit may bring the selected tab to the front of the strip; it stays inside its own
+  file's group, which is why that file goes first.
+- With tiled or split views, each group of tabs is sorted on its own, led by the file of
+  its own selected tab; no tab moves to another tile. Views in floating windows are left
+  alone.
 
 It works the same with coloring on or off. It sorts once, when you click, and never on
 its own, so you can still drag tabs anywhere afterwards. When the strip is already
@@ -59,7 +63,8 @@ Interface › Keyboard Shortcuts** and search for "Group Tabs".
 Group Tabs only changes the order of the tabs. It doesn't touch your model, and there is
 nothing to undo. If a Revit update changes the tab strip in a way Splash-It doesn't
 expect, the button says "Splash-It can't group tabs on this Revit build" and leaves the
-tabs as they are.
+tabs as they are. The log in `%LocalAppData%\SplashIt\logs` records each click; the
+first click of a session also records the tab-strip library's version.
 
 ## License
 
