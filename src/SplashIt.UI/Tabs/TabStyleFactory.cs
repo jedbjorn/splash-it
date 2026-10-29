@@ -143,6 +143,14 @@ public sealed class TabStyleFactory : ITabStyleFactory
     public TabStyleFactory(FamilyTopBarShape? familyTopBar = null) =>
         FamilyTopBar = familyTopBar ?? FamilyTopBarShape.Default;
 
+    /// <summary>EXPLORATION ONLY: a factory that draws project fills in <paramref name="projectFill"/> (the option sheet).</summary>
+    internal TabStyleFactory(FamilyTopBarShape? familyTopBar, ProjectFillShape projectFill)
+        : this(familyTopBar) =>
+        ProjectFill = projectFill;
+
+    /// <summary>EXPLORATION ONLY: the project fill's shape; <see cref="ProjectFillShape.P0Solid"/> (shipped) by default.</summary>
+    internal ProjectFillShape ProjectFill { get; } = ProjectFillShape.P0Solid;
+
     /// <summary>The family top bar's shape this factory draws (#27).</summary>
     public FamilyTopBarShape FamilyTopBar { get; }
 
@@ -218,8 +226,13 @@ public sealed class TabStyleFactory : ITabStyleFactory
 
     public void ClearCache() => _cache.Clear();
 
-    private static void AddProjectFill(Style style, TabTreatment treatment, Rgb backdrop)
+    private void AddProjectFill(Style style, TabTreatment treatment, Rgb backdrop)
     {
+        if (ProjectFill != ProjectFillShape.P0Solid)
+        {
+            AddShapedProjectFill(style, treatment, backdrop);
+            return;
+        }
         var colors = FillColors(treatment, backdrop);
         var fill = Brush(colors.Fill, colors.MutedOpacity);
         var text = Brush(colors.Text);
@@ -249,6 +262,59 @@ public sealed class TabStyleFactory : ITabStyleFactory
         AddState(selectedTrigger.Setters, selected, selectedText);
         selectedTrigger.Setters.Add(new Setter(TabDecoration.DecorationProperty, accent));
         style.Triggers.Add(selectedTrigger);
+    }
+
+    /// <summary>
+    /// EXPLORATION ONLY: <see cref="AddProjectFill"/> in <see cref="ProjectFill"/>'s shape. The
+    /// text keeps the solid part's black or white; on a fading fill the close glyph is bound to
+    /// the color under it instead (<see cref="ShapedGlyphConverter"/>).
+    /// </summary>
+    private void AddShapedProjectFill(Style style, TabTreatment treatment, Rgb backdrop)
+    {
+        var shape = ProjectFill;
+        var colors = FillColors(treatment, backdrop);
+        var fades = ProjectFillProfile.Fades(shape);
+        Brush Fill(Rgb c, double o) => fades ? ProjectFillProfile.Fill(shape, c, o) : Brush(c, o);
+        object Glyph(Rgb c, double o, Rgb text) =>
+            fades ? ShapedGlyphConverter.Binding(shape, c, o, backdrop) : Brush(text);
+
+        var fill = Fill(colors.Fill, colors.MutedOpacity);
+        var text = Brush(colors.Text);
+        var glyph = Glyph(colors.Fill, colors.MutedOpacity, colors.Text);
+        var hover = Fill(colors.Hover, colors.MutedOpacity);
+        var hoverText = Brush(colors.HoverText);
+        var hoverGlyph = Glyph(colors.Hover, colors.MutedOpacity, colors.HoverText);
+        var selected = Fill(colors.Selected, colors.Opacity);
+        var selectedText = Brush(colors.SelectedText);
+        var selectedGlyph = Glyph(colors.Selected, colors.Opacity, colors.SelectedText);
+        var accent = ProjectFillProfile.ShapedLine(shape)
+            ? new TabDecorationSpec(null, 0, Brush(colors.Accent), AccentHeight, ProjectFillProfile.FamilyWidth, ProjectFillProfile.FamilyFade)
+            : new TabDecorationSpec(null, 0, Brush(colors.Accent), AccentHeight);
+
+        AddState(style.Setters, fill, text, glyph);
+
+        var normal = new Trigger { Property = TabItem.IsSelectedProperty, Value = false };
+        AddState(normal.Setters, fill, text, glyph);
+        style.Triggers.Add(normal);
+
+        var hoverTrigger = new MultiTrigger();
+        hoverTrigger.Conditions.Add(new Condition(UIElement.IsMouseOverProperty, true));
+        hoverTrigger.Conditions.Add(new Condition(TabItem.IsSelectedProperty, false));
+        AddState(hoverTrigger.Setters, hover, hoverText, hoverGlyph);
+        style.Triggers.Add(hoverTrigger);
+
+        var selectedTrigger = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
+        AddState(selectedTrigger.Setters, selected, selectedText, selectedGlyph);
+        selectedTrigger.Setters.Add(new Setter(TabDecoration.DecorationProperty, accent));
+        style.Triggers.Add(selectedTrigger);
+    }
+
+    /// <summary>One state's fill, text, and a close glyph of its own (a brush, or a binding).</summary>
+    private static void AddState(SetterBaseCollection setters, Brush fill, Brush text, object glyph)
+    {
+        setters.Add(new Setter(Control.BackgroundProperty, fill));
+        setters.Add(new Setter(Control.ForegroundProperty, text));
+        setters.Add(new Setter(TabCloseGlyph.ForegroundProperty, glyph));
     }
 
     /// <summary>One state's fill, text, and close glyph (the glyph follows the text, #22).</summary>

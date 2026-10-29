@@ -338,6 +338,111 @@ public class TabStripScreenshotTests
         });
     }
 
+    /// <summary>
+    /// EXPLORATION ONLY (exp/project-fill-options, never merged): the project fill option sheet.
+    /// Each PNG is one <see cref="ProjectFillShape"/>: per theme (light above dark) a row at fill
+    /// 100 % and a row at fill 60 %, unselected 50 %; each row is two tabs of project 1 (blue, the
+    /// first selected), one of project 2 (orange, unselected), a family tab (the current L) and a
+    /// native .rte tab; at 2x (nearest neighbour), drawn by the real factory and adorner. Beside
+    /// it, a .txt records each project tab's close glyph: where it sits, the color rendered under
+    /// it, the black or white chosen, and both contrasts.
+    /// </summary>
+    [Theory]
+    [InlineData("P0")]
+    [InlineData("P1")]
+    [InlineData("P2")]
+    [InlineData("P3")]
+    [InlineData("P4")]
+    [InlineData("P5")]
+    public void ProjectFill_OptionSheet(string option)
+    {
+        var shape = option switch
+        {
+            "P0" => ProjectFillShape.P0Solid,
+            "P1" => ProjectFillShape.P1FamilyShape,
+            "P2" => ProjectFillShape.P2FadeToEdge,
+            "P3" => ProjectFillShape.P3ShapedLine,
+            "P4" => ProjectFillShape.P4ShapedFillAndLine,
+            "P5" => ProjectFillShape.P5Gentle,
+            _ => throw new ArgumentOutOfRangeException(nameof(option)),
+        };
+        Screenshots.RunSta(() =>
+        {
+            var panel = new StackPanel();
+            var rows = new List<(UiTheme Theme, int Fill, TabControl Strip)>();
+            foreach (var theme in new[] { UiTheme.Light, UiTheme.Dark })
+            {
+                var factory = new TabStyleFactory(null, shape);
+                var original = HostTabs.RevitLikeStyle(theme);
+                var stack = new StackPanel();
+                foreach (var fill in new[] { 100, 60 })
+                {
+                    var strip = Styled(factory, original, theme, selected: 0,
+                        ("Tower - Floor Plan: L1", TabTreatment.ProjectFill(P1, fill)),
+                        ("Tower - Sheet: A101", TabTreatment.ProjectFill(P1, fill)),
+                        ("Bridge - Floor Plan: L1", TabTreatment.ProjectFill(P2, fill)),
+                        ("Door - Floor Plan: Ref. Level", TabTreatment.FamilyBar(F1, 3, 100)),
+                        ("Template - 3D View: {3D}", null));
+                    stack.Children.Add(Label($"Option {option}, {Suffix(theme)}: fill {fill} %, unselected 50 % (1st tab selected)", theme));
+                    stack.Children.Add(strip);
+                    rows.Add((theme, fill, strip));
+                }
+                panel.Children.Add(HostTabs.Host(stack, theme.Surface(), padding: 12));
+            }
+            HostTabs.Layout(panel);
+            var bitmap = Screenshots.Render(panel);
+            Screenshots.Save(Screenshots.Zoom(bitmap, 2), "project-fill-option-" + option);
+
+            var log = new System.Text.StringBuilder();
+            log.AppendLine($"option {option} ({shape}); x = glyph centre / tab width; under = rendered pixel below the glyph (y 18.5)");
+            log.AppendLine("theme\tfill\ttab\tstate\tx\tunder\ttext\tglyph\tglyph:1\tother:1\tglyph != text");
+            var failures = new List<string>();
+            foreach (var (theme, fill, strip) in rows)
+            {
+                for (var i = 0; i < 3; i++)
+                {
+                    var tab = HostTabs.Tab(strip, i);
+                    var button = TabCloseGlyph.FindButton(tab)!;
+                    var centre = button.TransformToAncestor(tab).Transform(new Point(button.ActualWidth / 2, button.ActualHeight / 2));
+                    var under = PixelIn(bitmap, panel, tab, Math.Floor(centre.X) + 0.5, 18.5);
+                    var glyph = ((SolidColorBrush)button.Foreground).Color;
+                    var text = ((SolidColorBrush)tab.Foreground).Color;
+                    var underRgb = new Rgb(under.R, under.G, under.B);
+                    var glyphRgb = new Rgb(glyph.R, glyph.G, glyph.B);
+                    var other = glyph == Colors.Black ? ColorMath.White : ColorMath.Black;
+                    var mine = ColorMath.ContrastRatio(glyphRgb, underRgb);
+                    var theirs = ColorMath.ContrastRatio(other, underRgb);
+                    log.AppendLine(string.Join('\t', Suffix(theme), fill, $"{i}:{(i < 2 ? "blue" : "orange")}",
+                        tab.IsSelected ? "selected" : "unselected", (centre.X / tab.ActualWidth).ToString("0.000"),
+                        ColorMath.ToHex(underRgb), text == Colors.Black ? "black" : "white",
+                        glyph == Colors.Black ? "black" : glyph == Colors.White ? "white" : glyph.ToString(),
+                        mine.ToString("0.00"), theirs.ToString("0.00"), glyph != text ? "CHANGED" : ""));
+                    if (glyph != Colors.Black && glyph != Colors.White) failures.Add($"tab {i}: the glyph is {glyph}");
+                    // The better of black and white against what is actually under it (the factory blends
+                    // over the tab's own background, the render shows the strip: allow a near tie).
+                    else if (mine < theirs * 0.9) failures.Add($"{Suffix(theme)} {fill} % tab {i}: glyph {mine:0.00}:1 vs {theirs:0.00}:1 over {under}");
+                }
+
+                var selected = HostTabs.Tab(strip, 0);
+                var w = selected.ActualWidth;
+                var o = fill / 100.0;
+                var well = HostTabs.Well(theme);
+                Near(Shown(P1, o, well), PixelIn(bitmap, panel, selected, 3, 10), 6);   // solid at the left
+                var share = ProjectFillProfile.ShareAt(shape, (w - 2.5) / (w - 1));     // the border's last column
+                Near(Shown(P1, o * share, well), PixelIn(bitmap, panel, selected, w - 2.5, 10), 10);
+                var accent = HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken));
+                Near(accent, PixelIn(bitmap, panel, selected, 10.5, 1.5));            // the 3 px line
+                if (ProjectFillProfile.ShapedLine(shape)) Assert.NotEqual(accent, PixelIn(bitmap, panel, selected, w - 1.5, 1.5));
+                else Near(accent, PixelIn(bitmap, panel, selected, w - 3.5, 1.5));
+                Assert.NotEqual(accent, PixelIn(bitmap, panel, HostTabs.Tab(strip, 1), 10.5, 1.5)); // unselected: no line
+                Near(HostTabs.ColorOf(F1), PixelIn(bitmap, panel, HostTabs.Tab(strip, 3), 0.5, 10)); // the family L
+                Assert.False(TabStyleFactory.IsDerived(HostTabs.Tab(strip, 4).Style));                 // .rte: native
+            }
+            System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, "project-fill-option-" + option + ".txt"), log.ToString());
+            Assert.True(failures.Count == 0, string.Join("; ", failures));
+        });
+    }
+
     [Theory]
     [MemberData(nameof(Themes))]
     public void ProjectFill_At30And100Percent(UiTheme theme)
