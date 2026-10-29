@@ -706,22 +706,37 @@ public sealed class DocumentTabColorizer
             return state.OriginalBackground;
         }
 
+        // Best: what the window actually draws behind the tabs (a rendered sample). No tab may offer a
+        // point to sample yet (the first tab is selected and not styled): use the tree's answer for now,
+        // uncached, and look again on the next passes (bounded).
+        var rendered = TabBackdrop.Rendered(tab);
+        if (rendered is null && _backdropRetries < MaxBackdropRetries)
+        {
+            _backdropPending = true;
+            return TabBackdrop.Behind(tab) is { } guess ? Frozen(guess.Color) : state.OriginalBackground;
+        }
+
         Brush? brush = null;
-        if (TabBackdrop.Behind(tab) is { } behind)
+        if ((rendered ?? TabBackdrop.Behind(tab)) is { } behind)
         {
             var c = behind.Color;
-            var solid = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
-            solid.Freeze();
-            brush = solid;
+            brush = Frozen(c);
             _log.Info(Inv($"colorizer: tabs sit on {c.ToHex()} ({behind.Source}); project text and x are chosen against it. [{TabBackdrop.Explain(tab)}]"));
         }
         else
         {
-            _log.Info("colorizer: nothing solid behind the tabs; project text and x are chosen against each tab's own background, else the theme surface.");
+            _log.Info("colorizer: nothing solid behind the tabs; project text and x are chosen against each tab's own background, else the theme surface. [" + TabBackdrop.Explain(tab) + "]");
         }
         if (_backdrops.Count >= MaxBackdrops) _backdrops.Clear();
         _backdrops[pane] = brush;
         return brush ?? state.OriginalBackground;
+    }
+
+    private static Brush Frozen(Rgb c)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
+        brush.Freeze();
+        return brush;
     }
 
     private FileKind KindOf(object key)
