@@ -138,7 +138,7 @@ folder, then installs, repairs and uninstalls with `msiexec /qn`:
 | 4 | 2025 and 2026 (registry), 2027 (default folder) | install | all three |
 | 5 | 2026, then 2025 added | install, then repair | 2025 and 2026 |
 | 5b | 2026 removed | repair | only 2025 |
-| 6 | 2025 removed too (none left) | uninstall | not blocked; no Splash-It files; `Addins\<year>\`, another add-in's file and `settings.json` kept |
+| 6 | 2025 removed too (none left); `Addins\2025\` existed empty and `Addins\2026\` held another add-in before case 5 | uninstall | not blocked; no Splash-It files; both `Addins\<year>\` folders, the other add-in's file and `settings.json` kept |
 
 It uploads `results.md`, the full transcript and every msiexec verbose log as
 the `SplashIt-detection` artifact:

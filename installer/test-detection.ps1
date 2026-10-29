@@ -38,9 +38,11 @@
     5b  remove 2026, repair again -> only 2025 (a repair drops a year whose
         Revit is gone);
     6   remove 2025 too (no Revit left) and uninstall -> not blocked, every
-        Splash-It folder gone, Addins\<year>\ and another add-in's file in it
-        kept, and the pre-seeded %AppData%\SplashIt\settings.json kept
-        unchanged.
+        Splash-It folder gone; Addins\2025\ (which existed, empty, before
+        case 5) and Addins\2026\ kept, another add-in's file in it kept, and
+        the pre-seeded %AppData%\SplashIt\settings.json kept unchanged.
+        (An Addins\<year>\ that the MSI itself created, empty, is removed with
+        it by Windows Installer, leaving the folder tree as it was.)
 
   Repair is what the setup UI's Repair button does (WixUI_Minimal,
   VerifyReadyDlg): REINSTALL=ALL REINSTALLMODE=ecmus, here with /qn.
@@ -240,6 +242,7 @@ foreach ($y in $Years) {
 }
 if ((Get-InstalledProducts).Count) { throw 'Splash-It is already installed; not a clean runner.' }
 if ((Get-SplashItYears).Count) { throw "Splash-It files already exist under $addins; not a clean runner." }
+Say "Addins\ before the first case: $(if (Test-Path $addins) { (@(Get-ChildItem -Force $addins | ForEach-Object { $_.Name }) -join ', ') + ' (exists)' } else { 'does not exist' })"
 
 # A settings file written by the add-in, which the MSI must never touch.
 New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
@@ -288,6 +291,9 @@ try {
   $un = Uninstall-Msi 'case3-uninstall'
   if ($un.ExitCode -ne 0) { $p += "uninstall exit $($un.ExitCode)" }
   $p += Test-State @()
+  # Informational: Addins\2027\ did not exist before this install, so the MSI
+  # created it; this shows whether Windows Installer removed it again, empty.
+  Say "    (info) Addins\2027\ after the uninstall: $(if (Test-Path (Join-Path $addins '2027')) { 'present' } else { 'absent' })"
   Record '3' '2025 registry entry without Revit.exe; 2027 default folder only' 'install' 'only 2027' $p $obs
   Remove-AllFakes
 
@@ -310,11 +316,15 @@ try {
 
   # Case 5 ---------------------------------------------------------------
   Say ''; Say 'Case 5: install with 2026 only, then add 2025 and repair -> 2025 and 2026'
-  # Another add-in's manifest in Revit's folders: Splash-It must never touch it.
+  # Revit's own folders as Revit leaves them: Addins\2025\ empty, and
+  # Addins\2026\ holding another add-in's manifest. The uninstall in case 6
+  # must keep both folders, and the manifest.
   foreach ($y in '2025', '2026') {
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $addins $y)
     New-Item -ItemType Directory -Force -Path (Join-Path $addins $y) | Out-Null
-    Set-Content -Path (Join-Path $addins "$y\Other.addin") -Value '<RevitAddIns />'
   }
+  Set-Content -Path (Join-Path $addins '2026\Other.addin') -Value '<RevitAddIns />'
+  Say '    Revit folders: Addins\2025\ (empty) and Addins\2026\Other.addin exist before the install'
   Add-RegistryRevit '2026'
   $run = Install-Msi 'case5-install-2026'
   $p = @()
@@ -348,21 +358,21 @@ try {
   $p += Test-State @()
   foreach ($y in '2025', '2026') {
     if (-not (Test-Path (Join-Path $addins $y))) { $p += "Addins\$y\ was removed (Revit owns it)" }
-    if (-not (Test-Path (Join-Path $addins "$y\Other.addin"))) { $p += "Addins\$y\Other.addin (another add-in) was removed" }
   }
+  if (-not (Test-Path (Join-Path $addins '2026\Other.addin'))) { $p += 'Addins\2026\Other.addin (another add-in) was removed' }
   if (-not (Test-Path $settingsFile)) { $p += "$settingsFile was removed" }
   elseif ((Get-FileHash $settingsFile).Hash -ne $settingsHash) { $p += "$settingsFile was changed" }
   if ((Get-InstalledProducts).Count) { $p += 'Splash-It is still registered as installed' }
   $kept = @(Get-ChildItem -Force $addins | ForEach-Object { $_.Name }) -join ', '
   Say "    Addins\ now holds: $kept; settings.json present: $(Test-Path $settingsFile)"
-  Record '6' 'after 5b, remove 2025 too (no Revit); pre-seeded settings.json and Other.addin' 'uninstall' 'not blocked; no SplashIt* left; Addins\<year>\, Other.addin and settings.json kept' $p "$(Observed $run); Addins\ holds: $kept; settings.json unchanged: $((Test-Path $settingsFile) -and (Get-FileHash $settingsFile).Hash -eq $settingsHash)"
+  Record '6' 'after 5b, remove 2025 too (no Revit); Addins\2025\ existed empty and Addins\2026\ held Other.addin before case 5; settings.json pre-seeded' 'uninstall' 'not blocked; no SplashIt* left; Addins\2025\ and Addins\2026\ kept, Other.addin and settings.json kept' $p "$(Observed $run); Addins\ holds: $kept; settings.json unchanged: $((Test-Path $settingsFile) -and (Get-FileHash $settingsFile).Hash -eq $settingsHash)"
 }
 finally {
   # Leave the runner as it was: no fakes, no Splash-It.
   Remove-AllFakes
   if ((Get-InstalledProducts).Count) { Uninstall-Msi 'cleanup-uninstall' | Out-Null }
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $fakeRoot
-  foreach ($y in '2025', '2026') { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $addins "$y\Other.addin") }
+  Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $addins '2026\Other.addin')
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $settingsDir
 }
 
