@@ -119,7 +119,7 @@ public class TabStyleFactoryTests
     [Theory]
     // fill, opacity, theme (surface), expected text
     [InlineData("#4F8EF7", 100, UiTheme.Light, "#000000")] // mid blue: black 6.4:1 beats white 3.3:1, and the end fades lighter
-    [InlineData("#4F8EF7", 100, UiTheme.Dark, "#FFFFFF")]  // #31: black would drop to 2.98:1 where the fade darkens; white keeps 3.2:1
+    [InlineData("#4F8EF7", 100, UiTheme.Dark, "#000000")]  // #36: the title ends at 85 % of the fill, so black keeps 5.3:1 over the dark surface
     [InlineData("#1A3D7C", 100, UiTheme.Light, "#FFFFFF")] // dark navy: white
     [InlineData("#1A3D7C", 30, UiTheme.Light, "#000000")]  // 30 % navy over white reads light: black
     [InlineData("#1A3D7C", 30, UiTheme.Dark, "#FFFFFF")]   // 30 % navy over #2A2F37 reads dark: white
@@ -176,25 +176,35 @@ public class TabStyleFactoryTests
     }
 
     /// <summary>
-    /// Review M1 and #30: the close glyph is never Revit's grey; the fill ends before it, so in every
-    /// state it is black or white against the strip it sits on (the tab's own background, else the
-    /// theme surface), not the fill: on the dark theme a full orange tab has black text and a white ×.
+    /// Review M1 and #36: the close glyph is never Revit's grey; it sits on the fade, so per state it is
+    /// black or white by the higher minimum contrast over the fill under each of its 16 columns
+    /// (<see cref="ProjectFillShape.CloseShares"/>), blended over the backdrop. On the dark theme a full
+    /// orange tab's × is white while unselected or hovered (the fill there is at 50 %, dark over the
+    /// surface) and black when selected; on the light theme it is black in every state.
     /// </summary>
     [Theory]
-    [InlineData(UiTheme.Light, "#000000", "#000000")]
-    [InlineData(UiTheme.Dark, "#000000", "#FFFFFF")]
-    public void ProjectFill_CloseGlyph_IsChosenAgainstTheStrip_InEveryState(UiTheme theme, string text, string glyph)
+    [InlineData(UiTheme.Light, "#000000", "#000000", "#000000", "#000000")]
+    [InlineData(UiTheme.Dark, "#000000", "#FFFFFF", "#FFFFFF", "#000000")]
+    public void ProjectFill_CloseGlyph_IsChosenOverTheFadeUnderIt_PerState(UiTheme theme, string text, string normal, string hover, string selected)
     {
         Screenshots.RunSta(() =>
         {
-            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Rgb.Parse("#F28E2B"), 100), null, theme);
-            var states = new[] { style.Setters, NormalTrigger(style).Setters, style.Triggers.OfType<MultiTrigger>().Single().Setters, SelectedTrigger(style).Setters };
-            var first = SetterValue<Brush>(style.Setters, TabCloseGlyph.ForegroundProperty);
-            foreach (var setters in states)
-                Assert.Same(first, SetterValue<Brush>(setters, TabCloseGlyph.ForegroundProperty));
-            Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(theme.Surface())), Solid(first));
-            Assert.Equal(HostTabs.ColorOf(Rgb.Parse(glyph)), Solid(first));
+            var orange = Rgb.Parse("#F28E2B");
+            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(orange, 100), null, theme);
+            var hoverSetters = style.Triggers.OfType<MultiTrigger>().Single().Setters;
+            Assert.Same(SetterValue<Brush>(style.Setters, TabCloseGlyph.ForegroundProperty), SetterValue<Brush>(NormalTrigger(style).Setters, TabCloseGlyph.ForegroundProperty));
+            Assert.Equal(HostTabs.ColorOf(Rgb.Parse(normal)), Solid(SetterValue<Brush>(NormalTrigger(style).Setters, TabCloseGlyph.ForegroundProperty)));
+            Assert.Equal(HostTabs.ColorOf(Rgb.Parse(hover)), Solid(SetterValue<Brush>(hoverSetters, TabCloseGlyph.ForegroundProperty)));
+            Assert.Equal(HostTabs.ColorOf(Rgb.Parse(selected)), Solid(SetterValue<Brush>(SelectedTrigger(style).Setters, TabCloseGlyph.ForegroundProperty)));
             Assert.Equal(HostTabs.ColorOf(Rgb.Parse(text)), Solid(SetterValue<Brush>(SelectedTrigger(style).Setters, Control.ForegroundProperty)));
+
+            // And each is the better choice at its worst over the 16 columns.
+            var surface = theme.Surface();
+            foreach (var (c, o, chosen) in new[] { (orange, 0.5, normal), (ColorMath.Lighten(orange, TabStyleFactory.HoverLighten), 0.5, hover), (orange, 1.0, selected) })
+            {
+                var under = ProjectFillShape.Default.CloseShares().Select(s => ColorMath.Blend(c, o * s, surface)).ToArray();
+                Assert.Equal(Rgb.Parse(chosen), ColorMath.TextColorForAll(under));
+            }
 
             var bar = new TabStyleFactory().Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 100), null, UiTheme.Light);
             Assert.DoesNotContain(bar.Setters.OfType<Setter>(), s => s.Property == TabCloseGlyph.ForegroundProperty); // families stay native
@@ -272,6 +282,44 @@ public class TabStyleFactoryTests
             var fade = Assert.IsType<LinearGradientBrush>(bar.TopAccentFadeBrush);
             Assert.Equal(Argb(Magenta, opacity), fade.GradientStops[0].Color);
             Assert.Equal(0, fade.GradientStops[1].Color.A);
+            Assert.Null(bar.TopAccentAnchor); // not the project fill's shape
+        });
+    }
+
+    /// <summary>
+    /// #36 changes project tabs only: a family's style is the same whatever the project fill's shape.
+    /// Factories with #30's end (transparent before the ×) and #36's (half at the edge) give a family
+    /// the same one setter, the same L (side bar, 2 px top bar over 95 % fading out over its last
+    /// 15 %, #29) in the same brushes, and no fill, text or × setter.
+    /// </summary>
+    [Fact]
+    public void FamilyMarks_AreUntouchedByTheProjectFillShape()
+    {
+        Screenshots.RunSta(() =>
+        {
+            TabDecorationSpec Family(TabStyleFactory factory)
+            {
+                var style = factory.Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 100), null, UiTheme.Dark);
+                Assert.Empty(style.Triggers);
+                Assert.DoesNotContain(style.Setters.OfType<Setter>(), s => s.Property == Control.BackgroundProperty
+                    || s.Property == Control.ForegroundProperty || s.Property == TabCloseGlyph.ForegroundProperty);
+                return SetterValue<TabDecorationSpec>(style.Setters, TabDecoration.DecorationProperty);
+            }
+            var now = Family(new TabStyleFactory());
+            var other = Family(new TabStyleFactory(projectFill: new ProjectFillShape(24, 2, 18, 12, EdgeShare: 0)));
+            foreach (var spec in new[] { now, other })
+            {
+                Assert.Equal(3, spec.LeftBarWidth);
+                Assert.Equal(Argb(Magenta, 100), Solid(spec.LeftBar!));
+                Assert.Equal(Argb(Magenta, 100), Solid(spec.TopAccent!));
+                Assert.Equal((2.0, 0.95, 0.15), (spec.TopAccentHeight, spec.TopAccentWidth, spec.TopAccentFade));
+                Assert.Null(spec.TopAccentAnchor);
+                var fade = Assert.IsType<LinearGradientBrush>(spec.TopAccentFadeBrush);
+                Assert.Equal(Argb(Magenta, 100), fade.GradientStops[0].Color);
+                Assert.Equal(Color.FromArgb(0, Magenta.R, Magenta.G, Magenta.B), fade.GradientStops[1].Color);
+            }
+            Assert.Equal(TabDecorationAdorner.TopAccentRect(new Size(150, 20), now), TabDecorationAdorner.TopAccentRect(new Size(150, 20), other));
+            Assert.Equal(TabDecorationAdorner.TopAccentExtent(new TabItem(), new Size(150, 20), now), TabDecorationAdorner.TopAccentExtent(new TabItem(), new Size(150, 20), other));
         });
     }
 
