@@ -19,6 +19,7 @@ internal static class SettingsJson
     public const string ProjectColorsKey = "projectColors";
     public const string FamilyColorsKey = "familyColors";
     public const string ProjectFillOpacityKey = "projectFillOpacity";
+    public const string ProjectUnselectedOpacityKey = "projectUnselectedOpacity";
     public const string FamilyBarWidthKey = "familyBarWidth";
     public const string FamilyBarOpacityKey = "familyBarOpacity";
 
@@ -54,6 +55,7 @@ internal static class SettingsJson
             WriteColors(w, ProjectColorsKey, settings.ProjectColors);
             WriteColors(w, FamilyColorsKey, settings.FamilyColors);
             w.WriteNumber(ProjectFillOpacityKey, settings.ProjectFillOpacity);
+            w.WriteNumber(ProjectUnselectedOpacityKey, settings.ProjectUnselectedOpacity);
             w.WriteNumber(FamilyBarWidthKey, settings.FamilyBarWidth);
             w.WriteNumber(FamilyBarOpacityKey, settings.FamilyBarOpacity);
             w.WriteEndObject();
@@ -125,6 +127,10 @@ internal static class SettingsJson
                 FamilyColors = TolerantColors(root, FamilyColorsKey, SplashItDefaults.FamilyColors, log),
                 ProjectFillOpacity = TolerantInt(root, ProjectFillOpacityKey,
                     SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity, SplashItDefaults.ProjectFillOpacity, log),
+                // Decision #23 added this field within schema 1 (v1 had not shipped): a file
+                // without it reads the default, 50, like any missing field.
+                ProjectUnselectedOpacity = TolerantInt(root, ProjectUnselectedOpacityKey,
+                    SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity, SplashItDefaults.ProjectUnselectedOpacity, log),
                 FamilyBarWidth = TolerantInt(root, FamilyBarWidthKey,
                     SplashItDefaults.MinBarWidth, SplashItDefaults.MaxBarWidth, SplashItDefaults.FamilyBarWidth, log),
                 FamilyBarOpacity = TolerantInt(root, FamilyBarOpacityKey,
@@ -251,6 +257,8 @@ internal static class SettingsJson
         var family = StrictColors(root, FamilyColorsKey, CoreStrings.Field_FamilyColors, errors);
         var fill = StrictInt(root, ProjectFillOpacityKey, CoreStrings.Field_ProjectFillOpacity,
             SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity, errors);
+        var unselected = StrictInt(root, ProjectUnselectedOpacityKey, CoreStrings.Field_ProjectUnselectedOpacity,
+            SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity, errors);
         var width = StrictInt(root, FamilyBarWidthKey, CoreStrings.Field_FamilyBarWidth,
             SplashItDefaults.MinBarWidth, SplashItDefaults.MaxBarWidth, errors);
         var bar = StrictInt(root, FamilyBarOpacityKey, CoreStrings.Field_FamilyBarOpacity,
@@ -263,6 +271,7 @@ internal static class SettingsJson
             ProjectColors = project!,
             FamilyColors = family!,
             ProjectFillOpacity = fill!.Value,
+            ProjectUnselectedOpacity = unselected!.Value,
             FamilyBarWidth = width!.Value,
             FamilyBarOpacity = bar!.Value,
         };

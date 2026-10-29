@@ -17,7 +17,7 @@ public sealed record SplashItSettings
     private readonly IReadOnlyList<Rgb> _projectColors = SplashItDefaults.ProjectColors;
     private readonly IReadOnlyList<Rgb> _familyColors = SplashItDefaults.FamilyColors;
 
-    /// <summary>The defaults: enabled, both default color lists, 100 %, 3 px, 100 %.</summary>
+    /// <summary>The defaults: enabled, both default color lists, fill 100 %, unselected 50 %, bar 3 px at 100 %.</summary>
     public static SplashItSettings Default { get; } = new();
 
     /// <summary><c>%AppData%\SplashIt\settings.json</c> for the current user.</summary>
@@ -47,6 +47,12 @@ public sealed record SplashItSettings
     /// <summary>Project fill opacity, percent (10 to 100).</summary>
     public int ProjectFillOpacity { get; init; } = SplashItDefaults.ProjectFillOpacity;
 
+    /// <summary>
+    /// Unselected tab opacity (decision #23), percent (10 to 100) of <see cref="ProjectFillOpacity"/>:
+    /// a project's unselected tabs show its color at fill × this share, the selected tab at the full fill.
+    /// </summary>
+    public int ProjectUnselectedOpacity { get; init; } = SplashItDefaults.ProjectUnselectedOpacity;
+
     /// <summary>Family bar width, pixels (1 to 6).</summary>
     public int FamilyBarWidth { get; init; } = SplashItDefaults.FamilyBarWidth;
 
@@ -66,6 +72,7 @@ public sealed record SplashItSettings
         CheckColorCount(CoreStrings.Field_ProjectColors, ProjectColors.Count, errors);
         CheckColorCount(CoreStrings.Field_FamilyColors, FamilyColors.Count, errors);
         CheckOpacity(CoreStrings.Field_ProjectFillOpacity, ProjectFillOpacity, errors);
+        CheckOpacity(CoreStrings.Field_ProjectUnselectedOpacity, ProjectUnselectedOpacity, errors);
         CheckBarWidth(FamilyBarWidth, errors);
         CheckOpacity(CoreStrings.Field_FamilyBarOpacity, FamilyBarOpacity, errors);
         return errors;
@@ -134,6 +141,7 @@ public sealed record SplashItSettings
         && ProjectColors.SequenceEqual(other.ProjectColors)
         && FamilyColors.SequenceEqual(other.FamilyColors)
         && ProjectFillOpacity == other.ProjectFillOpacity
+        && ProjectUnselectedOpacity == other.ProjectUnselectedOpacity
         && FamilyBarWidth == other.FamilyBarWidth
         && FamilyBarOpacity == other.FamilyBarOpacity;
 
@@ -146,6 +154,7 @@ public sealed record SplashItSettings
         hash.Add(-1);
         foreach (var c in FamilyColors) hash.Add(c);
         hash.Add(ProjectFillOpacity);
+        hash.Add(ProjectUnselectedOpacity);
         hash.Add(FamilyBarWidth);
         hash.Add(FamilyBarOpacity);
         return hash.ToHashCode();

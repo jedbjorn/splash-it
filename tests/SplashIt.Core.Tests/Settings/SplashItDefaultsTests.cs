@@ -14,6 +14,8 @@ public class SplashItDefaultsTests(ITestOutputHelper output)
         Assert.True(d.Enabled);
         Assert.Equal(1, d.SchemaVersion);
         Assert.Equal(100, d.ProjectFillOpacity);
+        Assert.Equal(50, d.ProjectUnselectedOpacity);
+        Assert.Equal(50, SplashItDefaults.ProjectUnselectedOpacity);
         Assert.Equal(3, d.FamilyBarWidth);
         Assert.Equal(100, d.FamilyBarOpacity);
         Assert.Empty(d.Validate());

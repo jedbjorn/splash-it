@@ -24,6 +24,7 @@ public sealed class SettingsStoreTests : IDisposable
         ProjectColors = [Rgb.Parse("#112233"), Rgb.Parse("#ABCDEF"), Rgb.Parse("#FF0000")],
         FamilyColors = [Rgb.Parse("#00FF00")],
         ProjectFillOpacity = 40,
+        ProjectUnselectedOpacity = 70,
         FamilyBarWidth = 6,
         FamilyBarOpacity = 10,
     };
@@ -69,8 +70,10 @@ public sealed class SettingsStoreTests : IDisposable
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var names = doc.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
         Assert.Equal(
-            ["schemaVersion", "enabled", "projectColors", "familyColors", "projectFillOpacity", "familyBarWidth", "familyBarOpacity"],
+            ["schemaVersion", "enabled", "projectColors", "familyColors", "projectFillOpacity", "projectUnselectedOpacity",
+             "familyBarWidth", "familyBarOpacity"],
             names);
+        Assert.Equal(70, doc.RootElement.GetProperty("projectUnselectedOpacity").GetInt32());
         Assert.Equal(1, doc.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("#ABCDEF", doc.RootElement.GetProperty("projectColors")[1].GetString());
     }
@@ -226,8 +229,10 @@ public sealed class SettingsStoreTests : IDisposable
     public void Validate_BadOpacity_IsRejected(int opacity)
     {
         var fill = (SplashItSettings.Default with { ProjectFillOpacity = opacity }).Validate();
+        var unselected = (SplashItSettings.Default with { ProjectUnselectedOpacity = opacity }).Validate();
         var bar = (SplashItSettings.Default with { FamilyBarOpacity = opacity }).Validate();
         Assert.Equal([$"Project fill opacity must be from 10 to 100; it is {opacity}."], fill);
+        Assert.Equal([$"Unselected tab opacity must be from 10 to 100; it is {opacity}."], unselected);
         Assert.Equal([$"Family bar opacity must be from 10 to 100; it is {opacity}."], bar);
     }
 
@@ -236,7 +241,10 @@ public sealed class SettingsStoreTests : IDisposable
     [InlineData(55)]
     [InlineData(100)]
     public void Validate_OpacityInRange_IsValid(int opacity) =>
-        Assert.Empty((SplashItSettings.Default with { ProjectFillOpacity = opacity, FamilyBarOpacity = opacity }).Validate());
+        Assert.Empty((SplashItSettings.Default with
+        {
+            ProjectFillOpacity = opacity, ProjectUnselectedOpacity = opacity, FamilyBarOpacity = opacity,
+        }).Validate());
 
     [Fact]
     public void Validate_ListsEveryProblem_InFieldOrder()
@@ -246,6 +254,7 @@ public sealed class SettingsStoreTests : IDisposable
             ProjectColors = Colors(13),
             FamilyColors = [],
             ProjectFillOpacity = 5,
+            ProjectUnselectedOpacity = 0,
             FamilyBarWidth = 9,
             FamilyBarOpacity = 101,
         };
@@ -254,6 +263,7 @@ public sealed class SettingsStoreTests : IDisposable
             "Project colors must have from 1 to 12 colors; there are 13.",
             "Family colors must have from 1 to 12 colors; there are 0.",
             "Project fill opacity must be from 10 to 100; it is 5.",
+            "Unselected tab opacity must be from 10 to 100; it is 0.",
             "Family bar width must be from 1 to 6; it is 9.",
             "Family bar opacity must be from 10 to 100; it is 101.",
         ], bad.Validate());
@@ -283,6 +293,10 @@ public sealed class SettingsStoreTests : IDisposable
     [InlineData("projectFillOpacity", "150", 100)]
     [InlineData("projectFillOpacity", "55.4", 55)]
     [InlineData("projectFillOpacity", "1e9", 100)]
+    [InlineData("projectUnselectedOpacity", "9", 10)]
+    [InlineData("projectUnselectedOpacity", "0", 10)]
+    [InlineData("projectUnselectedOpacity", "250", 100)]
+    [InlineData("projectUnselectedOpacity", "49.6", 50)]
     [InlineData("familyBarOpacity", "9", 10)]
     [InlineData("familyBarOpacity", "101", 100)]
     [InlineData("familyBarWidth", "0", 1)]
@@ -297,12 +311,56 @@ public sealed class SettingsStoreTests : IDisposable
         var actual = key switch
         {
             "projectFillOpacity" => read.ProjectFillOpacity,
+            "projectUnselectedOpacity" => read.ProjectUnselectedOpacity,
             "familyBarOpacity" => read.FamilyBarOpacity,
             _ => read.FamilyBarWidth,
         };
         Assert.Equal(expected, actual);
         Assert.Empty(read.Validate());
         Assert.Contains(_log, l => l.Contains(key));
+    }
+
+    [Fact]
+    public void Read_FileWithoutUnselectedOpacity_Reads50_AndKeepsEverythingElse()
+    {
+        // A settings file written before decision #23 (same schema 1) has no projectUnselectedOpacity.
+        var read = SplashItSettings.FromJson("""
+            {
+              "schemaVersion": 1,
+              "enabled": false,
+              "projectColors": ["#112233"],
+              "familyColors": ["#00FF00"],
+              "projectFillOpacity": 40,
+              "familyBarWidth": 6,
+              "familyBarOpacity": 10
+            }
+            """, _log.Add);
+
+        Assert.Equal(50, read.ProjectUnselectedOpacity);
+        Assert.Equal(SplashItDefaults.ProjectUnselectedOpacity, read.ProjectUnselectedOpacity);
+        Assert.False(read.Enabled);
+        Assert.Equal(40, read.ProjectFillOpacity);
+        Assert.Equal(6, read.FamilyBarWidth);
+        Assert.Empty(read.Validate());
+        Assert.Contains(_log, l => l.Contains("no projectUnselectedOpacity; using 50", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RoundTrip_UnselectedOpacity_ThroughTheFile()
+    {
+        var path = _temp.File("settings.json");
+        foreach (var share in new[] { 10, 50, 73, 100 })
+        {
+            (Custom() with { ProjectUnselectedOpacity = share }).Write(path);
+            Assert.Equal(share, SplashItSettings.Read(path).ProjectUnselectedOpacity);
+        }
+    }
+
+    [Fact]
+    public void Equality_IncludesUnselectedOpacity()
+    {
+        Assert.NotEqual(SplashItSettings.Default, SplashItSettings.Default with { ProjectUnselectedOpacity = 60 });
+        Assert.Equal(SplashItSettings.Default with { ProjectUnselectedOpacity = 60 }, SplashItSettings.Default with { ProjectUnselectedOpacity = 60 });
     }
 
     [Fact]
