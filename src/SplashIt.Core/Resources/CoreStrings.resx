@@ -27,6 +27,9 @@
   <data name="Field_ProjectFillOpacity" xml:space="preserve">
     <value>Project fill opacity</value>
   </data>
+  <data name="Field_ProjectUnselectedOpacity" xml:space="preserve">
+    <value>Unselected tab opacity</value>
+  </data>
   <data name="Field_FamilyBarWidth" xml:space="preserve">
     <value>Family bar width</value>
   </data>
