@@ -10,7 +10,7 @@ namespace SplashIt.Revit.Tabs;
 /// <summary>
 /// Revit's side of the colorizer's events (spec, DocumentTabColorizer): DocumentOpened and
 /// DocumentCreated (→ opened), DocumentClosing then DocumentClosed (→ closed, only when the
-/// close succeeded), DocumentSavedAs, the UI <c>ThemeChanged</c>, and layout passes through a
+/// close succeeded), DocumentSavedAs (and DocumentSaved when it changed the title or kind), the UI <c>ThemeChanged</c>, and layout passes through a
 /// <see cref="LayoutPulse"/>. Linked documents are ignored. Subscriptions exist only between
 /// <see cref="Subscribe"/> and <see cref="Unsubscribe"/>, so turning the colorizer off leaves
 /// none behind. The document handlers run in Revit's API context and keep
@@ -44,6 +44,7 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         app.DocumentClosing += OnClosing;
         app.DocumentClosed += OnClosed;
         app.DocumentSavedAs += OnSavedAs;
+        app.DocumentSaved += OnSaved;
         _application.ThemeChanged += OnThemeChanged;
         _pulse.Start(OnLayoutUpdated);
     }
@@ -59,6 +60,7 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         app.DocumentClosing -= OnClosing;
         app.DocumentClosed -= OnClosed;
         app.DocumentSavedAs -= OnSavedAs;
+        app.DocumentSaved -= OnSaved;
         _application.ThemeChanged -= OnThemeChanged;
     }
 
@@ -130,6 +132,26 @@ public sealed class RevitColorizerEvents : IColorizerEventSource
         catch (Exception ex)
         {
             _log.Error("events: handling a document saved as failed (" + ex.GetType().Name + ").");
+        }
+    }
+
+    /// <summary>
+    /// A plain Save: when it changed the title or the kind (a first Save of a new document can
+    /// arrive here rather than as SavedAs), it is handled like a Save As (review m4).
+    /// </summary>
+    private void OnSaved(object? sender, DocumentSavedEventArgs e)
+    {
+        try
+        {
+            if (e.Status != RevitAPIEventStatus.Succeeded || e.Document is not { IsLinked: false } document || _sink is not { } sink) return;
+            var key = _documents.Update(document, out var changed);
+            if (!changed) return;
+            _log.Info($"events: document saved with a new title or kind ({key}, now {_documents.Classify(key)}).");
+            sink.OnDocumentSavedAs(key);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("events: handling a document saved failed (" + ex.GetType().Name + ").");
         }
     }
 

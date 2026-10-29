@@ -40,6 +40,7 @@ public sealed class RevitDocuments : IDocumentInfo
     private readonly ILog _log;
     private readonly List<Entry> _entries = new();
     private readonly Dictionary<int, RevitDocumentKey> _closing = new();
+    private readonly List<IReadOnlyList<string>> _titles = new();
     private int _serial;
 
     public RevitDocuments(Func<RevitApplication?> application, ILog? log = null)
@@ -65,11 +66,21 @@ public sealed class RevitDocuments : IDocumentInfo
         return entry.Key;
     }
 
-    /// <summary>API context. Reads the title and kind again (after a Save As).</summary>
-    public RevitDocumentKey Update(Document document)
+    /// <summary>API context. Reads the title and kind again (after a Save As or a Save).</summary>
+    public RevitDocumentKey Update(Document document) => Update(document, out _);
+
+    /// <summary>
+    /// API context. Reads the title and kind again; <paramref name="changed"/> tells whether
+    /// either changed (a first Save of a new document may raise DocumentSaved, not SavedAs).
+    /// </summary>
+    public RevitDocumentKey Update(Document document, out bool changed)
     {
-        if (Find(document) is not { } entry) return Register(document);
-        entry.Read();
+        if (Find(document) is not { } entry)
+        {
+            changed = true;
+            return Register(document);
+        }
+        changed = entry.Read();
         return entry.Key;
     }
 
@@ -130,32 +141,20 @@ public sealed class RevitDocuments : IDocumentInfo
     public RevitDocumentKey? KeyOf(Document document) => Find(document)?.Key;
 
     /// <summary>
-    /// The title-prefix fallback (spec, RevitTabSurface): the document whose cached title,
-    /// followed by <c>" - "</c>, begins <paramref name="tabTitle"/>, or that equals it. The
-    /// longest title wins, so "A - B" beats "A" for a tab titled "A - B - Level 1". Null
-    /// when none matches. No Revit call.
+    /// The document a tab belongs to, by title (<see cref="TabTitleMatcher.Find"/>: equal, or
+    /// the document title followed by <c>" - "</c>; ordinal; the longest wins; a tie between
+    /// two documents leaves the tab unresolved). Null when none matches; <paramref name="tied"/>
+    /// is true for a tie. Only cached titles are read: no Revit call.
     /// </summary>
-    public RevitDocumentKey? FindByTitle(string tabTitle)
+    public RevitDocumentKey? FindByTitle(string tabTitle, out bool tied)
     {
-        Entry? best = null;
-        var bestLength = 0;
-        foreach (var entry in _entries)
-        {
-            foreach (var title in entry.Titles)
-            {
-                if (title.Length <= bestLength || !TitleMatches(tabTitle, title)) continue;
-                best = entry;
-                bestLength = title.Length;
-            }
-        }
-        return best?.Key;
+        _titles.Clear();
+        foreach (var entry in _entries) _titles.Add(entry.Titles);
+        var match = TabTitleMatcher.Find(tabTitle, _titles);
+        _titles.Clear();
+        tied = match.Tied;
+        return match.IsMatch ? _entries[match.Index].Key : null;
     }
-
-    private static bool TitleMatches(string tabTitle, string title) =>
-        string.Equals(tabTitle, title, StringComparison.Ordinal)
-        || (tabTitle.Length > title.Length + 3
-            && tabTitle.StartsWith(title, StringComparison.Ordinal)
-            && string.CompareOrdinal(tabTitle, title.Length, " - ", 0, 3) == 0);
 
 #if DEBUG
     /// <summary>Debug diagnostics only: the cached titles.</summary>
@@ -186,24 +185,34 @@ public sealed class RevitDocuments : IDocumentInfo
 
         public RevitDocumentKey Key { get; } = key;
 
+        /// <summary>The most titles kept per document (the current forms plus earlier ones).</summary>
+        private const int MaxTitles = 6;
+
         /// <summary>
-        /// The title, and the title without its Revit extension when it has one (Revit's
-        /// <c>Document.Title</c> carries the extension when Windows shows file extensions;
-        /// AC11 confirms which form the tabs show).
+        /// The title, and the title without its Revit extension when it has one
+        /// (<see cref="TabTitleMatcher.TitleForms"/>), followed by the titles it had before a
+        /// Save As (review m4): Revit may refresh a tab's tool tip after its event, so a tab
+        /// still showing the old title keeps its color.
         /// </summary>
-        public string[] Titles { get; private set; } = [];
+        public IReadOnlyList<string> Titles { get; private set; } = [];
 
         public FileKind Kind { get; private set; } = FileKind.Other;
 
-        /// <summary>API context: caches the title and classifies the document (spec, Behavior: file kinds).</summary>
-        public void Read()
+        /// <summary>
+        /// API context: caches the title and classifies the document (spec, Behavior: file
+        /// kinds). True when the title or the kind changed.
+        /// </summary>
+        public bool Read()
         {
-            var title = Document.Title ?? "";
-            var extension = System.IO.Path.GetExtension(title).ToLowerInvariant();
-            Titles = extension is ".rvt" or ".rfa" or ".rte" or ".rft"
-                ? [title, title[..^extension.Length]]
-                : [title];
-            Kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud);
+            var current = TabTitleMatcher.TitleForms(Document.Title ?? "", Document.PathName);
+            var kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud);
+            var changed = kind != Kind || Titles.Count == 0 || !string.Equals(Titles[0], current.Count > 0 ? current[0] : "", StringComparison.Ordinal);
+            var titles = new List<string>(current);
+            foreach (var old in Titles)
+                if (titles.Count < MaxTitles && !titles.Contains(old, StringComparer.Ordinal)) titles.Add(old);
+            Titles = titles;
+            Kind = kind;
+            return changed;
         }
     }
 }
