@@ -24,33 +24,8 @@
     <value>Color each open file's tabs, and change the colors.</value>
   </data>
 
-  <data name="Status_Title" xml:space="preserve">
-    <value>Splash-It</value>
-  </data>
-  <data name="Status_Heading" xml:space="preserve">
-    <value>Tab coloring: {0}</value>
-    <comment>{0} one of the Status_* texts.</comment>
-  </data>
-  <data name="Status_Active" xml:space="preserve">
-    <value>Active</value>
-  </data>
-  <data name="Status_Off" xml:space="preserve">
-    <value>Off</value>
-  </data>
-  <data name="Status_Unavailable" xml:space="preserve">
-    <value>Unavailable on this Revit build</value>
-  </data>
-  <data name="Status_BlockedByPyRevit" xml:space="preserve">
-    <value>Blocked by pyRevit</value>
-  </data>
-  <data name="Status_Faulted" xml:space="preserve">
-    <value>Stopped after error</value>
-  </data>
-  <data name="Status_NotStarted" xml:space="preserve">
-    <value>Not started yet</value>
-  </data>
-  <data name="Status_Details" xml:space="preserve">
-    <value>{0} tabs colored. The settings window arrives in a later build.</value>
-    <comment>{0} the number of tabs carrying a Splash-It style.</comment>
+  <data name="Command_CouldNotOpen" xml:space="preserve">
+    <value>The Splash-It settings window could not open ({0}). The log in %LocalAppData%\SplashIt\logs has the details.</value>
+    <comment>{0} the error's type name.</comment>
   </data>
 </root>

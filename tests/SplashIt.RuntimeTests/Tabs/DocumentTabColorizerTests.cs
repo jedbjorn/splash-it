@@ -6,6 +6,7 @@ using SplashIt.Core.Files;
 using SplashIt.Core.Settings;
 using SplashIt.RuntimeTests.Support;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.RuntimeTests.Tabs;
 
@@ -20,7 +21,7 @@ public class DocumentTabColorizerTests
     private sealed class Rig
     {
         public readonly object P1 = new DocKey("P1"), P2 = new DocKey("P2"), F1 = new DocKey("F1"), T1 = new DocKey("T1");
-        public readonly Style Original = HostTabs.RevitLikeStyle(ThemeKind.Light);
+        public readonly Style Original = HostTabs.RevitLikeStyle(UiTheme.Light);
         public readonly TabControl Strip;
         public readonly FakeSurface Surface;
         public readonly FakeDocuments Documents = new();
@@ -32,7 +33,7 @@ public class DocumentTabColorizerTests
 
         public Rig(bool openAll = true)
         {
-            Strip = HostTabs.Strip(Original, ThemeKind.Light,
+            Strip = HostTabs.Strip(Original, UiTheme.Light,
                 "P1 - L1", "P1 - L2", "P2 - L1", "F1 - Ref. Level", "T1 - L1", "Unresolved - L1");
             Surface = new FakeSurface(Strip);
             Surface.Bind(Tab(0), P1);
@@ -449,13 +450,13 @@ public class DocumentTabColorizerTests
             Assert.Equal(Colors.Black, ((SolidColorBrush)rig.Tab(0).Foreground).Color);
 
             // The host restyles its tabs for dark (a new original style), then raises the event.
-            var darkOriginal = HostTabs.RevitLikeStyle(ThemeKind.Dark);
+            var darkOriginal = HostTabs.RevitLikeStyle(UiTheme.Dark);
             foreach (var tab in rig.Tabs)
                 if (!TabStyleFactory.IsDerived(tab.Style)) tab.Style = darkOriginal;
-            rig.Events.CurrentTheme = ThemeKind.Dark;
-            rig.Events.Sink!.OnThemeChanged(ThemeKind.Dark);
+            rig.Events.CurrentTheme = UiTheme.Dark;
+            rig.Events.Sink!.OnThemeChanged(UiTheme.Dark);
 
-            Assert.Equal(ThemeKind.Dark, rig.Colorizer.Theme);
+            Assert.Equal(UiTheme.Dark, rig.Colorizer.Theme);
             Assert.Equal(Colors.White, ((SolidColorBrush)rig.Tab(0).Foreground).Color);
             // Tabs the colorizer styled were restored, then restyled on what they carry now.
             Assert.True(TabStyleFactory.IsDerived(rig.Tab(0).Style));
@@ -471,7 +472,7 @@ public class DocumentTabColorizerTests
             var rig = new Rig();
             rig.Colorizer.Start();
 
-            var recycled = HostTabs.RevitLikeStyle(ThemeKind.Light);
+            var recycled = HostTabs.RevitLikeStyle(UiTheme.Light);
             rig.Tab(0).Style = recycled; // the host re-applied its container style
             rig.Events.Layout();
 
@@ -515,7 +516,7 @@ public class DocumentTabColorizerTests
             Style? foreign = null;
             for (var i = 0; i < DocumentTabColorizer.MaxRecaptures + 5; i++)
             {
-                foreign = HostTabs.RevitLikeStyle(ThemeKind.Light); // another colorizer, every pass
+                foreign = HostTabs.RevitLikeStyle(UiTheme.Light); // another colorizer, every pass
                 rig.Tab(0).Style = foreign;
                 rig.Events.Layout();
             }

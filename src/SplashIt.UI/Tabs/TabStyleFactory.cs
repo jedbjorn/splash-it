@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using SplashIt.Core.Colors;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.UI.Tabs;
 
@@ -24,7 +25,7 @@ public interface ITabStyleFactory
     /// <paramref name="basedOn"/> targets a type a <see cref="TabItem"/> style cannot derive
     /// from (see <see cref="TabStyleFactory.CanDerive"/>).
     /// </exception>
-    Style Create(Style? basedOn, TabTreatment treatment, Brush? originalBackground, ThemeKind theme);
+    Style Create(Style? basedOn, TabTreatment treatment, Brush? originalBackground, UiTheme theme);
 
     /// <summary>Drops every cached style (on a settings change or a theme change).</summary>
     void ClearCache();
@@ -127,7 +128,7 @@ public sealed class TabStyleFactory : ITabStyleFactory
     /// composited over <paramref name="theme"/>'s surface when it is a solid brush (its alpha
     /// and opacity count), else the surface itself.
     /// </summary>
-    public static Rgb BackdropFor(Brush? originalBackground, ThemeKind theme)
+    public static Rgb BackdropFor(Brush? originalBackground, UiTheme theme)
     {
         var surface = theme.Surface();
         if (originalBackground is not SolidColorBrush solid) return surface;
@@ -159,7 +160,7 @@ public sealed class TabStyleFactory : ITabStyleFactory
             Accent: ColorMath.Darken(color, AccentDarken));
     }
 
-    public Style Create(Style? basedOn, TabTreatment treatment, Brush? originalBackground, ThemeKind theme)
+    public Style Create(Style? basedOn, TabTreatment treatment, Brush? originalBackground, UiTheme theme)
     {
         var target = TargetTypeFor(basedOn)
             ?? throw new ArgumentException(

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using SplashIt.Core.Files;
 using SplashIt.Core.Logging;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.RuntimeTests.Support;
 
@@ -78,7 +79,7 @@ public sealed class FakeDocuments : IDocumentInfo
 /// <summary>A fake event source: counts subscriptions and lets tests raise events.</summary>
 public sealed class FakeEvents : IColorizerEventSource
 {
-    public ThemeKind CurrentTheme { get; set; } = ThemeKind.Light;
+    public UiTheme CurrentTheme { get; set; } = UiTheme.Light;
 
     public IColorizerEventSink? Sink { get; private set; }
 

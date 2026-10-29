@@ -5,6 +5,7 @@ using SplashIt.Core.Colors;
 using SplashIt.Core.Settings;
 using SplashIt.RuntimeTests.Support;
 using SplashIt.UI.Tabs;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.RuntimeTests.Tabs;
 
@@ -40,7 +41,7 @@ public class TabStyleFactoryTests
         Screenshots.RunSta(() =>
         {
             var original = Base();
-            var style = new TabStyleFactory().Create(original, TabTreatment.ProjectFill(Blue, 100), null, ThemeKind.Light);
+            var style = new TabStyleFactory().Create(original, TabTreatment.ProjectFill(Blue, 100), null, UiTheme.Light);
 
             Assert.Same(original, style.BasedOn);
             Assert.True(style.IsSealed);
@@ -65,7 +66,7 @@ public class TabStyleFactoryTests
         Screenshots.RunSta(() =>
         {
             var treatment = TabTreatment.ProjectFill(Blue, opacity, share);
-            var style = new TabStyleFactory().Create(Base(), treatment, null, ThemeKind.Light);
+            var style = new TabStyleFactory().Create(Base(), treatment, null, UiTheme.Light);
 
             var unselected = Argb(Blue, opacity / 100.0 * share / 100.0);
             Assert.Equal(unselected, Solid(SetterValue<Brush>(style.Setters, Control.BackgroundProperty)));
@@ -91,22 +92,22 @@ public class TabStyleFactoryTests
             var factory = new TabStyleFactory();
             var a = Base();
             Assert.NotSame(
-                factory.Create(a, TabTreatment.ProjectFill(Blue, 100, 50), null, ThemeKind.Light),
-                factory.Create(a, TabTreatment.ProjectFill(Blue, 100, 20), null, ThemeKind.Light));
+                factory.Create(a, TabTreatment.ProjectFill(Blue, 100, 50), null, UiTheme.Light),
+                factory.Create(a, TabTreatment.ProjectFill(Blue, 100, 20), null, UiTheme.Light));
         });
     }
 
     /// <summary>The text is the higher-contrast of black and white against the fill as shown.</summary>
     [Theory]
     // fill, opacity, theme (surface), expected text over the fill as shown
-    [InlineData("#4F8EF7", 100, ThemeKind.Light, "#000000")] // mid blue: black 6.4:1 beats white 3.3:1
-    [InlineData("#4F8EF7", 100, ThemeKind.Dark, "#000000")]  // opaque: the backdrop does not matter
-    [InlineData("#1A3D7C", 100, ThemeKind.Light, "#FFFFFF")] // dark navy: white
-    [InlineData("#1A3D7C", 30, ThemeKind.Light, "#000000")]  // 30 % navy over white reads light: black
-    [InlineData("#1A3D7C", 30, ThemeKind.Dark, "#FFFFFF")]   // 30 % navy over #2A2F37 reads dark: white
-    [InlineData("#EDC948", 30, ThemeKind.Dark, "#FFFFFF")]   // 30 % yellow over the dark surface: white
-    [InlineData("#EDC948", 100, ThemeKind.Dark, "#000000")]  // full yellow: black
-    public void ProjectFill_Text_IsTheHigherContrastChoice_OverLightAndDark(string fill, int opacity, ThemeKind theme, string expected)
+    [InlineData("#4F8EF7", 100, UiTheme.Light, "#000000")] // mid blue: black 6.4:1 beats white 3.3:1
+    [InlineData("#4F8EF7", 100, UiTheme.Dark, "#000000")]  // opaque: the backdrop does not matter
+    [InlineData("#1A3D7C", 100, UiTheme.Light, "#FFFFFF")] // dark navy: white
+    [InlineData("#1A3D7C", 30, UiTheme.Light, "#000000")]  // 30 % navy over white reads light: black
+    [InlineData("#1A3D7C", 30, UiTheme.Dark, "#FFFFFF")]   // 30 % navy over #2A2F37 reads dark: white
+    [InlineData("#EDC948", 30, UiTheme.Dark, "#FFFFFF")]   // 30 % yellow over the dark surface: white
+    [InlineData("#EDC948", 100, UiTheme.Dark, "#000000")]  // full yellow: black
+    public void ProjectFill_Text_IsTheHigherContrastChoice_OverLightAndDark(string fill, int opacity, UiTheme theme, string expected)
     {
         Screenshots.RunSta(() =>
         {
@@ -139,19 +140,19 @@ public class TabStyleFactoryTests
         {
             var factory = new TabStyleFactory();
             var navy = TabTreatment.ProjectFill(Rgb.Parse("#1A3D7C"), 30);
-            Brush Text(Brush? original, ThemeKind theme) =>
+            Brush Text(Brush? original, UiTheme theme) =>
                 SetterValue<Brush>(factory.Create(Base(), navy, original, theme).Setters, Control.ForegroundProperty);
 
             // A solid dark tab background on the light theme wins over the light surface.
-            Assert.Equal(Colors.White, Solid(Text(HostTabs.Brush(Rgb.Parse("#20242B")), ThemeKind.Light)));
+            Assert.Equal(Colors.White, Solid(Text(HostTabs.Brush(Rgb.Parse("#20242B")), UiTheme.Light)));
             // A solid light tab background on the dark theme wins over the dark surface.
-            Assert.Equal(Colors.Black, Solid(Text(HostTabs.Brush(Rgb.Parse("#FFFFFF")), ThemeKind.Dark)));
+            Assert.Equal(Colors.Black, Solid(Text(HostTabs.Brush(Rgb.Parse("#FFFFFF")), UiTheme.Dark)));
             // A transparent solid background (Revit's dark unselected tab) falls through to the surface.
-            Assert.Equal(Colors.White, Solid(Text(new SolidColorBrush(Color.FromArgb(0, 255, 255, 255)), ThemeKind.Dark)));
+            Assert.Equal(Colors.White, Solid(Text(new SolidColorBrush(Color.FromArgb(0, 255, 255, 255)), UiTheme.Dark)));
             // A gradient is not a solid brush: the theme surface is the backdrop.
             var gradient = new LinearGradientBrush(Colors.Black, Colors.Black, 0);
-            Assert.Equal(Colors.Black, Solid(Text(gradient, ThemeKind.Light)));
-            Assert.Equal(Colors.White, Solid(Text(gradient, ThemeKind.Dark)));
+            Assert.Equal(Colors.Black, Solid(Text(gradient, UiTheme.Light)));
+            Assert.Equal(Colors.White, Solid(Text(gradient, UiTheme.Dark)));
         });
     }
 
@@ -161,12 +162,12 @@ public class TabStyleFactoryTests
     {
         Screenshots.RunSta(() =>
         {
-            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Rgb.Parse("#F28E2B"), 100), null, ThemeKind.Light);
+            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Rgb.Parse("#F28E2B"), 100), null, UiTheme.Light);
             foreach (var setters in new[] { style.Setters, NormalTrigger(style).Setters, style.Triggers.OfType<MultiTrigger>().Single().Setters, SelectedTrigger(style).Setters })
                 Assert.Same(SetterValue<Brush>(setters, Control.ForegroundProperty), SetterValue<Brush>(setters, TabCloseGlyph.ForegroundProperty));
             Assert.Equal(Colors.Black, Solid(SetterValue<Brush>(SelectedTrigger(style).Setters, TabCloseGlyph.ForegroundProperty)));
 
-            var bar = new TabStyleFactory().Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 100), null, ThemeKind.Light);
+            var bar = new TabStyleFactory().Create(Base(), TabTreatment.FamilyBar(Magenta, 3, 100), null, UiTheme.Light);
             Assert.DoesNotContain(bar.Setters.OfType<Setter>(), s => s.Property == TabCloseGlyph.ForegroundProperty); // families stay native
         });
     }
@@ -176,7 +177,7 @@ public class TabStyleFactoryTests
     {
         Screenshots.RunSta(() =>
         {
-            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Blue, 60), null, ThemeKind.Light);
+            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Blue, 60), null, UiTheme.Light);
 
             var hover = style.Triggers.OfType<MultiTrigger>().Single();
             Assert.Contains(hover.Conditions, c => c.Property == UIElement.IsMouseOverProperty && Equals(c.Value, true));
@@ -195,7 +196,7 @@ public class TabStyleFactoryTests
     {
         Screenshots.RunSta(() =>
         {
-            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Yellow, 30), null, ThemeKind.Dark);
+            var style = new TabStyleFactory().Create(Base(), TabTreatment.ProjectFill(Yellow, 30), null, UiTheme.Dark);
 
             var selected = SelectedTrigger(style);
             Assert.Equal(TabItem.IsSelectedProperty, selected.Property);
@@ -222,7 +223,7 @@ public class TabStyleFactoryTests
         Screenshots.RunSta(() =>
         {
             var original = Base();
-            var style = new TabStyleFactory().Create(original, TabTreatment.FamilyBar(Magenta, width, opacity), null, ThemeKind.Light);
+            var style = new TabStyleFactory().Create(original, TabTreatment.FamilyBar(Magenta, width, opacity), null, UiTheme.Light);
 
             Assert.Same(original, style.BasedOn);
             Assert.Empty(style.Triggers); // selection and hover stay native
@@ -245,20 +246,20 @@ public class TabStyleFactoryTests
             var b = Base();
             var fill = TabTreatment.ProjectFill(Blue, 100);
 
-            var first = factory.Create(a, fill, null, ThemeKind.Light);
-            Assert.Same(first, factory.Create(a, fill, null, ThemeKind.Light));
-            Assert.NotSame(first, factory.Create(b, fill, null, ThemeKind.Light));                  // another original
-            Assert.NotSame(first, factory.Create(a, TabTreatment.ProjectFill(Blue, 50), null, ThemeKind.Light));
-            Assert.NotSame(first, factory.Create(a, TabTreatment.ProjectFill(Yellow, 100), null, ThemeKind.Light));
-            Assert.NotSame(first, factory.Create(a, fill, null, ThemeKind.Dark));                   // another backdrop
+            var first = factory.Create(a, fill, null, UiTheme.Light);
+            Assert.Same(first, factory.Create(a, fill, null, UiTheme.Light));
+            Assert.NotSame(first, factory.Create(b, fill, null, UiTheme.Light));                  // another original
+            Assert.NotSame(first, factory.Create(a, TabTreatment.ProjectFill(Blue, 50), null, UiTheme.Light));
+            Assert.NotSame(first, factory.Create(a, TabTreatment.ProjectFill(Yellow, 100), null, UiTheme.Light));
+            Assert.NotSame(first, factory.Create(a, fill, null, UiTheme.Dark));                   // another backdrop
 
             // A bar has no text, so the backdrop does not split its cache entry.
             var bar = TabTreatment.FamilyBar(Magenta, 3, 100);
-            Assert.Same(factory.Create(a, bar, null, ThemeKind.Light), factory.Create(a, bar, null, ThemeKind.Dark));
+            Assert.Same(factory.Create(a, bar, null, UiTheme.Light), factory.Create(a, bar, null, UiTheme.Dark));
 
             factory.ClearCache();
             Assert.Equal(0, factory.CachedCount);
-            Assert.NotSame(first, factory.Create(a, fill, null, ThemeKind.Light));
+            Assert.NotSame(first, factory.Create(a, fill, null, UiTheme.Light));
         });
     }
 
@@ -272,9 +273,9 @@ public class TabStyleFactoryTests
             Assert.True(TabStyleFactory.CanDerive(new Style(typeof(Control))));
             Assert.False(TabStyleFactory.CanDerive(new Style(typeof(Button))));
             Assert.Throws<ArgumentException>(() =>
-                factory.Create(new Style(typeof(Button)), TabTreatment.ProjectFill(Blue, 100), null, ThemeKind.Light));
+                factory.Create(new Style(typeof(Button)), TabTreatment.ProjectFill(Blue, 100), null, UiTheme.Light));
 
-            var fromControl = factory.Create(new Style(typeof(Control)), TabTreatment.ProjectFill(Blue, 100), null, ThemeKind.Light);
+            var fromControl = factory.Create(new Style(typeof(Control)), TabTreatment.ProjectFill(Blue, 100), null, UiTheme.Light);
             Assert.Equal(typeof(TabItem), fromControl.TargetType);
         });
     }
@@ -299,8 +300,8 @@ public class TabStyleFactoryTests
     {
         Screenshots.RunSta(() =>
         {
-            var original = HostTabs.RevitLikeStyle(ThemeKind.Light);
-            var strip = HostTabs.Strip(original, ThemeKind.Light, "Project1 - L1", "Project1 - L2", "Family1 - Ref. Level");
+            var original = HostTabs.RevitLikeStyle(UiTheme.Light);
+            var strip = HostTabs.Strip(original, UiTheme.Light, "Project1 - L1", "Project1 - L2", "Family1 - Ref. Level");
             var root = HostTabs.Host(strip, SplashItDefaults.LightSurface);
             var project = HostTabs.Tab(strip, 0);
             var selectedProject = HostTabs.Tab(strip, 1);
@@ -310,10 +311,10 @@ public class TabStyleFactoryTests
             Assert.Equal(Colors.White, Solid(selectedProject.Background)); // the original's own selected trigger
 
             var factory = new TabStyleFactory();
-            var fill = factory.Create(original, TabTreatment.ProjectFill(Blue, 40), project.Background, ThemeKind.Light);
+            var fill = factory.Create(original, TabTreatment.ProjectFill(Blue, 40), project.Background, UiTheme.Light);
             project.Style = fill;
             selectedProject.Style = fill;
-            family.Style = factory.Create(original, TabTreatment.FamilyBar(Magenta, 3, 100), family.Background, ThemeKind.Light);
+            family.Style = factory.Create(original, TabTreatment.FamilyBar(Magenta, 3, 100), family.Background, UiTheme.Light);
             HostTabs.Layout(root);
 
             Assert.Equal(Argb(Blue, 20), Solid(project.Background));          // unselected: 50 % of the 40 % fill

@@ -9,6 +9,7 @@ using SplashIt.Core.Colors;
 using SplashIt.Core.Files;
 using SplashIt.Core.Logging;
 using SplashIt.Core.Settings;
+using SplashIt.Core.Theming;
 
 namespace SplashIt.UI.Tabs;
 
@@ -113,7 +114,7 @@ public sealed class DocumentTabColorizer
     public SplashItSettings Settings { get; private set; } = SplashItSettings.Default;
 
     /// <summary>The theme the current styles were built for.</summary>
-    public ThemeKind Theme { get; private set; } = ThemeKind.Light;
+    public UiTheme Theme { get; private set; } = UiTheme.Light;
 
     /// <summary>Whether the colorizer is subscribed and coloring (Active or Unavailable).</summary>
     public bool IsRunning => _running;
@@ -421,7 +422,7 @@ public sealed class DocumentTabColorizer
         }
     }
 
-    private void OnThemeChanged(ThemeKind theme)
+    private void OnThemeChanged(UiTheme theme)
     {
         if (!_running) return;
         try
@@ -796,6 +797,6 @@ public sealed class DocumentTabColorizer
 
         public void OnLayoutUpdated() => owner.OnLayoutUpdated();
 
-        public void OnThemeChanged(ThemeKind theme) => owner.OnThemeChanged(theme);
+        public void OnThemeChanged(UiTheme theme) => owner.OnThemeChanged(theme);
     }
 }

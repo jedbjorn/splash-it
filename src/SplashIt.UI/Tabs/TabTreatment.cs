@@ -21,11 +21,8 @@ public enum TabTreatmentKind
 /// </summary>
 public readonly record struct TabTreatment
 {
-    /// <summary>
-    /// The default Unselected tab opacity (#23), percent of the fill opacity. Until the setting
-    /// lands in <see cref="SplashItSettings"/> (Lane C), the treatment built from settings uses it.
-    /// </summary>
-    public const int DefaultUnselectedPercent = 50;
+    /// <summary>The default Unselected tab opacity (#23), percent of the fill opacity: <see cref="SplashItDefaults.ProjectUnselectedOpacity"/>.</summary>
+    public const int DefaultUnselectedPercent = SplashItDefaults.ProjectUnselectedOpacity;
 
     private TabTreatment(TabTreatmentKind kind, Rgb color, int opacityPercent, int barWidth, int unselectedPercent)
     {
@@ -75,7 +72,7 @@ public readonly record struct TabTreatment
 
     /// <summary>The treatment <paramref name="settings"/> give a project in <paramref name="color"/>.</summary>
     public static TabTreatment ProjectFill(Rgb color, SplashItSettings settings) =>
-        ProjectFill(color, settings.ProjectFillOpacity, DefaultUnselectedPercent);
+        ProjectFill(color, settings.ProjectFillOpacity, settings.ProjectUnselectedOpacity);
 
     /// <summary>The treatment <paramref name="settings"/> give a family in <paramref name="color"/>.</summary>
     public static TabTreatment FamilyBar(Rgb color, SplashItSettings settings) =>
