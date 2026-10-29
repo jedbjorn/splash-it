@@ -62,14 +62,15 @@ public partial class PreviewStrip : UserControl
 
         // The window may hold out-of-range values until Save rejects them; draw the nearest valid ones.
         var fill = Math.Clamp(s.ProjectFillOpacity, SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity);
+        var share = Math.Clamp(s.ProjectUnselectedOpacity, SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity);
         var width = Math.Clamp(s.FamilyBarWidth, SplashItDefaults.MinBarWidth, SplashItDefaults.MaxBarWidth);
         var bar = Math.Clamp(s.FamilyBarOpacity, SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity);
 
-        var tower = Styler.ProjectStyle(baseStyle, ColorAt(s.ProjectColors, 0), fill, backdrop);
+        var tower = Styler.ProjectStyle(baseStyle, ColorAt(s.ProjectColors, 0), fill, share, backdrop);
         Tower1Tab.Style = tower;
         Tower2Tab.Style = tower;
         // The second project takes color 2; with a one-color list, colors repeat (spec, Allocation).
-        AnnexTab.Style = Styler.ProjectStyle(baseStyle, ColorAt(s.ProjectColors, 1), fill, backdrop);
+        AnnexTab.Style = Styler.ProjectStyle(baseStyle, ColorAt(s.ProjectColors, 1), fill, share, backdrop);
         FamilyTab.Style = Styler.FamilyStyle(baseStyle, ColorAt(s.FamilyColors, 0), width, bar);
         TemplateTab.Style = baseStyle;
     }

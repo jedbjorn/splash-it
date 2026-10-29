@@ -15,11 +15,13 @@ namespace SplashIt.UI.Settings.Preview;
 internal interface IPreviewTabStyler
 {
     /// <summary>
-    /// A project tab: <paramref name="color"/> at <paramref name="fillOpacity"/> percent over
-    /// <paramref name="backdrop"/>, with black or white text; the selected tab at full opacity
-    /// with a darker top accent. <see cref="Style.BasedOn"/> is <paramref name="baseStyle"/>.
+    /// A project tab (spec, Shapes and settings; decision #23): the selected tab shows
+    /// <paramref name="color"/> at <paramref name="fillOpacity"/> percent over <paramref name="backdrop"/>
+    /// with a 3 px darker line along its top; the project's other tabs show it at fill ×
+    /// <paramref name="unselectedShare"/> percent. Text and the close glyph are black or white,
+    /// whichever reads better on the color as shown. <see cref="Style.BasedOn"/> is <paramref name="baseStyle"/>.
     /// </summary>
-    Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, Rgb backdrop);
+    Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, int unselectedShare, Rgb backdrop);
 
     /// <summary>
     /// A family tab: a <paramref name="barWidth"/> px bar of <paramref name="color"/> at
@@ -40,9 +42,10 @@ internal sealed class PlaceholderTabStyler : IPreviewTabStyler
     /// <summary>How much the selected tab's top accent darkens the color.</summary>
     private const double AccentDarken = 0.3;
 
-    public Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, Rgb backdrop)
+    public Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, int unselectedShare, Rgb backdrop)
     {
-        var shown = ColorMath.Blend(color, fillOpacity / 100.0, backdrop);
+        var selectedFill = ColorMath.Blend(color, fillOpacity / 100.0, backdrop);
+        var shown = ColorMath.Blend(color, fillOpacity / 100.0 * (unselectedShare / 100.0), backdrop);
         var hover = ColorMath.Lighten(shown, HoverLighten);
 
         var style = new Style(typeof(TabItem), baseStyle);
@@ -54,10 +57,10 @@ internal sealed class PlaceholderTabStyler : IPreviewTabStyler
         hovered.Setters.Add(new Setter(Control.ForegroundProperty, Brush(ColorMath.TextColorFor(hover))));
         style.Triggers.Add(hovered);
 
-        // Last, so it wins over hover: full opacity and a 2 px darker accent along the top.
+        // Last, so it wins over hover: the full fill opacity and a 3 px darker line along the top.
         var selected = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
-        selected.Setters.Add(new Setter(Control.BackgroundProperty, Brush(color)));
-        selected.Setters.Add(new Setter(Control.ForegroundProperty, Brush(ColorMath.TextColorFor(color))));
+        selected.Setters.Add(new Setter(Control.BackgroundProperty, Brush(selectedFill)));
+        selected.Setters.Add(new Setter(Control.ForegroundProperty, Brush(ColorMath.TextColorFor(selectedFill))));
         selected.Setters.Add(new Setter(PreviewTab.AccentBrushProperty, Brush(ColorMath.Darken(color, AccentDarken))));
         style.Triggers.Add(selected);
 

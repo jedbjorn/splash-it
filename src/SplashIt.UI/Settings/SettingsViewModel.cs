@@ -27,6 +27,7 @@ public sealed class SettingsViewModel : ObservableObject
     private SplashItSettings _saved;
     private bool _enabled;
     private int _projectFillOpacity;
+    private int _projectUnselectedOpacity;
     private int _familyBarWidth;
     private int _familyBarOpacity;
     private SettingsStatus _status;
@@ -134,6 +135,21 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Unselected tab opacity (decision #23): percent of the fill opacity for a project's
+    /// unselected tabs. The slider keeps it in 10–100; anything else is rejected at Save.
+    /// </summary>
+    public int ProjectUnselectedOpacity
+    {
+        get => _projectUnselectedOpacity;
+        set
+        {
+            if (!SetField(ref _projectUnselectedOpacity, value)) return;
+            OnPropertyChanged(nameof(ProjectUnselectedOpacityText));
+            OnChanged();
+        }
+    }
+
     /// <summary>Pixels. The slider keeps it in 1–6; anything else is rejected at Save.</summary>
     public int FamilyBarWidth
     {
@@ -160,6 +176,8 @@ public sealed class SettingsViewModel : ObservableObject
 
     public string ProjectFillOpacityText => UiStrings.Settings_Percent(ProjectFillOpacity);
 
+    public string ProjectUnselectedOpacityText => UiStrings.Settings_Percent(ProjectUnselectedOpacity);
+
     public string FamilyBarWidthText => UiStrings.Settings_Pixels(FamilyBarWidth);
 
     public string FamilyBarOpacityText => UiStrings.Settings_Percent(FamilyBarOpacity);
@@ -171,6 +189,7 @@ public sealed class SettingsViewModel : ObservableObject
         ProjectColors = ProjectColors.Colors,
         FamilyColors = FamilyColors.Colors,
         ProjectFillOpacity = ProjectFillOpacity,
+        ProjectUnselectedOpacity = ProjectUnselectedOpacity,
         FamilyBarWidth = FamilyBarWidth,
         FamilyBarOpacity = FamilyBarOpacity,
     };
@@ -287,6 +306,9 @@ public sealed class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             ShowErrors(UiStrings.Settings_ApplyFailed(ex.Message), []);
+            // The file is written but the tabs aren't restyled: keep Save on so the user can retry.
+            _savedHere = false;
+            RaiseCanSave();
         }
         Status = ReadStatus();
         return true;
@@ -381,6 +403,7 @@ public sealed class SettingsViewModel : ObservableObject
             ProjectColors.Load(settings.ProjectColors);
             FamilyColors.Load(settings.FamilyColors);
             ProjectFillOpacity = settings.ProjectFillOpacity;
+            ProjectUnselectedOpacity = settings.ProjectUnselectedOpacity;
             FamilyBarWidth = settings.FamilyBarWidth;
             FamilyBarOpacity = settings.FamilyBarOpacity;
         }
