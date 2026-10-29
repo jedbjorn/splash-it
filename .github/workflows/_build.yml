@@ -1,0 +1,145 @@
+name: _build (reusable)
+
+# Adapted from gantt-it .github/workflows/_build.yml (gantt-it commit 1e27832),
+# with the R25 legs from gantt-it's Revit 2025 work. The MSI job arrives with
+# the installer lane.
+#
+# The one build pipeline, shared by build.yml (every PR and push to main) and,
+# later, release.yml (v* tags), so a release builds exactly what CI builds.
+# Leading underscore = internal, not triggered directly.
+#
+#   • test     — SplashIt.Core.Tests on net8.0 and net10.0 (AC1–AC3).
+#   • build    — SplashIt.sln in all six configurations. Every leg is
+#                required. The Debug legs stage the add-in as an artifact laid
+#                out like %AppData%\Autodesk\Revit\Addins\<year>\
+#                (SplashIt.addin + SplashIt\ folder):
+#                  gh run download <run-id> -n SplashIt-Debug-R26
+#                (SplashIt-Debug-R25 / -R26 / -R27).
+#   • runtime  — Windows runner: SplashIt.RuntimeTests (WPF, no Revit). The
+#                tests render WPF off-screen to PNG under
+#                TestResults/screenshots/, uploaded as SplashIt-screenshots:
+#                  gh run download <run-id> -n SplashIt-screenshots
+#
+# Linux builds the net8.0-windows / net10.0-windows targets thanks to
+# EnableWindowsTargeting and the reference-only Nice3point Revit API packages.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: >-
+          Version to stamp, the release tag without its "v" (1.0.0, 1.0.0-rc.1).
+          Empty for push/PR builds: the dev version from Directory.Build.props
+          applies (0.0.0-dev).
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+
+  test:
+    name: Core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: dotnet test (net8.0 + net10.0)
+        run: >-
+          dotnet test tests/SplashIt.Core.Tests/SplashIt.Core.Tests.csproj
+          -c "Release R26" --nologo
+          --logger "console;verbosity=normal"
+
+  build:
+    name: Build ${{ matrix.configuration }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: Debug R25
+            tfm: net8.0-windows
+            artifact: SplashIt-Debug-R25
+          - configuration: Release R25
+            tfm: net8.0-windows
+          - configuration: Debug R26
+            tfm: net8.0-windows
+            artifact: SplashIt-Debug-R26
+          - configuration: Release R26
+            tfm: net8.0-windows
+          - configuration: Debug R27
+            tfm: net10.0-windows
+            artifact: SplashIt-Debug-R27
+          - configuration: Release R27
+            tfm: net10.0-windows
+    env:
+      SPLASHIT_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: dotnet build
+        run: >-
+          dotnet build SplashIt.sln -c "${{ matrix.configuration }}" --nologo
+          "-p:SplashItVersion=${SPLASHIT_VERSION}"
+
+      - name: Stage add-in
+        if: matrix.artifact
+        env:
+          OUT: src/SplashIt.Revit/bin/${{ matrix.configuration }}/${{ matrix.tfm }}
+        run: |
+          set -euo pipefail
+          mkdir -p stage/SplashIt
+          cp "$OUT/SplashIt.addin" stage/
+          cp -r "$OUT/." stage/SplashIt/
+          rm stage/SplashIt/SplashIt.addin
+          find stage -type f | sort
+
+      - uses: actions/upload-artifact@v6
+        if: matrix.artifact
+        with:
+          name: ${{ matrix.artifact }}
+          path: stage/
+          if-no-files-found: error
+
+  runtime:
+    name: Runtime tests (Windows, WPF)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: dotnet test SplashIt.RuntimeTests
+        run: >-
+          dotnet test tests/SplashIt.RuntimeTests/SplashIt.RuntimeTests.csproj
+          -c "Release R26" --nologo
+          --logger "console;verbosity=normal"
+
+      - name: List screenshots
+        if: always()
+        run: find TestResults/screenshots -type f -name '*.png' -exec ls -l {} + || true
+
+      # Uploaded even when a test fails, so a broken render can be looked at.
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: SplashIt-screenshots
+          path: TestResults/screenshots/*.png
+          if-no-files-found: error
