@@ -50,9 +50,11 @@ public sealed class SettingsViewModel : ObservableObject
         _status = ReadStatus();
 
         ProjectColors = new ColorListViewModel(
-            settings.ProjectColors, SplashItDefaults.ProjectColors, n => UiStrings.Settings_ProjectColorN(n), dialogs, "Settings.ProjectColors");
+            UiStrings.Settings_ProjectColors, UiStrings.Settings_ProjectColorsHint, settings.ProjectColors, SplashItDefaults.ProjectColors,
+            n => UiStrings.Settings_ProjectColorN(n), dialogs, "Settings.ProjectColors");
         FamilyColors = new ColorListViewModel(
-            settings.FamilyColors, SplashItDefaults.FamilyColors, n => UiStrings.Settings_FamilyColorN(n), dialogs, "Settings.FamilyColors");
+            UiStrings.Settings_FamilyColors, UiStrings.Settings_FamilyColorsHint, settings.FamilyColors, SplashItDefaults.FamilyColors,
+            n => UiStrings.Settings_FamilyColorN(n), dialogs, "Settings.FamilyColors");
         ProjectColors.Changed += OnChanged;
         FamilyColors.Changed += OnChanged;
         LoadValues(settings);

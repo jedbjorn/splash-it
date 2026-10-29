@@ -105,12 +105,18 @@ public sealed class ColorListViewModel : ObservableObject
     private readonly string _automationPrefix;
     private ColorChipViewModel? _selected;
 
+    /// <param name="title">The section heading ("Project colors").</param>
+    /// <param name="hint">The short line beside the heading ("solid tab fill").</param>
     /// <param name="nameFor">A chip's name from its 1-based position ("Project color 3").</param>
     /// <param name="defaults">The list's default colors, also the picker's palette.</param>
     /// <param name="automationPrefix">Prefix of the chips' AutomationIds ("Settings.ProjectColors").</param>
     public ColorListViewModel(
-        IReadOnlyList<Rgb> colors, IReadOnlyList<Rgb> defaults, Func<int, string> nameFor, IDialogService dialogs, string automationPrefix)
+        string title, string hint, IReadOnlyList<Rgb> colors, IReadOnlyList<Rgb> defaults, Func<int, string> nameFor,
+        IDialogService dialogs, string automationPrefix)
     {
+        Title = title;
+        Hint = hint;
+        AutomationPrefix = automationPrefix;
         _defaults = defaults;
         _dialogs = dialogs;
         _nameFor = nameFor;
@@ -128,6 +134,13 @@ public sealed class ColorListViewModel : ObservableObject
 
     /// <summary>Raised after every edit (color, add, remove, move, reset, load).</summary>
     public event Action? Changed;
+
+    public string Title { get; }
+
+    public string Hint { get; }
+
+    /// <summary>The list's AutomationId; its chips are <c>&lt;AutomationPrefix&gt;.Chip&lt;n&gt;</c>.</summary>
+    public string AutomationPrefix { get; }
 
     public ObservableCollection<ColorChipViewModel> Chips { get; }
 

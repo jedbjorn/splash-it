@@ -27,12 +27,14 @@
                         <ControlTemplate TargetType="TabItem">
                             <Grid Margin="0,0,2,0" SnapsToDevicePixels="True">
                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="1,1,1,0" Padding="10,6,8,6">
-                                    <StackPanel Orientation="Horizontal">
-                                        <ContentPresenter ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="False" />
-                                        <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8" Margin="12,1,0,0"
-                                                   VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
-                                    </StackPanel>
+                                        BorderThickness="1,1,1,0" Padding="8,6,6,6">
+                                    <!-- Like Revit's tabs, a narrow tab trims its title; the close glyph stays. -->
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8"
+                                                   Margin="6,1,0,0" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
+                                        <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   Foreground="{TemplateBinding Foreground}" />
+                                    </DockPanel>
                                 </Border>
                                 <Rectangle VerticalAlignment="Top" Height="2"
                                            Fill="{Binding (preview:PreviewTab.AccentBrush), RelativeSource={RelativeSource TemplatedParent}}" />
@@ -53,7 +55,8 @@
             <ControlTemplate x:Key="StripTemplate" TargetType="TabControl">
                 <Border Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource SurfaceBrush}"
                         BorderThickness="0,0,0,3" Padding="6,8,6,0" SnapsToDevicePixels="True">
-                    <TabPanel IsItemsHost="True" />
+                    <!-- One row of equal tabs, as many as fit: the strip never wraps. -->
+                    <UniformGrid Rows="1" IsItemsHost="True" />
                 </Border>
             </ControlTemplate>
         </ResourceDictionary>
