@@ -10,12 +10,14 @@ using SplashIt.Core.Colors;
 namespace SplashIt.UI.Tabs;
 
 /// <summary>
-/// What shows behind a tab (the coordinator's resolution of review m1 on #30/#31): the project fill
-/// replaces the tab's own background and fades to transparent, so its fading end, and the close ×,
-/// show whatever is behind the tab, Revit's tab strip or pane. Text and × colors are chosen against
-/// that. Read-only and bounded; never throws.
+/// What shows behind a tab (decision #33): the project fill replaces the tab's own background and
+/// fades to transparent, so its fading end, and the close ×, show whatever is behind the tab, Revit's
+/// tab strip or pane. Text and × colors are chosen against that. Read-only and bounded; never throws.
+/// The order (#33): (1) <see cref="Rendered(DependencyObject, out string?)"/>, a sample of what the
+/// window draws; (2) the painted-layer search; (3) the ancestor walk; then the caller's fallbacks,
+/// the tab's original background and the theme surface.
 /// <para>
-/// <b>How.</b> A search of what is painted under the centre of the tabs' panel, from the nearest
+/// <b>The painted-layer search (2).</b> A search of what is painted under the centre of the tabs' panel, from the nearest
 /// layer down: at each of the panel's ancestors, first the siblings drawn below the branch that
 /// holds the tabs (their subtrees, topmost first), then the ancestor's own background. Every tab is
 /// skipped. The first border or panel background, or shape fill, that covers the point and is an
@@ -65,43 +67,74 @@ public static class TabBackdrop
     }
 
     /// <summary>
-    /// What is actually drawn behind the tabs of <paramref name="tab"/>'s pane, sampled from the
-    /// rendered window at a point where a tab shows only what is behind it: on a project tab carrying
-    /// a Splash-It fill, the 1 px just before its close button (the fill has ended, #30); on a tab
-    /// that is not selected, not under the mouse, and whose close button is hidden (Revit's are), the
-    /// centre of that button's slot. Null when no tab of the pane offers such a point yet, or the
-    /// sample is not opaque. The VM run on Revit 2026 showed why: the strip there (<c>#CCCCCC</c> light,
-    /// <c>#454F61</c> dark) is painted by nothing a tree search reaches.
+    /// What is actually drawn behind the tabs of <paramref name="tab"/>'s pane (decision #33, step 1),
+    /// sampled from the rendered window at a point where a tab shows only what is behind it: on a
+    /// project tab carrying a Splash-It fill, the middle of the 2 px gap between the fill's end and its
+    /// close button (#30); on a tab that is not selected, not under the mouse, and whose close button is
+    /// hidden (Revit's are), the centre of that button's slot. Only tabs that are drawn count
+    /// (<c>Visibility</c> Visible: Revit leaves Hidden tabs at stale positions, over other tabs), and
+    /// only points inside the tabs' panel. One render at most per call. Null when no tab of the pane
+    /// offers such a point, or the sample is not opaque; <paramref name="failure"/> then says why.
+    /// The VM run on Revit 2026 showed why it comes first: the strip there (<c>#CCCCCC</c> light,
+    /// <c>#454F61</c> dark) is not an ancestor's background.
     /// </summary>
-    public static (Rgb Color, string Source)? Rendered(DependencyObject tab)
+    public static (Rgb Color, string Source)? Rendered(DependencyObject tab, out string? failure)
     {
+        failure = null;
         try
         {
-            var pane = VisualTreeHelper.GetParent(tab);
-            if (pane is null) return null;
+            if (VisualTreeHelper.GetParent(tab) is not FrameworkElement { ActualWidth: > 0, ActualHeight: > 0 } pane)
+            {
+                failure = "no laid-out tab panel";
+                return null;
+            }
             var count = VisualTreeHelper.GetChildrenCount(pane);
             for (var i = 0; i < count; i++)
             {
-                if (VisualTreeHelper.GetChild(pane, i) is not TabItem { ActualWidth: > 0, ActualHeight: > 0 } candidate) continue;
+                // Visibility, not IsVisible: IsVisible is false off-screen (no presentation source).
+                if (VisualTreeHelper.GetChild(pane, i) is not TabItem { Visibility: Visibility.Visible, ActualWidth: > 0, ActualHeight: > 0 } candidate)
+                    continue;
                 if (SamplePoint(candidate) is not { } point) continue;
+                if (!Inside(pane, candidate, point)) continue;
                 if (Sample(candidate, point) is { } color)
                     return (color, candidate.IsSelected ? "rendered, before the selected tab's close button" : "rendered, under a tab's hidden close button");
+                failure = "the sample was not opaque";
+                return null; // one render per call: another candidate would show the same backdrop
             }
+            failure = "no tab offers a point yet";
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Rendering is best effort: the caller falls back.
+            failure = "not inspectable (" + ex.GetType().Name + ")"; // best effort: the caller falls back
         }
         return null;
     }
+
+    /// <inheritdoc cref="Rendered(DependencyObject, out string?)"/>
+    public static (Rgb Color, string Source)? Rendered(DependencyObject tab) => Rendered(tab, out _);
+
+    /// <summary>Whether <paramref name="point"/> of <paramref name="tab"/> lies inside the tab and inside the tabs' <paramref name="pane"/>.</summary>
+    private static bool Inside(FrameworkElement pane, FrameworkElement tab, Point point)
+    {
+        if (!new Rect(0, 0, tab.ActualWidth, tab.ActualHeight).Contains(point)) return false;
+        var inPane = tab.TransformToAncestor(pane).Transform(point);
+        return new Rect(0, 0, pane.ActualWidth, pane.ActualHeight).Contains(inPane);
+    }
+
+    /// <summary>A rendered sample's outcome, for <see cref="Explain"/>.</summary>
+    public static string Describe((Rgb Color, string Source)? rendered, string? failure) =>
+        rendered is { } v ? $"{v.Color.ToHex()} ({v.Source})" : $"none ({failure ?? "not taken"})";
 
     /// <summary>Where on <paramref name="tab"/> only what is behind it shows, in its own coordinates; null when nowhere.</summary>
     private static Point? SamplePoint(TabItem tab)
     {
         var mid = tab.ActualHeight / 2;
+        var gap = ProjectFillShape.Default.Gap;
         if (tab.Background is LinearGradientBrush { MappingMode: BrushMappingMode.Absolute } fill
-            && ProjectFillShape.CloseButtonLeft(tab) is { } closeLeft && closeLeft - fill.EndPoint.X >= 1)
-            return new Point(closeLeft - 0.5, mid); // between the fill's end and the close button
+            && ProjectFillShape.CloseButtonLeft(tab) is { } closeLeft && closeLeft - fill.EndPoint.X >= gap)
+            // The middle of the gap between the fill's end and the button: the 1 px window taken from
+            // there (floored in the window's coordinates) lies wholly inside the gap at any DPI scale.
+            return new Point(closeLeft - gap / 2, mid);
         if (tab.IsSelected || tab.IsMouseOver || TabStyleFactory.IsDerived(tab.Style)) return null;
         if (TabCloseGlyph.FindButton(tab) is not { Visibility: Visibility.Hidden, ActualWidth: > 0 } button) return null;
         if (tab.Background is SolidColorBrush { Color.A: > 0 }) return null; // a native background of its own
@@ -142,8 +175,10 @@ public static class TabBackdrop
     /// <summary>
     /// For the log: what each method gave, and the layers the search met on the way (type, name and
     /// brush), so a run in Revit shows where the color came from, or why nothing was found.
+    /// <paramref name="rendered"/> is the rendered sample's outcome as already taken (<see cref="Describe"/>):
+    /// it is not sampled again.
     /// </summary>
-    public static string Explain(DependencyObject tab)
+    public static string Explain(DependencyObject tab, string rendered)
     {
         static string Of((Rgb Color, string Source)? r) => r is { } v ? $"{v.Color.ToHex()} ({v.Source})" : "none";
         try
@@ -155,11 +190,11 @@ public static class TabBackdrop
             for (var depth = 1; node is not null && depth <= 14; depth++, node = VisualTreeHelper.GetParent(node))
                 ancestors.Append(depth == 1 ? "" : " < ").Append(Name(node)).Append(BrushText(AnyBackground(node)));
             return string.Create(CultureInfo.InvariantCulture,
-                $"rendered: {Of(Rendered(tab))}; painted: {Of(painted)}; layers met: {(trail.Count == 0 ? "none" : string.Join(" | ", trail.Take(10)))}; ancestors: {Of(AncestorBehind(tab))}; chain: {ancestors}");
+                $"rendered: {rendered}; painted: {Of(painted)}; layers met: {(trail.Count == 0 ? "none" : string.Join(" | ", trail.Take(10)))}; ancestors: {Of(AncestorBehind(tab))}; chain: {ancestors}");
         }
         catch (Exception ex)
         {
-            return "not inspectable (" + ex.GetType().Name + ")";
+            return "rendered: " + rendered + "; tree not inspectable (" + ex.GetType().Name + ")";
         }
     }
 

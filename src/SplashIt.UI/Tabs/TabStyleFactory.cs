@@ -45,7 +45,8 @@ public interface ITabStyleFactory
 /// <param name="SelectedText">Text over the selected fill, chosen as <paramref name="Text"/>.</param>
 /// <param name="Accent">The selected tab's 3 px top line (darker, opaque).</param>
 /// <param name="Glyph">The close glyph in every state (#30): the fill ends before it, so it is black or
-/// white against what is under it there, the tab's own background (else the theme surface), not the fill.</param>
+/// white against the backdrop alone: what shows behind the tab (decision #33, found by <see cref="TabBackdrop"/>),
+/// else the tab's original background, else the theme surface; not the fill.</param>
 public readonly record struct TabFillColors(
     Rgb Fill, double Opacity, double MutedOpacity, Rgb Text, Rgb Hover, Rgb HoverText, Rgb Selected, Rgb SelectedText, Rgb Accent,
     Rgb Glyph);
