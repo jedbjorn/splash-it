@@ -1,0 +1,102 @@
+<Project>
+
+  <!--
+    Splash-It — root build properties.
+    Adapted from gantt-it Directory.Build.props (gantt-it commit 1e27832), with
+    the R25 configurations from gantt-it's Revit 2025 work.
+
+    The MSBuild Configuration picks the Revit major: "Debug R26" → RevitVersion
+    2026 (R25, R26 and R27 are supported). Revit-bound projects select their
+    TargetFramework and Revit API package versions from $(RevitVersion).
+    SplashIt.Core and its tests ignore the Revit suffix and multi-target
+    net8.0;net10.0. SplashIt.RuntimeTests is net8.0-windows in every
+    configuration.
+  -->
+
+  <PropertyGroup>
+    <Configurations>Debug R25;Release R25;Debug R26;Release R26;Debug R27;Release R27</Configurations>
+    <Configuration Condition="'$(Configuration)' == ''">Debug R26</Configuration>
+  </PropertyGroup>
+
+  <!-- Revit version derived from the Configuration name (R25/R26/R27). -->
+  <PropertyGroup>
+    <RevitVersion Condition="$(Configuration.Contains('R25'))">2025</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R26'))">2026</RevitVersion>
+    <RevitVersion Condition="$(Configuration.Contains('R27'))">2027</RevitVersion>
+  </PropertyGroup>
+
+  <!-- Target framework selected from the Revit version:
+         2025 → net8.0-windows
+         2026 → net8.0-windows
+         2027 → net10.0-windows (requires the .NET 10 SDK) -->
+  <PropertyGroup>
+    <RevitTargetFramework Condition="'$(RevitVersion)' == '2025'">net8.0-windows</RevitTargetFramework>
+    <RevitTargetFramework Condition="'$(RevitVersion)' == '2026'">net8.0-windows</RevitTargetFramework>
+    <RevitTargetFramework Condition="'$(RevitVersion)' == '2027'">net10.0-windows</RevitTargetFramework>
+  </PropertyGroup>
+
+  <!-- Configuration name without the "R##" suffix (Debug/Release). The SDK
+       only applies its Debug/Release defaults to the exact names "Debug" and
+       "Release", so the equivalents are set here explicitly. -->
+  <PropertyGroup>
+    <PlainConfiguration Condition="$(Configuration.StartsWith('Debug'))">Debug</PlainConfiguration>
+    <PlainConfiguration Condition="$(Configuration.StartsWith('Release'))">Release</PlainConfiguration>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(PlainConfiguration)' == 'Debug'">
+    <Optimize>false</Optimize>
+    <DefineConstants>$(DefineConstants);DEBUG</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(PlainConfiguration)' == 'Release'">
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Splash-It</Product>
+    <Company>Designs/OS</Company>
+    <Authors>jedbjorn</Authors>
+    <Copyright>© 2026 Designs/OS</Copyright>
+    <RepositoryUrl>https://github.com/jedbjorn/splash-it</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <!--
+    Version — the single source will be the release tag (docs/RELEASING.md,
+    added with the release pipeline).
+
+    The release pipeline passes -p:SplashItVersion=<tag without the v>, e.g.
+    1.0.0 or 1.0.0-rc.1; push/PR builds pass it EMPTY and local builds omit
+    it. A command-line property is a global MSBuild property and cannot be
+    reassigned here, so an empty SplashItVersion is never "fixed up" in place:
+    Version (not global) is derived from it instead, falling back to the dev
+    version below. Nothing is bumped by hand.
+
+    Version feeds AssemblyVersion/FileVersion (numeric part) and
+    InformationalVersion. Release builds stamp exactly the tag version; dev
+    builds keep the SDK's "+<commit>" suffix so a dev build can be traced to
+    its source.
+  -->
+  <PropertyGroup>
+    <Version>0.0.0-dev</Version>
+    <Version Condition="'$(SplashItVersion)' != ''">$(SplashItVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion Condition="'$(SplashItVersion)' != ''">false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <!-- WiX (.wixproj) only accepts 'full' or 'none' for -pdbType, so the
+         portable PDB settings apply to managed projects only. -->
+    <DebugType Condition="'$(MSBuildProjectExtension)' != '.wixproj'">portable</DebugType>
+    <DebugSymbols Condition="'$(MSBuildProjectExtension)' != '.wixproj'">true</DebugSymbols>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!-- Revit-side analyzer noise (platform-compat on a Windows-only host). -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -35,3 +35,21 @@
 /.sc-state/map.db-shm
 /.sc-state/db_backups/
 # <<< subfloor managed ignores <<<
+
+## .NET build outputs (from gantt-it .gitignore, commit 1e27832)
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+*.binlog
+TestResults/
+/artifacts/
+
+## Native Claude Code agent worktrees
+/.claude/worktrees/
+
+## Python
+__pycache__/
