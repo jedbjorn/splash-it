@@ -9,11 +9,16 @@ version lives in a file that has to be edited before a release.
 
 ## The v1 gate
 
-`v1.0.0-rc.1` is cut once every v1 lane has merged on CI evidence; it is the
-build checked on real machines. `v1.0.0` is tagged only after the real-machine
-part of AC10 (detection on the FnB's second machine and the test VM) and AC11
-(the in-Revit checklist) pass on Revit 2025, 2026 and 2027. Until then, `main`
-is shipped pending acceptance.
+As spec #1 (decision #20) sets it:
+
+1. `v1.0.0-rc.1` is cut once every v1 lane has merged on CI evidence. It is
+   the build the test VM checks.
+2. `v1.0.0` is tagged after the VM part of AC10 (detection) and AC11 (the
+   in-Revit checklist) pass on **Revit 2026 and 2027**. The VM has no
+   Revit 2025.
+3. Revit 2025 ships supported and is verified by the FnB from the public
+   `v1.0.0` release, on another machine. A failure there is fixed in a patch
+   release (`v1.0.1`).
 
 ## Cut a release
 
@@ -107,20 +112,61 @@ Properties › Details). Don't hand rc MSIs to users once the final is out.
   Settings › Apps.
 - **Revit detection** (standard AppSearch, no custom actions), per year: the
   `InstallLocation` of `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{7346B4A0-<yy>00-0510-0000-705C0D862004}`
-  (64-bit view) when it holds `Revit.exe`, otherwise
-  `C:\Program Files\Autodesk\Revit <year>\Revit.exe`. A leftover entry with no
-  `Revit.exe` does not count.
+  (64-bit view) when it holds `Revit.exe`, and
+  `C:\Program Files\Autodesk\Revit <year>\Revit.exe`; either one counts. A
+  leftover entry with no `Revit.exe` does not count.
 - **No supported Revit**: a first install stops with "Splash-It needs Revit
-  2025, 2026 or 2027, and none was found on this computer." Repair and
-  uninstall are never blocked.
+  2025, 2026 or 2027, and none was found on this computer." (exit code 1603
+  when silent). Repair and uninstall are never blocked.
 - **Repair** re-runs the detection: it adds a Revit year installed since and
   drops one uninstalled since. The setup UI's Repair button sets
   `REINSTALL=ALL REINSTALLMODE=ecmus`; silently:
-  `msiexec /i SplashIt-<version>.msi REINSTALL=ALL REINSTALLMODE=ecmus /qn`.
-- **Silent install** works as is, for rst-c's chained setup:
-  `msiexec /i SplashIt-<version>.msi /qn`.
-- **Uninstall** removes the `SplashIt\` folders and `SplashIt.addin`, never
-  `Addins\<year>\` itself, and keeps `%AppData%\SplashIt\settings.json`.
+  `msiexec /i SplashIt-<version>.msi REINSTALL=ALL REINSTALLMODE=ecmus /qn /norestart`.
+  Running the same MSI again with a plain `/i … /qn` changes nothing and does
+  not detect again. A newer MSI (an upgrade) detects again by itself.
+- **Silent install**: see [Silent install and chaining](#silent-install-and-chaining).
+- **Uninstall** removes `SplashIt.addin` and the `SplashIt\` folder of every
+  year. It never removes an `Addins\<year>\` that existed before or that holds
+  anything else; Windows Installer removes one only when it created it itself
+  and it is empty again, which leaves the folders as they were. It keeps
+  `%AppData%\SplashIt\settings.json` and the logs in
+  `%LocalAppData%\SplashIt\logs\`, which the MSI does not own.
+
+## Silent install and chaining
+
+```bat
+msiexec /i SplashIt-<version>.msi /qn /norestart /l*v splashit-install.log
+msiexec /x SplashIt-<version>.msi /qn /norestart
+```
+
+- **Close Revit first.** While Revit runs, the Splash-It DLLs it has loaded
+  are locked. An upgrade, repair or uninstall then finishes with exit code
+  **3010** (the locked files are replaced at the next restart), or Windows may
+  try to close Revit. `/norestart` makes sure Windows never restarts the
+  computer by itself; it is recommended for every silent run.
+- **Run it as the user.** The install is per-user: it lands in the profile of
+  whoever runs `msiexec`. Run as SYSTEM (for example Intune or SCCM in device
+  context) it installs into SYSTEM's profile, where Revit never looks. Deploy
+  it in the user's context.
+- **No supported Revit** (2025, 2026 or 2027): the install exits **1603** by
+  design. That is the launch condition, and nothing is installed.
+- **A Revit year installed later**: a second `/i … /qn` of the same MSI does
+  not pick it up. Run the repair command above, or install a newer release.
+
+### For bundles that chain this MSI
+
+rst-c's setup (a WiX Burn bundle) chains this MSI unmodified (shared
+handoff, item 2). The exit codes a bundle sees:
+
+| Exit code | Meaning | Suggested handling |
+|---|---|---|
+| 0 | Installed (or uninstalled) | success |
+| 1603 | No supported Revit found: the launch condition stopped the install, nothing was changed. Also any other fatal install error | mark the package non-vital, or show its checkbox only when a Revit 2025-2027 is detected (the same `InstallLocation` + `Revit.exe` checks as above), so it cannot roll back the whole bundle |
+| 3010 | Installed; a restart is needed because Revit had the old DLLs locked | success, restart pending; ask users to close Revit before running setup |
+| 1618 | Another installation is in progress | retry later |
+
+The UpgradeCode never changes, so a bundle can detect an installed Splash-It
+by it (`080648F4-EEC7-4DB6-A793-683A1C008BFC`).
 
 ## The detection test (AC10, CI part)
 
@@ -132,7 +178,7 @@ folder, then installs, repairs and uninstalls with `msiexec /qn`:
 
 | Case | Fake Revit | Action | Expected |
 |---|---|---|---|
-| 1 | none | install | blocked by the launch condition, nothing installed |
+| 1 | none | install | blocked by the launch condition (exit 1603), nothing installed |
 | 2 | 2026 in a custom folder (registry) | install | only 2026 |
 | 3 | a 2025 entry without `Revit.exe`; 2027 in the default folder only | install | only 2027 |
 | 4 | 2025 and 2026 (registry), 2027 (default folder) | install | all three |
@@ -147,7 +193,10 @@ the `SplashIt-detection` artifact:
 gh run download <run-id> -n SplashIt-detection
 ```
 
-Do not run the script on a machine with Revit: it writes fake Revit entries.
+Do not run the script on a machine with Revit, or one you care about: it
+writes fake Revit entries and deletes `Addins\2025\`, `Addins\2026\` and
+`%AppData%\SplashIt\` of the user running it. Outside GitHub Actions it
+refuses to start unless given `-IUnderstandThisDeletesUserFolders`.
 
 ## Rehearse without publishing
 
