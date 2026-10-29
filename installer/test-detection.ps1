@@ -149,15 +149,24 @@ function Uninstall-Msi([string] $name) { Invoke-Msiexec $name @('/x', "`"$msiPat
 
 # --- state checks -----------------------------------------------------------
 
+# The installed products of Splash-It's UpgradeCode (Windows Installer's
+# RelatedProducts; per-user installs of this user included). Windows
+# Installer hands back no list at all when there are none.
 function Get-InstalledProducts {
-  $list = Invoke-Com $installer 'RelatedProducts' ([System.Reflection.BindingFlags]::GetProperty) @($UpgradeCode)
   $codes = @()
-  $count = Invoke-Com $list 'Count' ([System.Reflection.BindingFlags]::GetProperty)
-  for ($i = 0; $i -lt $count; $i++) { $codes += Invoke-Com $list 'Item' ([System.Reflection.BindingFlags]::GetProperty) @($i) }
+  $list = $installer.RelatedProducts($UpgradeCode)
+  if ($null -ne $list) { foreach ($c in $list) { $codes += [string]$c } }
   return , $codes
 }
-function Invoke-Com($obj, [string] $name, [System.Reflection.BindingFlags] $kind, [object[]] $argList = @()) {
-  return $obj.GetType().InvokeMember($name, $kind, $null, $obj, $argList)
+# AssignmentType 0 = installed per-user (1 = per-machine).
+function Test-PerUser {
+  $problems = @()
+  foreach ($c in (Get-InstalledProducts)) {
+    $t = [string]$installer.ProductInfo($c, 'AssignmentType')
+    Say "    installed product $c, AssignmentType $t"
+    if ($t -ne '0') { $problems += "product $c has AssignmentType '$t', expected 0 (per-user)" }
+  }
+  return , $problems
 }
 
 # Years whose Addins\<year>\ holds anything of Splash-It's.
@@ -259,6 +268,7 @@ try {
   if ($run.ExitCode -ne 0) { $p += "install exit $($run.ExitCode)" }
   $p += Test-State @('2026')
   if ((Get-InstalledProducts).Count -ne 1) { $p += "expected one installed Splash-It product, found $((Get-InstalledProducts).Count)" }
+  $p += Test-PerUser
   $obs = Observed $run
   $un = Uninstall-Msi 'case2-uninstall'
   if ($un.ExitCode -ne 0) { $p += "uninstall exit $($un.ExitCode)" }
