@@ -25,7 +25,11 @@ public static class HostTabs
     /// (#A2A6B0, set by the button's own style as in Revit, so the tab's Foreground does
     /// not reach it; the button is named mDocumentCloseButton, as in Revit). Like Revit's, the style is a local style on the tab, and
     /// sets its own selected and unselected backgrounds (selected: the theme's surface;
-    /// unselected: transparent over the strip).
+    /// unselected: transparent over the strip). As in Revit (vm/2026-review/diag-2026-close-button.txt
+    /// and the AC11 captures), the close button is 16 x 16, its right edge 2 px inside the tab
+    /// (here the grid's 1 px gap plus 1 px), 12 px after the title as Revit's, and Hidden,
+    /// keeping its slot, unless the tab is
+    /// selected or under the mouse.
     /// </summary>
     public static Style RevitLikeStyle(UiTheme theme)
     {
@@ -47,15 +51,16 @@ public static class HostTabs
                   <ControlTemplate TargetType="TabItem">
                     <Grid x:Name="mGrid" Height="20" Margin="0,0,1,0">
                       <Border x:Name="mBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" />
-                      <DockPanel Margin="4,2,4,2">
-                        <Button x:Name="mDocumentCloseButton" DockPanel.Dock="Right" Content="×" Margin="8,0,0,0" VerticalAlignment="Center" Focusable="False">
+                      <DockPanel Margin="4,2,1,2">
+                        <Button x:Name="mDocumentCloseButton" DockPanel.Dock="Right" Content="×" Width="16" Height="16" Margin="12,0,0,0"
+                                VerticalAlignment="Center" Focusable="False" Visibility="Hidden">
                           <Button.Style>
                             <Style TargetType="Button">
                               <Setter Property="Foreground" Value="#FFA2A6B0" />
                               <Setter Property="Template">
                                 <Setter.Value>
                                   <ControlTemplate TargetType="Button">
-                                    <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
                                   </ControlTemplate>
                                 </Setter.Value>
                               </Setter>
@@ -66,6 +71,10 @@ public static class HostTabs
                         <ContentPresenter ContentSource="Header" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
                       </DockPanel>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsSelected" Value="True"><Setter TargetName="mDocumentCloseButton" Property="Visibility" Value="Visible" /></Trigger>
+                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="mDocumentCloseButton" Property="Visibility" Value="Visible" /></Trigger>
+                    </ControlTemplate.Triggers>
                   </ControlTemplate>
                 </Setter.Value>
               </Setter>
@@ -92,6 +101,17 @@ public static class HostTabs
     }
 
     public static Color ColorOf(Rgb c) => Color.FromRgb(c.R, c.G, c.B);
+
+    /// <summary>
+    /// A tab background's color: a solid brush's own, or the solid part of a project fill's fade
+    /// (#30: its first stop, before the fade starts).
+    /// </summary>
+    public static Color FillOf(Brush brush) => brush switch
+    {
+        SolidColorBrush solid => solid.Color,
+        GradientBrush gradient => gradient.GradientStops[0].Color,
+        _ => throw new ArgumentException($"Not a fill: {brush.GetType().Name}", nameof(brush)),
+    };
 
     /// <summary>A TabControl whose strip shows only the headers (no content area), with one tab per title.</summary>
     public static TabControl Strip(Style? tabStyle, UiTheme theme, params string[] titles)

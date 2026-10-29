@@ -58,7 +58,7 @@ public class DocumentTabColorizerTests
 
         public IEnumerable<TabItem> Tabs => Strip.Items.Cast<TabItem>();
 
-        public Color Fill(int i) => ((SolidColorBrush)Tab(i).Background).Color;
+        public Color Fill(int i) => HostTabs.FillOf(Tab(i).Background);
     }
 
     private sealed record DocKey(string Name);
@@ -260,7 +260,7 @@ public class DocumentTabColorizerTests
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
 
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), HostTabs.FillOf(tab.Background));
             Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(0)); // P2, now first
             Assert.True(rig.Surface.Invalidations >= 2);
         });
@@ -542,7 +542,7 @@ public class DocumentTabColorizerTests
 
             rig.Colorizer.Start();
             HostTabs.Layout(root);
-            Assert.Equal(((SolidColorBrush)rig.Tab(2).Foreground).Color, ((SolidColorBrush)close.Foreground).Color);
+            Assert.Equal(Colors.Black, ((SolidColorBrush)close.Foreground).Color); // #30: chosen against the strip under it (light)
             Assert.NotEqual(HostTabs.CloseGrey, ((SolidColorBrush)close.Foreground).Color);
             Assert.Equal(HostTabs.CloseGrey, ((SolidColorBrush)TabCloseGlyph.FindButton(rig.Tab(3))!.Foreground).Color); // family: native
 
@@ -663,7 +663,7 @@ public class DocumentTabColorizerTests
             rig.Events.Layout();
             rig.Events.Scan();
 
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[2]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[2]), HostTabs.FillOf(tab.Background));
         });
     }
 
@@ -777,7 +777,7 @@ public class DocumentTabColorizerTests
             rig.Strip.Items.Add(tab);
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), HostTabs.FillOf(tab.Background));
         });
     }
 
@@ -836,7 +836,7 @@ public class DocumentTabColorizerTests
             rig.Strip.Items.Add(tab);
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), HostTabs.FillOf(tab.Background));
         });
     }
 
