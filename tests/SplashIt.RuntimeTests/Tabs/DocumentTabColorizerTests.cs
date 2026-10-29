@@ -751,6 +751,54 @@ public class DocumentTabColorizerTests
         });
     }
 
+    /// <summary>
+    /// Spec #2 (Group Tabs) and #33/#36: reordering tabs keeps each tab's pane (its visual parent,
+    /// the backdrop cache's key), so a settled backdrop is neither sampled nor settled again, and
+    /// the colorizer's next pass simply restyles in the new order.
+    /// </summary>
+    [Fact]
+    public void ReorderingTabs_KeepsThePane_AndItsSettledBackdrop()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            Room(rig, root);
+            var samples = 0;
+            rig.Colorizer.SampleRendered = (DependencyObject tab, out string? failure) =>
+            {
+                samples++;
+                return TabBackdrop.Rendered(tab, out failure);
+            };
+            rig.Colorizer.Start();
+            for (var i = 0; i < 3; i++)
+            {
+                HostTabs.Layout(root);
+                rig.Events.Layout();
+            }
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            var pane = VisualTreeHelper.GetParent(rig.Tab(0));
+            Assert.NotNull(pane);
+            var samplesSettled = samples;
+
+            // Group Tabs' kind of change: P2's tab moves to the front (MoveChild in Revit).
+            var last = rig.Tab(2);
+            rig.Strip.Items.Remove(last);
+            rig.Strip.Items.Insert(0, last);
+            for (var i = 0; i < 3; i++)
+            {
+                HostTabs.Layout(root);
+                rig.Events.Layout();
+            }
+
+            Assert.Same(last, rig.Tab(0));
+            foreach (var tab in rig.Tabs) Assert.Same(pane, VisualTreeHelper.GetParent(tab));
+            Assert.Equal(samplesSettled, samples);
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            Assert.True(TabStyleFactory.IsDerived(last.Style));
+        });
+    }
+
     /// <summary>A tab with nothing solid behind it (not in a tree yet) keeps the old rule: its own background, else the surface.</summary>
     [Fact]
     public void ProjectContrast_FallsBackToTheTabsOwnBackground_WhenNothingIsBehindIt()
