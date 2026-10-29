@@ -760,6 +760,10 @@ public class DocumentTabColorizerTests
             Assert.Equal(0, changes.Count);
             Assert.Equal(invalidations, rig.Surface.Invalidations);
             Assert.Contains(rig.Log.Lines, l => l.Contains("document scan registered 0 documents") && l.Contains("0 changed title or kind, 0 reclassified; 0 no longer open; 1 unresolved."));
+            // Delta review d3: a second scan that finds nothing, with the same unresolved count, is not logged.
+            var scanLines = rig.Log.Lines.Count(l => l.Contains("document scan"));
+            rig.Events.Scan();
+            Assert.Equal(scanLines, rig.Log.Lines.Count(l => l.Contains("document scan")));
 
             // P1 closed with no event: the scan forgets it, so P3 takes colour 1.
             rig.Strip.Items.RemoveAt(1);
@@ -876,6 +880,43 @@ public class DocumentTabColorizerTests
             Assert.Null(TabDecoration.GetDecoration(supportTab)?.LeftBar);                                // the project keeps its fill
             Assert.Contains(rig.Log.Lines, l => l.Contains("1 unresolved")); // only the rig's own unresolvable tab
             Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("2 unresolved"));
+        });
+    }
+
+    /// <summary>
+    /// Delta review d1: a document that reads as changed on every listing, beside a tab that never
+    /// resolves, cannot keep the scans going. The pass each scan forces does not refill the budget,
+    /// so there are at most <see cref="DocumentTabColorizer.MaxScansPerChange"/> scans, then none.
+    /// </summary>
+    [Fact]
+    public void ADocumentThatAlwaysReadsChanged_DoesNotRefillTheScanBudget()
+    {
+        Screenshots.RunSta(() =>
+        {
+            long now = 100_000;
+            var rig = new Rig(clock: () => now); // tab 5 never resolves
+            rig.Documents.ChangedEveryListing = 1;
+            rig.Colorizer.Start();
+            var scans = 0;
+            for (var second = 0; second < 30; second++)
+            {
+                var before = rig.Events.ScanRequests;
+                now += DocumentTabColorizer.DocumentScanIntervalMs;
+                rig.Events.Layout();
+                if (rig.Events.ScanRequests > before || second == 0)
+                {
+                    rig.Events.Scan();  // the Idling the request asked for
+                    scans++;
+                }
+            }
+            Assert.Equal(DocumentTabColorizer.MaxScansPerChange, rig.Events.ScanRequests);
+            Assert.True(rig.Documents.Listings - 1 <= DocumentTabColorizer.MaxScansPerChange + 1, $"{rig.Documents.Listings} listings");
+
+            // A real change of the tabs refills it.
+            rig.Tab(0).IsSelected = true;
+            now += DocumentTabColorizer.DocumentScanIntervalMs;
+            rig.Events.Layout();
+            Assert.Equal(DocumentTabColorizer.MaxScansPerChange + 1, rig.Events.ScanRequests);
         });
     }
 }

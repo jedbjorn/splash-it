@@ -92,6 +92,9 @@ public sealed class FakeDocuments : IDocumentInfo
     /// <summary>Whether the document is registered: open, and announced or listed since.</summary>
     public bool IsRegistered(object key) => Open.Contains(key) && !Unannounced.Contains(key);
 
+    /// <summary>Reported as changed by every listing (a document that reads as changed each time, delta review d1).</summary>
+    public int ChangedEveryListing { get; set; }
+
     /// <summary>Applied by the next listing (Revit re-reads each known document's title and kind there); returns how many changed.</summary>
     public Func<int>? OnNextListing { get; set; }
 
@@ -102,7 +105,7 @@ public sealed class FakeDocuments : IDocumentInfo
     {
         Listings++;
         Unannounced.Clear();
-        changed = OnNextListing?.Invoke() ?? 0;
+        changed = (OnNextListing?.Invoke() ?? 0) + ChangedEveryListing;
         OnNextListing = null;
         into.Clear();
         into.AddRange(Open);

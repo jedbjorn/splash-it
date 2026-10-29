@@ -253,7 +253,9 @@ public sealed class RevitDocuments : IDocumentInfo
         {
             var current = TabTitleMatcher.TitleForms(Document.Title ?? "", Document.PathName, Document.IsFamilyDocument);
             var kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud, out var rule);
-            var changed = kind != Kind || Titles.Count == 0 || !string.Equals(Titles[0], current.Count > 0 ? current[0] : "", StringComparison.Ordinal);
+            // Only a real difference counts (delta review d1): a document with no title must not
+            // read as changed on every scan.
+            var changed = kind != Kind || !Titles.SequenceEqual(current, StringComparer.Ordinal);
             var kept = new List<string>();
             foreach (var old in Titles.Concat(KeptTitles))
                 if (kept.Count < MaxKeptTitles && !current.Contains(old, StringComparer.Ordinal) && !kept.Contains(old, StringComparer.Ordinal))
