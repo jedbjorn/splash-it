@@ -6,7 +6,7 @@ public enum FileKind
     /// <summary>Takes no color; its tabs stay native.</summary>
     Other = 0,
 
-    /// <summary>A project: a solid fill from Project colors.</summary>
+    /// <summary>A project: a fill from Project colors.</summary>
     Project,
 
     /// <summary>A family: a left bar from Family colors.</summary>

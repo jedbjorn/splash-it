@@ -165,7 +165,9 @@ jobs:
         if: always()
         with:
           name: SplashIt-screenshots
-          path: TestResults/screenshots/*.png
+          path: |
+            TestResults/screenshots/*.png
+            TestResults/screenshots/*.txt
           if-no-files-found: error
 
   # From gantt-it .github/workflows/_build.yml, msi job (gantt-it commit aa83f35).

@@ -250,15 +250,57 @@ finds a document handle on 2026 or 2027).
 Styles come from `TabStyleFactory` (decisions #22 and #23): the selected project tab shows the
 color at the fill opacity with a 3 px darker top line; the project's other tabs show it at the
 Unselected tab opacity (a share of the fill opacity, default 50 %). The fill is
-`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family marks (#27: the
+`Background`/`Foreground` setters plus `IsSelected`/hover triggers. Its shape (#30,
+`ProjectFillShape.Default`): solid from the left edge, then a fixed 24 px fade to transparent
+that ends 2 px before the close button's left edge, so the × sits on Revit's strip; the
+selected tab's top line takes the same shape. The `Background` value is a binding to the tab's
+width (`ProjectFillConverter`), because the fade's position depends on where that tab's close
+button is: the button's layout slot (Revit keeps it `Hidden`, not collapsed, on tabs that are
+not selected or hovered, so hovering moves nothing), else the tab's right edge less 18 px. A
+tab too narrow for the fade fades from its left edge. Contrast (#31): the text is black or white,
+whichever has the higher *minimum* contrast over two points, the solid part and the fade under a
+title's last column (Revit leaves 12 px between a title and its ×, so a title that fills its tab
+ends 10.5 px into the 24 px fade, at about 44 % of the opacity); the × is black or white against
+the backdrop alone. The backdrop is what actually shows through the fade's transparent end and
+under the ×: whatever is behind the tab, since the fill replaces the tab's own background
+(decision #33). The colorizer finds it with `TabBackdrop`, in this order:
+
+1. **Rendered sample.** What the window actually draws, sampled (one 1 px render) where a tab shows
+   only what is behind it: the middle of the 2 px gap between a filled tab's fade and its ×, or the
+   slot of an unselected, unhovered tab's hidden ×. Only tabs that are drawn (`Visibility` Visible;
+   Revit leaves Hidden tabs at stale positions) and points inside the tabs' panel count. It is taken
+   only in a pass run from a layout pass (render data is current then), and not before the first
+   layout after a theme change.
+2. **Painted-layer search.** What is painted under the centre of the tabs' panel, from the nearest
+   layer down (at each of the panel's ancestors, the siblings drawn below the tabs' branch, then the
+   ancestor's own background), skipping every tab: the first border or panel background (or shape
+   fill) covering that point that is an opaque `SolidColorBrush`, with translucent ones above it
+   blended over it. It reads the tree rather than hit-testing it.
+3. **Ancestor walk.** The tab's visual parents, to the first panel or border with an opaque solid
+   background.
+4. Else the tab's original background, then the theme surface.
+
+On Revit 2026 and 2027 (VM) the rendered sample and the painted search agree with the pixels,
+`#CCCCCC` light and `#454F61` dark; the ancestor walk alone gives `#EEEEEE` and `#2E3440`, and a hit
+test finds nothing. Each pane (the tabs' parent) is worked out at the top of a pass, before any style
+is assigned. Until a sample is taken it uses the tree's answer, uncached, and the next layout passes
+look again, at most 20 times per pane; then the tree's answer is settled. Settled panes are kept in a
+weak table (a pane Revit drops is not kept alive), dropped on a theme change and on Stop, and each is
+logged once: "tabs sit on #RRGGBB (…) (sample N ms). [rendered: …; painted: …; layers met: …;
+ancestors: …; chain: …]". The per-pass hot path is untouched. Over every default color, fill,
+unselected share and state, one of black and white reaches 3:1 over the whole title (from the solid
+part to its end in the fade) on each candidate strip. The settings preview passes its tab color,
+which its template lays under the fill. The
+family marks (#27: the
 side bar of the bar width, plus a fixed 2 px top bar from the left edge over 95 % of the tab,
 fading out over its last 15 % (#29), `FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
 (`TabDecoration`), so they do not depend on Revit's template, follow a resize, and go with
 the original style.
 Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
 (`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
-AvalonDock theme), so `TabCloseGlyph` sets it to the text color per state and puts the
-button's own value back when the original style returns. All of this was checked in Revit
+AvalonDock theme), so `TabCloseGlyph` sets it to black or white (since #30, chosen against what
+is behind the tab, see above) and puts the button's own value back when the original style
+returns. All of this was checked in Revit
 2026 and 2027 on the VM (`shared/evidence/lane-b/vm/`).
 
 - Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and

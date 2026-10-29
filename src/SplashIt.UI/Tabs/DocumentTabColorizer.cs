@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -83,6 +84,34 @@ public sealed class DocumentTabColorizer
 
     private readonly Dictionary<object, FileKind> _kinds = new();
     private readonly Dictionary<TabItem, TabState> _tabs = new();
+
+    /// <summary>
+    /// What is behind the tabs, per pane (the tabs' visual parent; decision #33). Weak keys: a pane
+    /// Revit drops is not kept alive with its tabs and documents (delta review D-m3). Worked out at the
+    /// top of a pass, before any style is assigned (D-m1); dropped on a theme change and on Stop.
+    /// </summary>
+    private readonly ConditionalWeakTable<DependencyObject, PaneBackdrop> _backdrops = new();
+
+    /// <summary>A pane's backdrop is still to find: pass again on the next layout.</summary>
+    private bool _backdropPending;
+
+    /// <summary>After a theme change, until the next layout pass: the window still draws the old theme, so nothing is sampled.</summary>
+    private bool _backdropNeedsLayout;
+
+    /// <summary>The panes met in this pass (reused; changed passes only).</summary>
+    private readonly List<DependencyObject> _passPanes = new();
+
+    /// <summary>The most passes one pane waits for a rendered sample before it settles for the tree's answer.</summary>
+    internal const int MaxBackdropRetries = 20;
+
+    /// <summary>One pane's backdrop: settled (<see cref="Done"/>, <see cref="Brush"/> null for "nothing solid"), or a guess while it waits.</summary>
+    private sealed class PaneBackdrop
+    {
+        public bool Done;
+        public Brush? Brush;
+        public Brush? Guess;
+        public int Retries;
+    }
     private readonly List<SurfaceTab> _read = new();
     private readonly List<Signature> _signature = new();
     private readonly List<TabItem> _drop = new();
@@ -349,6 +378,9 @@ public sealed class DocumentTabColorizer
             _running = false;
         }
         RestoreAll();
+        _backdrops.Clear();
+        _backdropPending = false;
+        _backdropNeedsLayout = false;
         _kinds.Clear();
         _projects.Clear();
         _families.Clear();
@@ -380,7 +412,8 @@ public sealed class DocumentTabColorizer
         if (!_running) return;
         try
         {
-            Pass(force: false);
+            _backdropNeedsLayout = false;
+            Pass(force: false, fromLayout: true);
             _consecutiveFaults = 0;
         }
         catch (Exception ex)
@@ -457,6 +490,8 @@ public sealed class DocumentTabColorizer
             _log.Info(Inv($"colorizer: theme changed to {theme}; restyling."));
             Theme = theme;
             RestoreAll();           // originals back on every tab...
+            _backdrops.Clear();     // ...what is behind the tabs found again...
+            _backdropNeedsLayout = true; // what is drawn is the old theme until the next layout
             _styles.ClearCache();   // ...styles rebuilt for the new backdrop...
             _signatureValid = false;
             Pass(force: true);      // ...originals recaptured, contrast recomputed, reapplied.
@@ -550,7 +585,8 @@ public sealed class DocumentTabColorizer
     /// <param name="force">Restyle even when the signature is unchanged.</param>
     /// <param name="refillScans">Whether unresolved tabs after this pass refill the scan budget
     /// (false for the pass a scan forces, delta review d1).</param>
-    private void Pass(bool force, bool refillScans = true)
+    /// <param name="fromLayout">Run from a layout pass: render data is current, so a pane's backdrop may be sampled (#33).</param>
+    private void Pass(bool force, bool refillScans = true, bool fromLayout = false)
     {
         var result = _surface.Read(_read);
         if (!result.IsAvailable)
@@ -571,6 +607,9 @@ public sealed class DocumentTabColorizer
         SetStatus(ColorizerStatus.Active, null);
         var generation = ++_generation;
         int projects = 0, families = 0, others = 0, unresolved = 0;
+
+        // Before any style is assigned in this pass: what is behind each pane's tabs (#33).
+        ResolveBackdrops(mayRender: fromLayout);
 
         foreach (var entry in _read)
         {
@@ -654,7 +693,10 @@ public sealed class DocumentTabColorizer
         if (state.Unstylable || state.Abandoned) return null;
         try
         {
-            return _styles.Create(state.BaseStyle, treatment, state.OriginalBackground, Theme);
+            // A project's text and × are chosen against what shows behind the tab (#30/#31: the fill
+            // fades to transparent); a family bar has no text, so its backdrop does not matter.
+            var backdrop = kind == FileKind.Project ? BackdropFor(entry.Tab, state) : state.OriginalBackground;
+            return _styles.Create(state.BaseStyle, treatment, backdrop, Theme);
         }
         catch (ArgumentException)
         {
@@ -663,6 +705,92 @@ public sealed class DocumentTabColorizer
             _log.Warn(Inv($"colorizer: a tab's style targets {state.BaseStyle?.TargetType.Name}; that tab stays native."));
             return null;
         }
+    }
+
+    /// <summary>
+    /// The backdrop brush for a project tab's contrast: its pane's, as <see cref="ResolveBackdrops"/>
+    /// left it at the top of this pass (settled, or the tree's guess while it waits); else (not in a
+    /// tree, or not laid out) the tab's own original background, which the factory blends over the
+    /// theme surface. Looks up only: it never samples, so it cannot read a tab styled earlier in the pass.
+    /// </summary>
+    private Brush? BackdropFor(TabItem tab, TabState state)
+    {
+        if (VisualTreeHelper.GetParent(tab) is not { } pane || !_backdrops.TryGetValue(pane, out var backdrop))
+            return state.OriginalBackground;
+        return (backdrop.Done ? backdrop.Brush : backdrop.Guess) ?? state.OriginalBackground;
+    }
+
+    /// <summary>
+    /// Decision #33, at the top of a pass, before any style is assigned (delta review D-m1): works out
+    /// each pane's backdrop once. A rendered sample is taken only in a pass run from a layout pass
+    /// (<paramref name="mayRender"/>; render data is current then), and not before the first layout
+    /// after a theme change. Until a sample is taken the pane uses the tree's answer, uncached, and the
+    /// next layout passes look again, at most <see cref="MaxBackdropRetries"/> times per pane (D-m2);
+    /// then the tree's answer is settled. Every settled pane is logged once, with what each method gave.
+    /// </summary>
+    private void ResolveBackdrops(bool mayRender)
+    {
+        _passPanes.Clear();
+        foreach (var entry in _read)
+            if (VisualTreeHelper.GetParent(entry.Tab) is { } pane && !_passPanes.Contains(pane))
+                _passPanes.Add(pane);
+
+        foreach (var pane in _passPanes)
+        {
+            var backdrop = _backdrops.GetValue(pane, static _ => new PaneBackdrop());
+            if (backdrop.Done) continue;
+            var tab = FirstTab(pane);
+            if (tab is null || pane is not FrameworkElement { ActualWidth: > 0 })
+            {
+                // Not laid out yet: nothing to read; look again on the next layout pass (bounded).
+                if (backdrop.Retries++ < MaxBackdropRetries) _backdropPending = true;
+                continue;
+            }
+
+            (Rgb Color, string Source)? rendered = null;
+            string? failure = "not taken yet: waiting for a layout pass";
+            long sampleTicks = 0;
+            if (mayRender && !_backdropNeedsLayout)
+            {
+                var t0 = Stopwatch.GetTimestamp();
+                rendered = TabBackdrop.Rendered(tab, out failure);
+                sampleTicks = Stopwatch.GetTimestamp() - t0;
+            }
+            if (rendered is null && backdrop.Retries++ < MaxBackdropRetries)
+            {
+                _backdropPending = true;
+                backdrop.Guess = TabBackdrop.FromTree(tab) is { } guess ? Frozen(guess.Color) : null;
+                continue;
+            }
+
+            backdrop.Done = true;
+            backdrop.Guess = null;
+            var sampled = TabBackdrop.Describe(rendered, failure);
+            if ((rendered ?? TabBackdrop.FromTree(tab)) is { } behind)
+            {
+                backdrop.Brush = Frozen(behind.Color);
+                _log.Info(Inv($"colorizer: tabs sit on {behind.Color.ToHex()} ({behind.Source}); project text and x are chosen against it (sample {Ms(0, sampleTicks):0.0} ms). [{TabBackdrop.Explain(tab, sampled)}]"));
+            }
+            else
+            {
+                _log.Info("colorizer: nothing solid behind the tabs; project text and x are chosen against each tab's own background, else the theme surface. [" + TabBackdrop.Explain(tab, sampled) + "]");
+            }
+        }
+    }
+
+    /// <summary>A tab of <paramref name="pane"/> read in this pass.</summary>
+    private TabItem? FirstTab(DependencyObject pane)
+    {
+        foreach (var entry in _read)
+            if (ReferenceEquals(VisualTreeHelper.GetParent(entry.Tab), pane)) return entry.Tab;
+        return null;
+    }
+
+    private static Brush Frozen(Rgb c)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
+        brush.Freeze();
+        return brush;
     }
 
     private FileKind KindOf(object key)
@@ -796,7 +924,10 @@ public sealed class DocumentTabColorizer
         _signature.Clear();
         foreach (var entry in _read)
             _signature.Add(new Signature(entry.Tab, entry.Title, entry.IsSelected, entry.DocumentKey, entry.Tab.Style));
-        _signatureValid = true;
+        // A pane not laid out yet had no backdrop to find: pass again on the next layout, a bounded
+        // number of times (a pane that never lays out must not keep the hot path busy).
+        _signatureValid = !_backdropPending; // a pane still to settle: pass again on the next layout (bounded per pane)
+        _backdropPending = false;
     }
 
     // ---- status, faults, logging ----

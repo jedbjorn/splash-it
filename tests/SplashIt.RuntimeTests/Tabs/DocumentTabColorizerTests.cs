@@ -21,7 +21,7 @@ public class DocumentTabColorizerTests
     private sealed class Rig
     {
         public readonly object P1 = new DocKey("P1"), P2 = new DocKey("P2"), F1 = new DocKey("F1"), T1 = new DocKey("T1");
-        public readonly Style Original = HostTabs.RevitLikeStyle(UiTheme.Light);
+        public readonly Style Original;
         public readonly TabControl Strip;
         public readonly FakeSurface Surface;
         public readonly FakeDocuments Documents = new();
@@ -31,8 +31,9 @@ public class DocumentTabColorizerTests
         public readonly TabStyleFactory Styles = new();
         public readonly DocumentTabColorizer Colorizer;
 
-        public Rig(bool openAll = true, Func<long>? clock = null)
+        public Rig(bool openAll = true, Func<long>? clock = null, Style? original = null)
         {
+            Original = original ?? HostTabs.RevitLikeStyle(UiTheme.Light);
             Strip = HostTabs.Strip(Original, UiTheme.Light,
                 "P1 - L1", "P1 - L2", "P2 - L1", "F1 - Ref. Level", "T1 - L1", "Unresolved - L1");
             Surface = new FakeSurface(Strip);
@@ -58,7 +59,7 @@ public class DocumentTabColorizerTests
 
         public IEnumerable<TabItem> Tabs => Strip.Items.Cast<TabItem>();
 
-        public Color Fill(int i) => ((SolidColorBrush)Tab(i).Background).Color;
+        public Color Fill(int i) => HostTabs.FillOf(Tab(i).Background);
     }
 
     private sealed record DocKey(string Name);
@@ -260,7 +261,7 @@ public class DocumentTabColorizerTests
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
 
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), HostTabs.FillOf(tab.Background));
             Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(0)); // P2, now first
             Assert.True(rig.Surface.Invalidations >= 2);
         });
@@ -529,6 +530,161 @@ public class DocumentTabColorizerTests
         });
     }
 
+    /// <summary>
+    /// #30/#31 (coordinator's resolution of review m1): a project tab's text and × are chosen against
+    /// what is behind the tab, found once per pane by walking its visual parents, logged, and found
+    /// again after a theme change. Here the strip is the stand-in's well; a near-black strip makes the
+    /// same project's × white where the light surface would make it black.
+    /// </summary>
+    [Fact]
+    public void ProjectContrast_IsChosenAgainstWhatIsBehindTheTabs_FoundOncePerPane()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#1E1E1E")); // a dark strip under a light-theme tab style
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+            rig.Colorizer.Start();
+            HostTabs.Layout(root);
+            // The Start pass does not sample (render data may be stale): it uses the tree's answer, unsettled.
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            rig.Events.Layout(); // the next layout pass samples
+            HostTabs.Layout(root);
+
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E"));
+            Assert.Contains(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E (rendered"));
+            // The × is chosen against the dark strip: white, though the theme surface is white.
+            var close = TabCloseGlyph.FindButton(rig.Tab(0))!;
+            Assert.Equal(Colors.White, ((SolidColorBrush)close.Foreground).Color);
+
+            // Passes reuse it: no new walk, no new log line.
+            rig.Colorizer.Apply(SplashItSettings.Default);
+            HostTabs.Layout(root);
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on"));
+
+            // A theme change finds it again.
+            rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#F0F0F0"));
+            rig.Events.Sink!.OnThemeChanged(UiTheme.Light);
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on #F0F0F0")); // the old theme is still drawn: not sampled yet
+            HostTabs.Layout(root);
+            rig.Events.Layout(); // the next layout pass samples the new theme
+            HostTabs.Layout(root);
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on #F0F0F0"));
+            Assert.Equal(Colors.Black, ((SolidColorBrush)TabCloseGlyph.FindButton(rig.Tab(0))!.Foreground).Color);
+        });
+    }
+
+    /// <summary>
+    /// Delta review D-m1: the backdrop is worked out at the top of a pass, before any style is
+    /// assigned, and sampled only in a layout pass. Here the tabs' own native background is opaque
+    /// (#E0E0E0) and the selected tab is not a project, so in the Start pass no tab offers a point;
+    /// a tab styled earlier in that pass (its render data still the native #E0E0E0) must not be
+    /// sampled. After a layout the styled project tabs offer the gap before their ×: the strip.
+    /// </summary>
+    [Fact]
+    public void Backdrop_IsNotSampledFromATabStyledEarlierInThePass()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig(original: HostTabs.RevitLikeStyle(UiTheme.Light, unselectedBackground: "#FFE0E0E0"));
+            rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#1E1E1E"));
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+            rig.Colorizer.Start();
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            for (var i = 0; i < 3; i++)
+            {
+                HostTabs.Layout(root);
+                rig.Events.Layout();
+            }
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            Assert.Contains(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E (rendered"));
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on #E0E0E0"));
+        });
+    }
+
+    /// <summary>
+    /// Delta review D-m2: the wait for a sample is bounded per pane, and starts over on Stop. Here no
+    /// tab can be sampled (no close button to measure, no hidden one to look under), so the pane
+    /// settles for the tree's answer after <see cref="DocumentTabColorizer.MaxBackdropRetries"/> layout
+    /// passes; after Stop and Start it waits the full budget again.
+    /// </summary>
+    [Fact]
+    public void BackdropWait_IsBoundedPerPane_AndStartsOverOnStop()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig(original: HostTabs.RevitLikeStyle(UiTheme.Light, closeName: "NotACloseButton"));
+            rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#1E1E1E"));
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+
+            for (var round = 0; round < 2; round++)
+            {
+                var before = rig.Log.Lines.Count(l => l.Contains("tabs sit on"));
+                rig.Colorizer.Start();
+                for (var i = 0; i < DocumentTabColorizer.MaxBackdropRetries - 3; i++)
+                {
+                    HostTabs.Layout(root);
+                    rig.Events.Layout();
+                }
+                Assert.Equal(before, rig.Log.Lines.Count(l => l.Contains("tabs sit on"))); // still waiting
+                for (var i = 0; i < 10; i++)
+                {
+                    HostTabs.Layout(root);
+                    rig.Events.Layout();
+                }
+                Assert.Equal(before + 1, rig.Log.Lines.Count(l => l.Contains("tabs sit on"))); // settled once
+                Assert.Contains(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E (Border")); // the painted search
+                rig.Colorizer.Stop();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Review n5: once a laid-out pane's backdrop is settled, unchanged passes are back to no style
+    /// assignment and no allocation.
+    /// </summary>
+    [Fact]
+    public void LaidOutPane_AfterItsBackdropIsSettled_UnchangedPassesAllocateNothing()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+            rig.Colorizer.Start();
+            for (var i = 0; i < DocumentTabColorizer.MaxBackdropRetries + 10; i++)
+            {
+                HostTabs.Layout(root);
+                rig.Events.Layout();
+            }
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            for (var i = 0; i < 20; i++) rig.Events.Layout(); // warm up (JIT)
+
+            using var changes = new StyleChangeCounter(rig.Tabs);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 500; i++) rig.Events.Layout();
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.Equal(0, changes.Count);
+            Assert.Equal(0, allocated);
+        });
+    }
+
+    /// <summary>A tab with nothing solid behind it (not in a tree yet) keeps the old rule: its own background, else the surface.</summary>
+    [Fact]
+    public void ProjectContrast_FallsBackToTheTabsOwnBackground_WhenNothingIsBehindIt()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.Start(); // never laid out: no pane
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            Assert.Equal(Colors.Black, ((SolidColorBrush)rig.Tab(0).Foreground).Color); // over the light surface
+        });
+    }
+
     [Fact]
     public void Stop_PutsTheCloseButtonsOwnColorBack()
     {
@@ -542,7 +698,7 @@ public class DocumentTabColorizerTests
 
             rig.Colorizer.Start();
             HostTabs.Layout(root);
-            Assert.Equal(((SolidColorBrush)rig.Tab(2).Foreground).Color, ((SolidColorBrush)close.Foreground).Color);
+            Assert.Equal(Colors.Black, ((SolidColorBrush)close.Foreground).Color); // #30: chosen against the strip under it (light)
             Assert.NotEqual(HostTabs.CloseGrey, ((SolidColorBrush)close.Foreground).Color);
             Assert.Equal(HostTabs.CloseGrey, ((SolidColorBrush)TabCloseGlyph.FindButton(rig.Tab(3))!.Foreground).Color); // family: native
 
@@ -663,7 +819,7 @@ public class DocumentTabColorizerTests
             rig.Events.Layout();
             rig.Events.Scan();
 
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[2]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[2]), HostTabs.FillOf(tab.Background));
         });
     }
 
@@ -777,7 +933,7 @@ public class DocumentTabColorizerTests
             rig.Strip.Items.Add(tab);
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), HostTabs.FillOf(tab.Background));
         });
     }
 
@@ -836,7 +992,7 @@ public class DocumentTabColorizerTests
             rig.Strip.Items.Add(tab);
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
-            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), HostTabs.FillOf(tab.Background));
         });
     }
 

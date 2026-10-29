@@ -85,6 +85,23 @@ public static class ColorMath
     public static Rgb TextColorFor(Rgb fill, double opacity, Rgb backdrop) =>
         TextColorFor(Blend(fill, opacity, backdrop));
 
+    /// <summary>
+    /// Black or white for text that crosses every one of <paramref name="backgrounds"/> (opaque):
+    /// whichever has the higher <em>minimum</em> WCAG contrast over them. A tie, or no background,
+    /// goes to black. With one background this is <see cref="TextColorFor(Rgb)"/>.
+    /// </summary>
+    public static Rgb TextColorForAll(params Rgb[] backgrounds)
+    {
+        ArgumentNullException.ThrowIfNull(backgrounds);
+        double black = double.MaxValue, white = double.MaxValue;
+        foreach (var background in backgrounds)
+        {
+            black = Math.Min(black, ContrastRatio(Black, background));
+            white = Math.Min(white, ContrastRatio(White, background));
+        }
+        return black >= white ? Black : White;
+    }
+
     private static double Clamp01(double value) =>
         double.IsNaN(value) ? 0 : Math.Clamp(value, 0, 1);
 }
