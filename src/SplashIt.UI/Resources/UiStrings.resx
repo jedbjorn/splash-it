@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    SplashIt.UI's user-facing strings: the settings window, the vendored gantt-it color
+    picker and dialogs. English only in v1 (decision #8). UiStrings.cs has one accessor
+    per entry; the runtime test UiStringsTests checks every accessor resolves here.
+
+    Partly copied from gantt-it src/GanttIt.Revit/Resources/Strings.resx (gantt-it commit
+    aa83f35, MIT, same owner): the Common_, Dialog_, Edit_, Color_ and Pick_ entries, word
+    for word, except Color_DialogTitle ("Section color" there, "Color" here). The Settings_,
+    Status_ and Preview_ entries are Splash-It's own.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Common_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Dialog_Items" xml:space="preserve">
+    <value>Items</value>
+  </data>
+  <data name="Edit_Cut" xml:space="preserve">
+    <value>Cu_t</value>
+    <comment>Text box context menu; _ marks the access key.</comment>
+  </data>
+  <data name="Edit_Copy" xml:space="preserve">
+    <value>_Copy</value>
+  </data>
+  <data name="Edit_Paste" xml:space="preserve">
+    <value>_Paste</value>
+  </data>
+  <data name="Color_DialogTitle" xml:space="preserve">
+    <value>Color</value>
+    <comment>Default picker title; the settings window passes the chip's name instead.</comment>
+  </data>
+  <data name="Color_Palette" xml:space="preserve">
+    <value>Palette</value>
+  </data>
+  <data name="Color_Recent" xml:space="preserve">
+    <value>Recent</value>
+  </data>
+  <data name="Color_Hex" xml:space="preserve">
+    <value>Hex</value>
+  </data>
+  <data name="Color_HexName" xml:space="preserve">
+    <value>Hex color</value>
+  </data>
+  <data name="Color_CurrentTip" xml:space="preserve">
+    <value>Current color</value>
+  </data>
+  <data name="Color_Apply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="Color_PickTip" xml:space="preserve">
+    <value>Pick from screen: click any pixel on any monitor (Esc cancels). Picks the color as displayed.</value>
+  </data>
+  <data name="Color_PickName" xml:space="preserve">
+    <value>Pick from screen</value>
+  </data>
+  <data name="Color_More" xml:space="preserve">
+    <value>More…</value>
+  </data>
+  <data name="Color_MoreName" xml:space="preserve">
+    <value>More colors</value>
+  </data>
+  <data name="Color_HexError" xml:space="preserve">
+    <value>Enter a color as #RRGGBB, for example #4F8EF7.</value>
+  </data>
+  <data name="Color_PickFailed" xml:space="preserve">
+    <value>Couldn't pick from the screen: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Pick_WindowTitle" xml:space="preserve">
+    <value>Pick a color</value>
+  </data>
+  <data name="Pick_Hint" xml:space="preserve">
+    <value>Click to pick · Esc to cancel</value>
+  </data>
+  <data name="Pick_ListFailed" xml:space="preserve">
+    <value>Windows did not list the monitors.</value>
+  </data>
+  <data name="Pick_AreaTooLarge" xml:space="preserve">
+    <value>The screen area {0} × {1} can't be captured.</value>
+    <comment>{0} width, {1} height in pixels.</comment>
+  </data>
+  <data name="Pick_NoAccess" xml:space="preserve">
+    <value>Windows did not give access to the screen.</value>
+  </data>
+  <data name="Pick_CopyRefused" xml:space="preserve">
+    <value>Windows refused to copy the screen.</value>
+  </data>
+  <data name="Pick_PointerFailed" xml:space="preserve">
+    <value>The pointer position could not be read.</value>
+  </data>
+  <data name="Pick_NoMonitors" xml:space="preserve">
+    <value>Windows reported no monitors.</value>
+  </data>
+  <data name="Settings_WindowTitle" xml:space="preserve">
+    <value>Splash-It Settings</value>
+  </data>
+  <data name="Settings_Heading" xml:space="preserve">
+    <value>Tab colors</value>
+  </data>
+  <data name="Settings_Subheading" xml:space="preserve">
+    <value>Colors every open file's tabs so you can see which tab belongs to which model. Projects get a solid fill, families a bar on the left edge; templates and other files keep Revit's look.</value>
+  </data>
+  <data name="Status_Active" xml:space="preserve">
+    <value>Active: open tabs are colored by file.</value>
+  </data>
+  <data name="Status_Off" xml:space="preserve">
+    <value>Off: tabs keep Revit's own look.</value>
+  </data>
+  <data name="Status_Unavailable" xml:space="preserve">
+    <value>Unavailable on this Revit build: {0}</value>
+    <comment>{0} the reason the tabs could not be found.</comment>
+  </data>
+  <data name="Status_UnavailableNoReason" xml:space="preserve">
+    <value>Unavailable on this Revit build: Splash-It could not find the document tabs. Tabs keep Revit's own look.</value>
+  </data>
+  <data name="Status_BlockedByPyRevit" xml:space="preserve">
+    <value>Blocked by pyRevit: pyRevit's tab coloring is running, so Splash-It stays off. Turn off pyRevit's tab coloring and restart Revit.</value>
+  </data>
+  <data name="Status_Faulted" xml:space="preserve">
+    <value>Stopped after an error: the tabs were restored. Restart Revit to try again.</value>
+  </data>
+  <data name="Settings_Enabled" xml:space="preserve">
+    <value>Color document tabs</value>
+  </data>
+  <data name="Settings_EnabledTip" xml:space="preserve">
+    <value>Off restores every tab's own look. Takes effect when you save.</value>
+  </data>
+  <data name="Settings_ProjectColors" xml:space="preserve">
+    <value>Project colors</value>
+  </data>
+  <data name="Settings_ProjectColorsHint" xml:space="preserve">
+    <value>Tab fill; each project takes the first free color.</value>
+  </data>
+  <data name="Settings_FamilyColors" xml:space="preserve">
+    <value>Family colors</value>
+  </data>
+  <data name="Settings_FamilyColorsHint" xml:space="preserve">
+    <value>Left-edge bar; each family takes the first free color.</value>
+  </data>
+  <data name="Settings_ProjectColorN" xml:space="preserve">
+    <value>Project color {0}</value>
+    <comment>{0} the 1-based position in the list.</comment>
+  </data>
+  <data name="Settings_FamilyColorN" xml:space="preserve">
+    <value>Family color {0}</value>
+    <comment>{0} the 1-based position in the list.</comment>
+  </data>
+  <data name="Settings_ChipName" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>Screen reader name of a chip: {0} Project color 3, {1} #RRGGBB.</comment>
+  </data>
+  <data name="Settings_ChipTip" xml:space="preserve">
+    <value>{0}: {1}. Click to change.</value>
+    <comment>{0} Project color 3, {1} #RRGGBB.</comment>
+  </data>
+  <data name="Settings_AddColor" xml:space="preserve">
+    <value>Add a color</value>
+  </data>
+  <data name="Settings_RemoveColor" xml:space="preserve">
+    <value>Remove the selected color</value>
+  </data>
+  <data name="Settings_MoveLeft" xml:space="preserve">
+    <value>Move the selected color left</value>
+  </data>
+  <data name="Settings_MoveRight" xml:space="preserve">
+    <value>Move the selected color right</value>
+  </data>
+  <data name="Settings_ResetColors" xml:space="preserve">
+    <value>Reset to defaults</value>
+  </data>
+  <data name="Settings_ResetColorsTip" xml:space="preserve">
+    <value>Put back this list's 12 default colors. Takes effect when you save.</value>
+  </data>
+  <data name="Settings_ColorCount" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>{0} colors in the list, {1} the maximum.</comment>
+  </data>
+  <data name="Settings_FillOpacity" xml:space="preserve">
+    <value>Fill opacity</value>
+  </data>
+  <data name="Settings_UnselectedOpacity" xml:space="preserve">
+    <value>Unselected tab opacity</value>
+  </data>
+  <data name="Settings_UnselectedOpacityTip" xml:space="preserve">
+    <value>A share of the fill opacity: the project's other tabs show its color at fill × this share; the selected tab shows the full fill.</value>
+  </data>
+  <data name="Settings_BarWidth" xml:space="preserve">
+    <value>Bar width</value>
+  </data>
+  <data name="Settings_BarOpacity" xml:space="preserve">
+    <value>Bar opacity</value>
+  </data>
+  <data name="Settings_Percent" xml:space="preserve">
+    <value>{0}%</value>
+    <comment>{0} a whole percent.</comment>
+  </data>
+  <data name="Settings_Pixels" xml:space="preserve">
+    <value>{0} px</value>
+    <comment>{0} whole pixels.</comment>
+  </data>
+  <data name="Settings_Preview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="Settings_PreviewHint" xml:space="preserve">
+    <value>Two projects (Tower, two views, the first selected; Annex), a family (Door) and a template, drawn with the settings above.</value>
+  </data>
+  <data name="Preview_Tower1" xml:space="preserve">
+    <value>Tower - Plan</value>
+    <comment>Sample tab: project Tower, selected.</comment>
+  </data>
+  <data name="Preview_Tower2" xml:space="preserve">
+    <value>Tower - 3D</value>
+    <comment>Sample tab: project Tower, second view.</comment>
+  </data>
+  <data name="Preview_Annex" xml:space="preserve">
+    <value>Annex - Plan</value>
+    <comment>Sample tab: a second project.</comment>
+  </data>
+  <data name="Preview_Family" xml:space="preserve">
+    <value>Door - Front</value>
+    <comment>Sample tab: a family.</comment>
+  </data>
+  <data name="Preview_Template" xml:space="preserve">
+    <value>Template - 3D</value>
+    <comment>Sample tab: a .rte template, never colored.</comment>
+  </data>
+  <data name="Preview_Off" xml:space="preserve">
+    <value>Coloring is off: every tab keeps Revit's own look.</value>
+    <comment>Under the preview when Color document tabs is unchecked.</comment>
+  </data>
+  <data name="Settings_Export" xml:space="preserve">
+    <value>Export…</value>
+  </data>
+  <data name="Settings_ExportTip" xml:space="preserve">
+    <value>Save these colors and sizes to a file to share. On/off is not included.</value>
+  </data>
+  <data name="Settings_Import" xml:space="preserve">
+    <value>Import…</value>
+  </data>
+  <data name="Settings_ImportTip" xml:space="preserve">
+    <value>Load colors and sizes from an export. Nothing changes until you save.</value>
+  </data>
+  <data name="Settings_ResetAssignments" xml:space="preserve">
+    <value>Reset assignments</value>
+  </data>
+  <data name="Settings_ResetAssignmentsTip" xml:space="preserve">
+    <value>Give the open files their colors again from the start of each list, in tab order.</value>
+  </data>
+  <data name="Settings_Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Settings_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Settings_Imported" xml:space="preserve">
+    <value>Imported from {0}; Save to apply.</value>
+    <comment>{0} the file name.</comment>
+  </data>
+  <data name="Settings_ImportFailed" xml:space="preserve">
+    <value>Couldn't import {0}:</value>
+    <comment>{0} the file name; the problems follow as a list.</comment>
+  </data>
+  <data name="Settings_Invalid" xml:space="preserve">
+    <value>Not saved. Fix these first:</value>
+    <comment>The validation problems follow as a list.</comment>
+  </data>
+  <data name="Settings_SaveFailed" xml:space="preserve">
+    <value>Couldn't save the settings: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Settings_Saved" xml:space="preserve">
+    <value>Saved. Open tabs were updated.</value>
+  </data>
+  <data name="Settings_ApplyFailed" xml:space="preserve">
+    <value>Saved, but the open tabs couldn't be updated: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Settings_Exported" xml:space="preserve">
+    <value>Exported to {0}.</value>
+    <comment>{0} the file name.</comment>
+  </data>
+  <data name="Settings_ExportFailed" xml:space="preserve">
+    <value>Couldn't export: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Settings_ExportInvalid" xml:space="preserve">
+    <value>Not exported. Fix these first:</value>
+    <comment>The validation problems follow as a list.</comment>
+  </data>
+  <data name="Settings_AssignmentsReset" xml:space="preserve">
+    <value>The open files have their colors again from the start of each list.</value>
+  </data>
+  <data name="Settings_ResetAssignmentsFailed" xml:space="preserve">
+    <value>Couldn't reset assignments: {0}</value>
+    <comment>{0} the error message.</comment>
+  </data>
+  <data name="Settings_DiscardTitle" xml:space="preserve">
+    <value>Unsaved changes</value>
+  </data>
+  <data name="Settings_DiscardMessage" xml:space="preserve">
+    <value>Close without saving your changes?</value>
+  </data>
+  <data name="Settings_Discard" xml:space="preserve">
+    <value>Discard</value>
+  </data>
+  <data name="Settings_FileFilter" xml:space="preserve">
+    <value>Splash-It settings (*.json)|*.json|All files (*.*)|*.*</value>
+    <comment>File dialog filter: label|pattern pairs.</comment>
+  </data>
+  <data name="Settings_ExportTitle" xml:space="preserve">
+    <value>Export Splash-It settings</value>
+  </data>
+  <data name="Settings_ImportTitle" xml:space="preserve">
+    <value>Import Splash-It settings</value>
+  </data>
+  <data name="Settings_ExportFileName" xml:space="preserve">
+    <value>splash-it-settings.json</value>
+  </data>
+</root>

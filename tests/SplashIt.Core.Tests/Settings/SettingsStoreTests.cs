@@ -24,6 +24,7 @@ public sealed class SettingsStoreTests : IDisposable
         ProjectColors = [Rgb.Parse("#112233"), Rgb.Parse("#ABCDEF"), Rgb.Parse("#FF0000")],
         FamilyColors = [Rgb.Parse("#00FF00")],
         ProjectFillOpacity = 40,
+        ProjectUnselectedOpacity = 70,
         FamilyBarWidth = 6,
         FamilyBarOpacity = 10,
     };
@@ -69,8 +70,10 @@ public sealed class SettingsStoreTests : IDisposable
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var names = doc.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
         Assert.Equal(
-            ["schemaVersion", "enabled", "projectColors", "familyColors", "projectFillOpacity", "familyBarWidth", "familyBarOpacity"],
+            ["schemaVersion", "enabled", "projectColors", "familyColors", "projectFillOpacity", "projectUnselectedOpacity",
+             "familyBarWidth", "familyBarOpacity"],
             names);
+        Assert.Equal(70, doc.RootElement.GetProperty("projectUnselectedOpacity").GetInt32());
         Assert.Equal(1, doc.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("#ABCDEF", doc.RootElement.GetProperty("projectColors")[1].GetString());
     }
@@ -226,8 +229,10 @@ public sealed class SettingsStoreTests : IDisposable
     public void Validate_BadOpacity_IsRejected(int opacity)
     {
         var fill = (SplashItSettings.Default with { ProjectFillOpacity = opacity }).Validate();
+        var unselected = (SplashItSettings.Default with { ProjectUnselectedOpacity = opacity }).Validate();
         var bar = (SplashItSettings.Default with { FamilyBarOpacity = opacity }).Validate();
         Assert.Equal([$"Project fill opacity must be from 10 to 100; it is {opacity}."], fill);
+        Assert.Equal([$"Unselected tab opacity must be from 10 to 100; it is {opacity}."], unselected);
         Assert.Equal([$"Family bar opacity must be from 10 to 100; it is {opacity}."], bar);
     }
 
@@ -236,7 +241,10 @@ public sealed class SettingsStoreTests : IDisposable
     [InlineData(55)]
     [InlineData(100)]
     public void Validate_OpacityInRange_IsValid(int opacity) =>
-        Assert.Empty((SplashItSettings.Default with { ProjectFillOpacity = opacity, FamilyBarOpacity = opacity }).Validate());
+        Assert.Empty((SplashItSettings.Default with
+        {
+            ProjectFillOpacity = opacity, ProjectUnselectedOpacity = opacity, FamilyBarOpacity = opacity,
+        }).Validate());
 
     [Fact]
     public void Validate_ListsEveryProblem_InFieldOrder()
@@ -246,6 +254,7 @@ public sealed class SettingsStoreTests : IDisposable
             ProjectColors = Colors(13),
             FamilyColors = [],
             ProjectFillOpacity = 5,
+            ProjectUnselectedOpacity = 0,
             FamilyBarWidth = 9,
             FamilyBarOpacity = 101,
         };
@@ -254,6 +263,7 @@ public sealed class SettingsStoreTests : IDisposable
             "Project colors must have from 1 to 12 colors; there are 13.",
             "Family colors must have from 1 to 12 colors; there are 0.",
             "Project fill opacity must be from 10 to 100; it is 5.",
+            "Unselected tab opacity must be from 10 to 100; it is 0.",
             "Family bar width must be from 1 to 6; it is 9.",
             "Family bar opacity must be from 10 to 100; it is 101.",
         ], bad.Validate());
@@ -283,6 +293,10 @@ public sealed class SettingsStoreTests : IDisposable
     [InlineData("projectFillOpacity", "150", 100)]
     [InlineData("projectFillOpacity", "55.4", 55)]
     [InlineData("projectFillOpacity", "1e9", 100)]
+    [InlineData("projectUnselectedOpacity", "9", 10)]
+    [InlineData("projectUnselectedOpacity", "0", 10)]
+    [InlineData("projectUnselectedOpacity", "250", 100)]
+    [InlineData("projectUnselectedOpacity", "49.6", 50)]
     [InlineData("familyBarOpacity", "9", 10)]
     [InlineData("familyBarOpacity", "101", 100)]
     [InlineData("familyBarWidth", "0", 1)]
@@ -297,12 +311,56 @@ public sealed class SettingsStoreTests : IDisposable
         var actual = key switch
         {
             "projectFillOpacity" => read.ProjectFillOpacity,
+            "projectUnselectedOpacity" => read.ProjectUnselectedOpacity,
             "familyBarOpacity" => read.FamilyBarOpacity,
             _ => read.FamilyBarWidth,
         };
         Assert.Equal(expected, actual);
         Assert.Empty(read.Validate());
         Assert.Contains(_log, l => l.Contains(key));
+    }
+
+    [Fact]
+    public void Read_FileWithoutUnselectedOpacity_Reads50_AndKeepsEverythingElse()
+    {
+        // A settings file written before decision #23 (same schema 1) has no projectUnselectedOpacity.
+        var read = SplashItSettings.FromJson("""
+            {
+              "schemaVersion": 1,
+              "enabled": false,
+              "projectColors": ["#112233"],
+              "familyColors": ["#00FF00"],
+              "projectFillOpacity": 40,
+              "familyBarWidth": 6,
+              "familyBarOpacity": 10
+            }
+            """, _log.Add);
+
+        Assert.Equal(50, read.ProjectUnselectedOpacity);
+        Assert.Equal(SplashItDefaults.ProjectUnselectedOpacity, read.ProjectUnselectedOpacity);
+        Assert.False(read.Enabled);
+        Assert.Equal(40, read.ProjectFillOpacity);
+        Assert.Equal(6, read.FamilyBarWidth);
+        Assert.Empty(read.Validate());
+        Assert.Contains(_log, l => l.Contains("no projectUnselectedOpacity; using 50", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RoundTrip_UnselectedOpacity_ThroughTheFile()
+    {
+        var path = _temp.File("settings.json");
+        foreach (var share in new[] { 10, 50, 73, 100 })
+        {
+            (Custom() with { ProjectUnselectedOpacity = share }).Write(path);
+            Assert.Equal(share, SplashItSettings.Read(path).ProjectUnselectedOpacity);
+        }
+    }
+
+    [Fact]
+    public void Equality_IncludesUnselectedOpacity()
+    {
+        Assert.NotEqual(SplashItSettings.Default, SplashItSettings.Default with { ProjectUnselectedOpacity = 60 });
+        Assert.Equal(SplashItSettings.Default with { ProjectUnselectedOpacity = 60 }, SplashItSettings.Default with { ProjectUnselectedOpacity = 60 });
     }
 
     [Fact]
@@ -537,23 +595,22 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Write_RetriesWhileAnotherProcessBrieflyLocksTheFile()
+    public void Write_RetriesWhileAnotherProcessBrieflyLocksTheFile()
     {
         // A reader without FileShare.Delete (an antivirus scanner, a sync client) makes
         // Windows refuse the replace; the write retries and succeeds once it lets go.
         // Elsewhere the rename never waits on readers, so the first attempt succeeds.
+        // The reader lets go when the write logs its first "retrying" (logged before the
+        // wait), so the retry succeeds whatever the machine's load: no timer races the write.
         var path = _temp.File("settings.json");
         SplashItSettings.Default.Write(path);
 
-        var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var release = Task.Run(async () =>
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Custom().Write(path, line =>
         {
-            await Task.Delay(60);
-            held.Dispose();
+            _log.Add(line);
+            if (line.Contains("retrying", StringComparison.Ordinal)) held.Dispose();
         });
-
-        Custom().Write(path, _log.Add);
-        await release;
 
         Assert.Equal(Custom(), SplashItSettings.Read(path));
         Assert.Equal(["settings.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
@@ -596,7 +653,7 @@ public sealed class SettingsStoreTests : IDisposable
                     using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                     using (var streamReader = new StreamReader(stream))
                         text = streamReader.ReadToEnd();
-                    reads++;
+                    Interlocked.Increment(ref reads);
                     var log = new List<string>();
                     var s = SplashItSettings.FromJson(text, log.Add);
                     if (log.Count > 0 || (s != a && s != b)) Interlocked.Increment(ref bad);
@@ -611,13 +668,21 @@ public sealed class SettingsStoreTests : IDisposable
             }
         });
 
+        // Start writing only once the reader is reading: under a busy test run the thread
+        // pool can start the reader task after all 200 writes are done.
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (Volatile.Read(ref reads) == 0 && waited.Elapsed < TimeSpan.FromSeconds(30)) await Task.Delay(1);
+        var readsBefore = Volatile.Read(ref reads);
+        Assert.True(readsBefore > 0, "the reader never started");
+
         // Every write must succeed (on Windows too, with the reader holding the file).
         for (var i = 0; i < 200; i++) (i % 2 == 0 ? b : a).Write(path);
+        var readsDuring = Volatile.Read(ref reads) - readsBefore;
         stop.Cancel();
         await reader;
 
         Assert.Equal(0, bad);
-        Assert.True(reads > 0);
+        Assert.True(readsDuring > 0, "no read overlapped the writes");
     }
 
     // --------------------------------------------------------------- misc

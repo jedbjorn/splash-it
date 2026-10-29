@@ -27,4 +27,9 @@
     <ProjectReference Include="..\SplashIt.Core\SplashIt.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The preview's style seam (IPreviewTabStyler) is internal; the runtime tests swap it. -->
+    <InternalsVisibleTo Include="SplashIt.RuntimeTests" />
+  </ItemGroup>
+
 </Project>

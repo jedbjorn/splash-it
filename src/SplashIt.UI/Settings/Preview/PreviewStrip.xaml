@@ -1,0 +1,80 @@
+<UserControl x:Class="SplashIt.UI.Settings.Preview.PreviewStrip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:preview="clr-namespace:SplashIt.UI.Settings.Preview"
+             Focusable="False"
+             AutomationProperties.AutomationId="Settings.Preview">
+    <!--
+        The settings window's Preview (spec #1, Settings window): plain WPF TabItems — two
+        projects (Tower selected, plus a second Tower view), one family and one .rte
+        template — styled through PreviewStrip.Styler from the window's unsaved values. With
+        "Color document tabs" off, every tab keeps the native style and a note says so.
+    -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/SplashIt.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- A flat, Revit-like document tab: the base every preview style is BasedOn. -->
+            <Style x:Key="PreviewTabBase" TargetType="TabItem">
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="Background" Value="{StaticResource HoverBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Focusable" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TabItem">
+                            <Grid Margin="0,0,2,0" SnapsToDevicePixels="True">
+                                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="1,1,1,0" Padding="8,6,6,6">
+                                    <!-- Like Revit's tabs, a narrow tab trims its title; the close glyph stays. -->
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Right" Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8"
+                                                   Margin="6,1,0,0" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
+                                        <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   Foreground="{TemplateBinding Foreground}" />
+                                    </DockPanel>
+                                </Border>
+                                <Rectangle VerticalAlignment="Top" Height="3"
+                                           Fill="{Binding (preview:PreviewTab.AccentBrush), RelativeSource={RelativeSource TemplatedParent}}" />
+                                <Rectangle HorizontalAlignment="Left"
+                                           Width="{Binding (preview:PreviewTab.BarWidth), RelativeSource={RelativeSource TemplatedParent}}"
+                                           Fill="{Binding (preview:PreviewTab.BarBrush), RelativeSource={RelativeSource TemplatedParent}}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <ControlTemplate x:Key="StripTemplate" TargetType="TabControl">
+                <Border Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource SurfaceBrush}"
+                        BorderThickness="0,0,0,3" Padding="6,8,6,0" SnapsToDevicePixels="True">
+                    <!-- One row of equal tabs, as many as fit: the strip never wraps. -->
+                    <UniformGrid Rows="1" IsItemsHost="True" />
+                </Border>
+            </ControlTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <StackPanel>
+    <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3" ClipToBounds="True">
+        <TabControl x:Name="Strip" Template="{StaticResource StripTemplate}" IsHitTestVisible="False" Focusable="False">
+            <TabItem x:Name="Tower1Tab" AutomationProperties.AutomationId="Settings.Preview.Tower1" />
+            <TabItem x:Name="Tower2Tab" AutomationProperties.AutomationId="Settings.Preview.Tower2" />
+            <TabItem x:Name="AnnexTab" AutomationProperties.AutomationId="Settings.Preview.Annex" />
+            <TabItem x:Name="FamilyTab" AutomationProperties.AutomationId="Settings.Preview.Family" />
+            <TabItem x:Name="TemplateTab" AutomationProperties.AutomationId="Settings.Preview.Template" />
+        </TabControl>
+    </Border>
+    <!-- With coloring off, every tab is native and this says why. -->
+    <TextBlock x:Name="OffNote" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0" Visibility="Collapsed"
+               AutomationProperties.AutomationId="Settings.Preview.OffNote" />
+    </StackPanel>
+</UserControl>
