@@ -42,9 +42,9 @@ public sealed class App : IExternalApplication
     public Result OnStartup(UIControlledApplication application)
     {
         _application = application;
-        Log = new FileLog(FileLog.DefaultFolder);
         try
         {
+            Log = new FileLog(FileLog.DefaultFolder);
             var version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
             Log.Info($"Splash-It {version} starting in Revit {application.ControlledApplication.VersionNumber}.");
 

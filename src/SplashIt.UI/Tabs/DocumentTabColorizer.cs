@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -42,6 +43,14 @@ public sealed class DocumentTabColorizer
     /// <summary>Faults in a row that stop the colorizer for the session.</summary>
     public const int MaxConsecutiveFaults = 3;
 
+    /// <summary>
+    /// How many times within <see cref="RecaptureWindowMs"/> a tab may be restyled by someone
+    /// else (and re-adopted) before the colorizer leaves it alone (review m5).
+    /// </summary>
+    public const int MaxRecaptures = 5;
+
+    public const long RecaptureWindowMs = 10_000;
+
     private readonly ITabSurface _surface;
     private readonly IDocumentInfo _documents;
     private readonly IColorizerEventSource _events;
@@ -49,6 +58,7 @@ public sealed class DocumentTabColorizer
     private readonly IForeignColorizerGuard? _guard;
     private readonly ILog _log;
     private readonly Dispatcher _dispatcher;
+    private readonly Func<long> _clockMs;
     private readonly Sink _sink;
 
     private readonly Dictionary<object, FileKind> _kinds = new();
@@ -66,6 +76,7 @@ public sealed class DocumentTabColorizer
     private bool _signatureValid;
     private int _generation;
     private int _consecutiveFaults;
+    private double _guardMs;
     private string _lastCounts = "";
 
     public DocumentTabColorizer(
@@ -74,7 +85,8 @@ public sealed class DocumentTabColorizer
         IColorizerEventSource events,
         ITabStyleFactory styles,
         IForeignColorizerGuard? guard = null,
-        ILog? log = null)
+        ILog? log = null,
+        Func<long>? clockMs = null)
     {
         _surface = surface ?? throw new ArgumentNullException(nameof(surface));
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
@@ -83,6 +95,7 @@ public sealed class DocumentTabColorizer
         _guard = guard;
         _log = log ?? NullLog.Instance;
         _dispatcher = Dispatcher.CurrentDispatcher;
+        _clockMs = clockMs ?? (() => Environment.TickCount64);
         _sink = new Sink(this);
         _projects = new ColorAllocator<object>(Settings.ProjectColors.Count);
         _families = new ColorAllocator<object>(Settings.FamilyColors.Count);
@@ -246,7 +259,9 @@ public sealed class DocumentTabColorizer
         bool running;
         try
         {
+            var t0 = Stopwatch.GetTimestamp();
             running = _guard?.IsRunning(out detail) == true;
+            _guardMs = Ms(t0, Stopwatch.GetTimestamp());
         }
         catch (Exception ex)
         {
@@ -264,20 +279,26 @@ public sealed class DocumentTabColorizer
     {
         try
         {
+            // Split timings, so the start cost (AC11 step 7) can be judged part by part.
+            var t0 = Stopwatch.GetTimestamp();
             Theme = _events.CurrentTheme;
+            var t1 = Stopwatch.GetTimestamp();
             ConfigureAllocators();
             _kinds.Clear();
             _documents.GetOpenDocuments(_keys);
             foreach (var key in _keys) _kinds[key] = Classify(key);
             _keys.Clear();
+            var t2 = Stopwatch.GetTimestamp();
 
             _events.Subscribe(_sink);
             _running = true;
+            var t3 = Stopwatch.GetTimestamp();
             _signatureValid = false;
             SetStatus(ColorizerStatus.Active, null);
-            _log.Info(Inv($"colorizer: started; {_kinds.Count} documents open, {Theme} theme."));
             Pass(force: true);
+            var t4 = Stopwatch.GetTimestamp();
             _consecutiveFaults = 0;
+            _log.Info(Inv($"colorizer: started; {_kinds.Count} documents open, {Theme} theme (pyRevit check {_guardMs:0.0} ms, theme {Ms(t0, t1):0.0} ms, documents {Ms(t1, t2):0.0} ms, subscribe {Ms(t2, t3):0.0} ms, first pass {Ms(t3, t4):0.0} ms)."));
         }
         catch (Exception ex)
         {
@@ -506,7 +527,7 @@ public sealed class DocumentTabColorizer
                 return null;
         }
 
-        if (state.Unstylable) return null;
+        if (state.Unstylable || state.Abandoned) return null;
         try
         {
             return _styles.Create(state.BaseStyle, treatment, state.OriginalBackground, Theme);
@@ -558,10 +579,26 @@ public sealed class DocumentTabColorizer
         var current = tab.Style;
         if (_tabs.TryGetValue(tab, out var state))
         {
+            if (state.Abandoned) return state;
             var expected = state.Applied ?? state.BaseStyle;
             if (ReferenceEquals(current, expected) || TabStyleFactory.IsDerived(current)) return state;
-            // Replaced by someone else: what is there now is the new original.
+
+            // Replaced by someone else: what is there now is the new original. Someone who
+            // keeps doing it (another colorizer, a binding) would make every pass restyle the
+            // tab; past the limit the tab is theirs and is left alone (review m5).
+            var now = _clockMs();
+            if (now - state.RecaptureWindowStart > RecaptureWindowMs)
+            {
+                state.RecaptureWindowStart = now;
+                state.Recaptures = 0;
+            }
             state.Applied = null;
+            if (++state.Recaptures > MaxRecaptures)
+            {
+                state.Abandoned = true;
+                _log.Warn(Inv($"colorizer: a tab was restyled by something else {MaxRecaptures} times in {RecaptureWindowMs / 1000} s; it is left alone."));
+                return state;
+            }
             state.Capture(tab);
             return state;
         }
@@ -670,7 +707,15 @@ public sealed class DocumentTabColorizer
                 _log.Info("colorizer: status " + status);
                 break;
         }
-        StatusChanged?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            StatusChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // A subscriber's failure (the settings window) must not reach Revit's dispatcher (review m6).
+            _log.Warn("colorizer: a status listener failed (" + ex.GetType().Name + ").");
+        }
     }
 
     private void LogCounts(int projects, int families, int others, int unresolved)
@@ -682,6 +727,8 @@ public sealed class DocumentTabColorizer
     }
 
     private static string Site(Exception ex) => ex.TargetSite?.Name ?? "?";
+
+    private static double Ms(long from, long to) => (to - from) * 1000.0 / Stopwatch.Frequency;
 
     private static string Inv(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
 
@@ -704,6 +751,13 @@ public sealed class DocumentTabColorizer
         public int Generation { get; set; }
 
         public bool Unstylable { get; set; }
+
+        /// <summary>Left alone for good: something else keeps restyling it (review m5).</summary>
+        public bool Abandoned { get; set; }
+
+        public int Recaptures { get; set; }
+
+        public long RecaptureWindowStart { get; set; } = long.MinValue / 2;
 
         public void Capture(TabItem tab)
         {

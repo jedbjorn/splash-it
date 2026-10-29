@@ -64,6 +64,7 @@ public sealed class TreeTabSurface : ITabSurface
     private readonly Dictionary<Type, bool> _isHost = new();
     private readonly Dictionary<Type, PropertyInfo?> _titleProperty = new();
     private readonly Dictionary<TabItem, Resolved> _keys = new();
+    private readonly List<TabItem> _stale = new();
 
     private Visual? _host;
     private bool _invalid = true;
@@ -72,6 +73,8 @@ public sealed class TreeTabSurface : ITabSurface
     private long? _missingSince;
     private string? _lastFailure;
     private string _lastLog = "";
+    private int _readGeneration;
+    private (int Panes, int Roots, Type? Host, bool Full) _lastFound;
 
     /// <param name="getRoots">Clears and fills the list with the visual roots to search.</param>
     /// <param name="documentsOpen">Whether any document is open (so tabs are expected). Called on every read: keep it cheap.</param>
@@ -102,8 +105,11 @@ public sealed class TreeTabSurface : ITabSurface
     /// <summary>While documents are open, how long no pane may be found before the surface reports Unavailable.</summary>
     public TimeSpan UnavailableAfter { get; init; } = TimeSpan.FromSeconds(5);
 
-    /// <summary>While no pane is found, how often a read walks the tree again.</summary>
-    public TimeSpan RetryAfter { get; init; } = TimeSpan.FromMilliseconds(500);
+    /// <summary>
+    /// While no pane is found, or after reading the tabs failed, how often a read walks the
+    /// tree again (review m1: a read that throws on every pass costs at most one walk a second).
+    /// </summary>
+    public TimeSpan RetryAfter { get; init; } = TimeSpan.FromSeconds(1);
 
     public IReadOnlyCollection<string> PaneTypeNames => _paneNames;
 
@@ -141,6 +147,7 @@ public sealed class TreeTabSurface : ITabSurface
             }
             _missingSince = null;
 
+            var generation = ++_readGeneration;
             foreach (var pane in _panes)
             {
                 var items = pane.Items;
@@ -149,17 +156,23 @@ public sealed class TreeTabSurface : ITabSurface
                 {
                     if (generator.ContainerFromIndex(i) is not TabItem tab) continue;
                     var title = TitleOf(tab);
-                    into.Add(new SurfaceTab(tab, title, tab.IsSelected, KeyOf(tab, title)));
+                    into.Add(new SurfaceTab(tab, title, tab.IsSelected, KeyOf(tab, title, generation)));
                 }
             }
+            if (_keys.Count > into.Count) PruneKeys(generation);
             return TabSurfaceResult.Available;
         }
         catch (Exception ex)
         {
-            _invalid = true;
+            // Back off: no walk until RetryAfter has passed (review m1). A document event
+            // (Invalidate) still walks at once.
             into.Clear();
-            LogOnce("tab surface: reading the tabs failed (" + ex.GetType().Name + ").");
-            return TabSurfaceResult.Unavailable("Reading the tabs failed (" + ex.GetType().Name + ").");
+            _panes.Clear();
+            _keys.Clear();
+            _lastWalk = _clockMs();
+            _lastFailure = "Reading the tabs failed (" + ex.GetType().Name + ").";
+            LogOnce("tab surface: reading the tabs failed (" + ex.GetType().Name + "); retrying at most once a second.");
+            return TabSurfaceResult.Unavailable(_lastFailure);
         }
     }
 
@@ -177,13 +190,25 @@ public sealed class TreeTabSurface : ITabSurface
         return TitleProperty(tab.Header) ?? TitleProperty(tab.DataContext) ?? TitleProperty(tab.Content) ?? "";
     }
 
-    private object? KeyOf(TabItem tab, string title)
+    private object? KeyOf(TabItem tab, string title, int generation)
     {
         if (_keys.TryGetValue(tab, out var resolved) && string.Equals(resolved.Title, title, StringComparison.Ordinal))
+        {
+            if (resolved.Generation != generation) _keys[tab] = resolved with { Generation = generation };
             return resolved.Key;
+        }
         var key = _resolveKey(tab, title);
-        _keys[tab] = new Resolved(title, key);
+        _keys[tab] = new Resolved(title, key, generation);
         return key;
+    }
+
+    /// <summary>Drops cached keys of tabs that are gone (closed views), so they are not kept alive (review n4).</summary>
+    private void PruneKeys(int generation)
+    {
+        foreach (var (tab, resolved) in _keys)
+            if (resolved.Generation != generation) _stale.Add(tab);
+        foreach (var tab in _stale) _keys.Remove(tab);
+        _stale.Clear();
     }
 
     /// <summary>
@@ -245,7 +270,14 @@ public sealed class TreeTabSurface : ITabSurface
         foreach (var pane in _panes)
             if (PresentationSource.FromVisual(pane) is not null) _panesLive = true;
 
-        LogOnce(Inv($"tab surface: {_panes.Count} document panes ({PaneTypes()}) under {_roots.Count} roots, {visited} elements visited, host {(_host is null ? "none" : _host.GetType().Name)}."));
+        // The log line is built only when what was found changes, so a periodic rediscovery
+        // that finds the same panes allocates nothing for it (review m7).
+        var found = (_panes.Count, _roots.Count, _host?.GetType(), full);
+        if (found != _lastFound)
+        {
+            _lastFound = found;
+            LogOnce(Inv($"tab surface: {_panes.Count} document panes ({PaneTypes()}) under {_roots.Count} roots, {visited} elements visited, host {(_host is null ? "none" : _host.GetType().Name)}."));
+        }
         return _panes.Count > 0;
     }
 
@@ -344,5 +376,5 @@ public sealed class TreeTabSurface : ITabSurface
 
     private static string Inv(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
 
-    private readonly record struct Resolved(string Title, object? Key);
+    private readonly record struct Resolved(string Title, object? Key, int Generation);
 }

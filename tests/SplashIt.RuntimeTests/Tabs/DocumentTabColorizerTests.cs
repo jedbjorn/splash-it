@@ -64,6 +64,9 @@ public class DocumentTabColorizerTests
 
     private static Color Opaque(Rgb c) => Color.FromRgb(c.R, c.G, c.B);
 
+    /// <summary>An unselected project tab at the default fill (100 %) and Unselected tab opacity (50 %, #23).</summary>
+    private static Color Muted(Rgb c) => At(c, TabTreatment.DefaultUnselectedPercent);
+
     private static Color At(Rgb c, int percent) =>
         Color.FromArgb((byte)Math.Round(percent / 100.0 * 255, MidpointRounding.AwayFromZero), c.R, c.G, c.B);
 
@@ -86,8 +89,8 @@ public class DocumentTabColorizerTests
                 Assert.Same(rig.Original, rig.Tab(i).Style.BasedOn);
             }
             Assert.Same(rig.Tab(0).Style, rig.Tab(1).Style); // tabs of one file share it
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[0]), rig.Fill(0));
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[1]), rig.Fill(2));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), rig.Fill(0));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(2));
             // Family: a bar from Family colors.
             var bar = TabDecoration.GetDecoration(rig.Tab(3));
             Assert.NotNull(bar);
@@ -159,8 +162,8 @@ public class DocumentTabColorizerTests
                 FamilyBarOpacity = 30,
             });
 
-            Assert.Equal(At(red, 40), rig.Fill(0));
-            Assert.Equal(At(green, 40), rig.Fill(2));
+            Assert.Equal(At(red, 20), rig.Fill(0));   // unselected: 50 % of the 40 % fill (#23)
+            Assert.Equal(At(green, 20), rig.Fill(2));
             var bar = TabDecoration.GetDecoration(rig.Tab(3))!;
             Assert.Equal(6, bar.LeftBarWidth);
             Assert.Equal(At(SplashItDefaults.FamilyColors[0], 30), ((SolidColorBrush)bar.LeftBar!).Color);
@@ -256,8 +259,8 @@ public class DocumentTabColorizerTests
             rig.Surface.Bind(tab, p3);
             rig.Events.Sink!.OnDocumentOpened(p3);
 
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[1]), rig.Fill(0)); // P2, now first
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), ((SolidColorBrush)tab.Background).Color);
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(0)); // P2, now first
             Assert.True(rig.Surface.Invalidations >= 2);
         });
     }
@@ -298,13 +301,13 @@ public class DocumentTabColorizerTests
             rig.Surface.Bind(rig.Tab(0), rig.P1);
             rig.Surface.Bind(rig.Tab(1), rig.P1);
             rig.Events.Sink!.OnDocumentOpened(rig.P1);
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[1]), rig.Fill(0));
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[0]), rig.Fill(2));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(0));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), rig.Fill(2));
 
             rig.Colorizer.ResetAssignments();
 
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[0]), rig.Fill(0)); // P1 is first in the strip
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[1]), rig.Fill(2));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), rig.Fill(0)); // P1 is first in the strip
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(2));
         });
     }
 
@@ -488,8 +491,8 @@ public class DocumentTabColorizerTests
             rig.Documents.Open.Reverse(); // Revit lists them in another order
             rig.Colorizer.Start();
 
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[0]), rig.Fill(0));
-            Assert.Equal(Opaque(SplashItDefaults.ProjectColors[1]), rig.Fill(2));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[0]), rig.Fill(0));
+            Assert.Equal(Muted(SplashItDefaults.ProjectColors[1]), rig.Fill(2));
         });
     }
 
@@ -499,5 +502,68 @@ public class DocumentTabColorizerTests
         DocumentTabColorizer? colorizer = null;
         Screenshots.RunSta(() => colorizer = new Rig().Colorizer);
         Assert.Throws<InvalidOperationException>(() => colorizer!.Start());
+    }
+
+    [Fact]
+    public void ATabSomeoneKeepsRestyling_IsLeftAloneAfterTheLimit()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.Start();
+
+            Style? foreign = null;
+            for (var i = 0; i < DocumentTabColorizer.MaxRecaptures + 5; i++)
+            {
+                foreign = HostTabs.RevitLikeStyle(ThemeKind.Light); // another colorizer, every pass
+                rig.Tab(0).Style = foreign;
+                rig.Events.Layout();
+            }
+
+            Assert.Same(foreign, rig.Tab(0).Style);                       // theirs now: no fight loop
+            Assert.True(TabStyleFactory.IsDerived(rig.Tab(1).Style));     // the others stay colored
+            Assert.True(TabStyleFactory.IsDerived(rig.Tab(2).Style));
+            Assert.Single(rig.Log.Lines, l => l.Contains("left alone"));
+            Assert.Equal(ColorizerStatus.Active, rig.Colorizer.Status);
+        });
+    }
+
+    [Fact]
+    public void Stop_PutsTheCloseButtonsOwnColorBack()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+            var close = TabCloseGlyph.FindButton(rig.Tab(2))!;
+            Assert.Equal(HostTabs.CloseGrey, ((SolidColorBrush)close.Foreground).Color);
+
+            rig.Colorizer.Start();
+            HostTabs.Layout(root);
+            Assert.Equal(((SolidColorBrush)rig.Tab(2).Foreground).Color, ((SolidColorBrush)close.Foreground).Color);
+            Assert.NotEqual(HostTabs.CloseGrey, ((SolidColorBrush)close.Foreground).Color);
+            Assert.Equal(HostTabs.CloseGrey, ((SolidColorBrush)TabCloseGlyph.FindButton(rig.Tab(3))!.Foreground).Color); // family: native
+
+            rig.Colorizer.Stop();
+            HostTabs.Layout(root);
+            Assert.Equal(DependencyProperty.UnsetValue, close.ReadLocalValue(Control.ForegroundProperty));
+            Assert.Equal(HostTabs.CloseGrey, ((SolidColorBrush)close.Foreground).Color);
+        });
+    }
+
+    [Fact]
+    public void AStatusListenerThatThrows_DoesNotEscape()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.StatusChanged += (_, _) => throw new InvalidOperationException("listener");
+            rig.Colorizer.Start();
+            rig.Surface.UnavailableReason = "gone";
+            rig.Events.Layout();
+            Assert.Equal(ColorizerStatus.Unavailable, rig.Colorizer.Status);
+            Assert.Contains(rig.Log.Lines, l => l.Contains("status listener failed"));
+        });
     }
 }
