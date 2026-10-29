@@ -6,7 +6,7 @@ namespace SplashIt.UI.Tabs;
 /// <summary>The two tab shapes (decision #10).</summary>
 public enum TabTreatmentKind
 {
-    /// <summary>A project's tab: a solid fill.</summary>
+    /// <summary>A project's tab: a fill, solid then fading out before the close × (#30).</summary>
     ProjectFill = 0,
 
     /// <summary>A family's tab: a bar on the left edge plus a fixed top bar (#27); everything else native.</summary>
