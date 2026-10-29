@@ -173,6 +173,44 @@ public class ColorAllocatorTests
         Assert.Equal(0, allocator.Assign("doc"));
         Assert.Equal(0, allocator.Assign("DOC"));
         Assert.Equal(1, allocator.Count);
+        Assert.Equal(1, allocator.Assign("Other"));
+
+        // Release through a key that is equal only under the comparer: no ghost is left.
+        Assert.True(allocator.Release("Doc"));
+        Assert.Equal(1, allocator.Count);
+        Assert.Equal(["Other"], allocator.Keys);
+        Assert.False(allocator.TryGetIndex("doc", out _));
+        Assert.Equal(0, allocator.HolderCount(0));
+
+        // SetColorCount walks the keys; a ghost would throw KeyNotFoundException here.
+        allocator.SetColorCount(1);
+        Assert.True(allocator.TryGetIndex("other", out var other));
+        Assert.Equal(0, other);
+
+        // Reset over Keys gives no color back to the released document.
+        allocator.Reset(allocator.Keys);
+        Assert.Equal(["Other"], allocator.Keys);
+        Assert.False(allocator.TryGetIndex("DOC", out _));
+
+        Assert.True(allocator.Release("OTHER"));
+        Assert.Equal(0, allocator.Count);
+        Assert.Empty(allocator.Keys);
+    }
+
+    [Fact]
+    public void Keys_IsASnapshot_ReleasingEveryKeyWhileEnumeratingWorks()
+    {
+        var allocator = new ColorAllocator<string>(12);
+        foreach (var k in new[] { "A", "B", "C", "D" }) allocator.Assign(k);
+
+        var keys = allocator.Keys;
+        foreach (var key in allocator.Keys) Assert.True(allocator.Release(key));
+
+        Assert.Equal(0, allocator.Count);
+        Assert.Empty(allocator.Keys);
+        Assert.Equal(["A", "B", "C", "D"], keys); // the earlier snapshot did not change
+        Assert.False(keys is List<string>);
+        Assert.Throws<NotSupportedException>(() => ((IList<string>)keys).Add("E"));
     }
 
     [Theory]
