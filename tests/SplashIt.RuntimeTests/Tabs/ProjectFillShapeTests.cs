@@ -13,10 +13,11 @@ using SplashIt.UI.Tabs;
 namespace SplashIt.RuntimeTests.Tabs;
 
 /// <summary>
-/// #30 and #31: the project fill is solid from the left edge, then fades over a fixed 24 px that
-/// ends 2 px before the close button's measured slot, so the × sits on the strip; the selected tab's
-/// top line takes the same shape. Geometry (including a button that is not where Revit's is), the
-/// hover and narrow-tab edge cases, the 3:1 floor at a title's end, the × color, and restore.
+/// #36 (supersedes #34), with #31 and #33: the project fill is solid from the left edge to a fade start
+/// 26 px before the close button's measured slot (where #30's fade started), then fades linearly
+/// through the × to half its opacity at the tab's right edge; the selected tab's top line takes the
+/// same shape. Geometry (including a button that is not where Revit's is), hover and narrow tabs, the
+/// rendered backdrop sample (never on our fill), the 3:1 floor for titles and the ×, and restore.
 /// </summary>
 public class ProjectFillShapeTests
 {
@@ -27,57 +28,65 @@ public class ProjectFillShapeTests
     public static TheoryData<UiTheme> Themes => new() { UiTheme.Light, UiTheme.Dark };
 
     [Fact]
-    public void Default_IsA24PxFade_Ending2PxBeforeThe18PxCloseSlot_12PxAfterTheTitle()
+    public void Default_StartsTheFade26PxBeforeTheX_AndEndsAtHalfOpacityAtTheEdge()
     {
-        Assert.Equal(new ProjectFillShape(24, 2, 18, 12), ProjectFillShape.Default);
+        Assert.Equal(new ProjectFillShape(24, 2, 18, 12, 0.5, 16), ProjectFillShape.Default);
         Assert.Equal(ProjectFillShape.Default, new TabStyleFactory().ProjectFill);
-        Assert.Equal(10.5 / 24, ProjectFillShape.Default.TitleEndShare, 10); // a title's last column: about 44 %
-        Assert.Equal(1, new ProjectFillShape(0, 2, 18).TitleEndShare);       // no fade: the title is on the solid part
-        Assert.Equal(1, new ProjectFillShape(8, 2, 18).TitleEndShare);       // the fade starts after the title
+        Assert.Equal(26, Shape.StartBeforeClose);
+        Assert.Equal(44, Shape.TypicalRun);
+        Assert.Equal(1 - 0.5 * 13.5 / 44, Shape.TitleEndShare, 10); // a title's last column: about 85 %
+        var close = Shape.CloseShares();
+        Assert.Equal(16, close.Length);                              // one per column of the 16 px button
+        Assert.Equal(1 - 0.5 * 26.5 / 44, close[0], 10);
+        Assert.Equal(1 - 0.5 * 41.5 / 44, close[^1], 10);
+        Assert.Equal(1, Shape.ShareAt(-3, 44));                      // solid before the fade
+        Assert.Equal(0.75, Shape.ShareAt(22, 44), 10);
+        Assert.Equal(0.5, Shape.ShareAt(44, 44), 10);                // never transparent
+        Assert.Equal(0.5, Shape.ShareAt(90, 44), 10);
     }
 
-    /// <summary>The anchor is the gap before the button's left edge; with no button slot, the 18 px slot from the right edge.</summary>
+    /// <summary>The fade starts 26 px before the button's left edge (with no button slot, the 18 px slot from the right edge) and ends at the right edge.</summary>
     [Theory]
-    [InlineData(155, 137.0, 135)]
-    [InlineData(155, null, 135)]     // no slot: 155 - 18 - 2
-    [InlineData(350, 332.0, 330)]
-    [InlineData(101, 90.0, 88)]      // a button somewhere else: its slot wins
-    [InlineData(10, null, 0)]        // narrower than the slot: no fill, never negative
+    [InlineData(155, 137.0, 111)]
+    [InlineData(155, null, 111)]     // no slot: 155 - 18 - 26
+    [InlineData(350, 332.0, 306)]
+    [InlineData(101, 90.0, 64)]      // a button somewhere else: its slot wins
+    [InlineData(10, null, 0)]        // narrower than the solid part: fades from the left edge
     [InlineData(40, -5.0, 0)]
-    [InlineData(20, 30.0, 20)]       // never past the tab
-    [InlineData(0, null, 0)]
-    public void Anchor_IsTheGapBeforeTheCloseButton(double width, double? closeLeft, double expected) =>
-        Assert.Equal(expected, Shape.AnchorFor(width, closeLeft));
-
-    /// <summary>The fade is 24 px before the anchor; on a tab too narrow for that, it fades from the left edge.</summary>
-    [Theory]
-    [InlineData(135, 111, 135)]
-    [InlineData(24, 0, 24)]
-    [InlineData(10, 0, 10)]          // narrow: a shorter fade from the start
-    [InlineData(0, 0, 0)]
-    [InlineData(-5, 0, 0)]           // no negative widths
-    public void Fade_Is24PxWide_OrFromTheLeftEdgeOnANarrowTab(double anchor, double start, double end)
+    [InlineData(20, 30.0, 4)]
+    public void TheFade_StartsBeforeTheX_AndEndsAtTheRightEdge(double width, double? closeLeft, double start)
     {
-        var fade = Shape.FadeFor(anchor);
+        var fade = Shape.FadeFor(width, closeLeft);
         Assert.Equal(start, fade.Start);
-        Assert.Equal(end, fade.End);
-        Assert.True(fade.End >= fade.Start && fade.Start >= 0);
+        Assert.Equal(width, fade.End);
     }
+
+    [Fact]
+    public void ANonPositiveWidth_HasNoFade() => Assert.Equal((0.0, 0.0), Shape.FadeFor(0, null));
 
     // ---- live tabs ---------------------------------------------------------------------------------
 
-    /// <summary>A strip of project tabs on <paramref name="original"/> (default: the Revit-like style), the first selected, laid out.</summary>
+    /// <summary>
+    /// A strip of project tabs on <paramref name="original"/> (default: the Revit-like style), the first
+    /// selected, laid out; <paramref name="room"/> px of strip past the last tab.
+    /// </summary>
     private static (FrameworkElement Root, TabItem Selected, TabItem Unselected) Strip(UiTheme theme, double width,
-        Rgb? color = null, Style? original = null, string[]? titles = null, int fill = 100)
+        Rgb? color = null, Style? original = null, string[]? titles = null, int fill = 100, double room = 0)
     {
         original ??= HostTabs.RevitLikeStyle(theme);
         var strip = HostTabs.Strip(original, theme, titles ?? ["Tower - Floor Plan: L1", "Tower - Sheet: A101"]);
         var root = HostTabs.Host(strip, theme.Surface(), padding: 12);
-        HostTabs.Layout(root); // in a tree, so the backdrop walk finds what is behind the tabs
+        foreach (TabItem tab in strip.Items)
+            if (!double.IsNaN(width)) tab.Width = width;
+        HostTabs.Layout(root); // in a tree, so the backdrop search finds what is behind the tabs
+        if (room > 0)
+        {
+            strip.Width = strip.ActualWidth + room;
+            HostTabs.Layout(root);
+        }
         var factory = new TabStyleFactory();
         foreach (TabItem tab in strip.Items)
         {
-            if (!double.IsNaN(width)) tab.Width = width;
             var backdrop = TabBackdrop.Resolve(tab, tab.Background, theme).Color;
             tab.Style = factory.Create(original, TabTreatment.ProjectFill(color ?? Blue, fill), HostTabs.Brush(backdrop), theme);
         }
@@ -106,91 +115,103 @@ public class ProjectFillShapeTests
         Assert.True(Math.Abs(expected.R - actual.R) <= tolerance && Math.Abs(expected.G - actual.G) <= tolerance
                     && Math.Abs(expected.B - actual.B) <= tolerance, $"{what}: expected {expected}, got {actual}");
 
+    /// <summary>The share of the opacity the fade draws at <paramref name="x"/> on a fade from <paramref name="start"/> to <paramref name="end"/>.</summary>
+    private static double ShareAt(double x, double start, double end) => Shape.ShareAt(x - start, end - start);
+
     /// <summary>
-    /// At 101, 155, 250 and 350 px the fill and the selected tab's line end 2 px before the measured
-    /// button, and the fade is 24 px wide on every tab: drawn brushes, the adorner's extent and pixels.
+    /// At 101, 155, 250 and 350 px the fill and the selected tab's line start fading 26 px before the
+    /// measured button and run to half the opacity at the right edge: drawn brushes, the adorner's
+    /// extent, and pixels (solid, mid-fade, the last column: never the bare strip).
     /// </summary>
     [Theory]
     [InlineData(101)]
     [InlineData(155)]
     [InlineData(250)]
     [InlineData(350)]
-    public void TheFade_EndsAtTheAnchor_AndIs24PxWide_AtEveryWidth(double width)
+    public void TheFade_RunsFromBeforeTheX_ToHalfAtTheEdge_AtEveryWidth(double width)
     {
         Screenshots.RunSta(() =>
         {
             var theme = UiTheme.Light;
             var (root, selected, unselected) = Strip(theme, width);
             var bitmap = Screenshots.Render(root);
-            var well = HostTabs.ColorOf(HostTabs.Well(theme));
+            var well = HostTabs.Well(theme);
             foreach (var tab in new[] { selected, unselected })
             {
                 Assert.Equal(width, tab.ActualWidth);
-                var anchor = MeasuredCloseLeft(tab) - Shape.Gap;
-                Assert.Equal(anchor, Shape.AnchorFor(tab));
+                var start = MeasuredCloseLeft(tab) - Shape.StartBeforeClose;
+                Assert.Equal((start, width), Shape.FadeFor(tab));
 
+                var opacity = tab.IsSelected ? 1.0 : 0.5;
                 var brush = Assert.IsType<LinearGradientBrush>(tab.Background);
                 Assert.Equal(BrushMappingMode.Absolute, brush.MappingMode);
                 Assert.Equal(GradientSpreadMethod.Pad, brush.SpreadMethod);
-                Assert.Equal(anchor, brush.EndPoint.X);
-                Assert.Equal(Shape.FadeWidth, brush.EndPoint.X - brush.StartPoint.X);
-                Assert.Equal(0, brush.GradientStops[1].Color.A);
+                Assert.Equal(start, brush.StartPoint.X);
+                Assert.Equal(width, brush.EndPoint.X);
+                Assert.Equal((byte)Math.Round(opacity * 0.5 * 255, MidpointRounding.AwayFromZero), brush.GradientStops[1].Color.A);
 
-                // Pixels: solid before the fade, about half way at its middle, the strip from its end.
-                var opacity = tab.IsSelected ? 1.0 : 0.5;
-                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity, HostTabs.Well(theme))),
-                    Pixel(bitmap, root, tab, anchor - Shape.FadeWidth - 1.5, 10), 3, $"{width} solid");
-                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity / 2, HostTabs.Well(theme))),
-                    Pixel(bitmap, root, tab, anchor - Shape.FadeWidth / 2, 18.5), 8, $"{width} mid-fade");
-                Near(well, Pixel(bitmap, root, tab, anchor + 0.5, 10), 3, $"{width} past the fade");
+                // Pixels (row 18.5: below the title and the ×): solid before the fade, three quarters at its middle, half at the edge.
+                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity, well)), Pixel(bitmap, root, tab, start - 1.5, 18.5), 3, $"{width} solid");
+                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity * 0.75, well)), Pixel(bitmap, root, tab, (start + width) / 2, 18.5), 6, $"{width} mid-fade");
+                var last = Pixel(bitmap, root, tab, width - 0.5, 18.5);
+                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity * ShareAt(width - 0.5, start, width), well)), last, 6, $"{width} last column");
+                Assert.NotEqual(HostTabs.ColorOf(well), last); // no colorless column
             }
 
-            // The selected tab's line: the same shape and end (#30).
+            // The selected tab's line: the same shape, opaque before the fade, about half at the edge.
             var adorner = TabDecoration.FindAdorner(selected)!;
             var (fadeStart, end) = TabDecorationAdorner.TopAccentExtent(selected, selected.RenderSize, adorner.Spec);
-            Assert.Equal(MeasuredCloseLeft(selected) - Shape.Gap, end);
-            Assert.Equal(Shape.FadeWidth, end - fadeStart);
-            var accent = HostTabs.ColorOf(ColorMath.Darken(Blue, TabStyleFactory.AccentDarken));
-            Near(accent, Pixel(bitmap, root, selected, fadeStart - 1.5, 1.5), 3, $"{width} line before its fade");
-            Near(well, Pixel(bitmap, root, selected, end + 0.5, 1.5), 3, $"{width} line ends at the anchor");
+            Assert.Equal(MeasuredCloseLeft(selected) - Shape.StartBeforeClose, fadeStart);
+            Assert.Equal(width, end);
+            var fade = Assert.IsType<LinearGradientBrush>(adorner.Spec.TopAccentFadeBrush);
+            Assert.Equal(255, fade.GradientStops[0].Color.A);
+            Assert.Equal(128, fade.GradientStops[1].Color.A);
+            var accent = ColorMath.Darken(Blue, TabStyleFactory.AccentDarken);
+            Near(HostTabs.ColorOf(accent), Pixel(bitmap, root, selected, fadeStart - 1.5, 1.5), 3, $"{width} line before its fade");
+            var share = ShareAt(width - 0.5, fadeStart, width);
+            var underLine = ColorMath.Blend(Blue, share, well);
+            Near(HostTabs.ColorOf(ColorMath.Blend(accent, share, underLine)), Pixel(bitmap, root, selected, width - 0.5, 1.5), 8, $"{width} line at the edge");
             Assert.Null(TabDecoration.FindAdorner(unselected));
         });
     }
 
     /// <summary>
-    /// Review M2: a template whose close button is NOT at width - 18 (24 px wide, 7 px from the
-    /// edge, so its left edge is at width - 32). The fill and the line end 2 px before the measured
-    /// button, not where the right-edge fallback would put them.
+    /// Review M2: a template whose close button is NOT at width - 18 (24 px wide, 7 px from the edge,
+    /// so its left edge is at width - 32). The fade starts 26 px before the measured button, not where
+    /// the right-edge fallback would put it, and still runs to the edge.
     /// </summary>
     [Theory]
     [InlineData(155)]
     [InlineData(250)]
-    public void TheAnchor_IsMeasuredFromTheButton_NotTheRightEdge(double width)
+    public void TheFadeStart_IsMeasuredFromTheButton_NotTheRightEdge(double width)
     {
         Screenshots.RunSta(() =>
         {
             var theme = UiTheme.Dark;
-            var original = HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 7);
+            var original = HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 8);
             var (root, selected, unselected) = Strip(theme, width, original: original);
             var bitmap = Screenshots.Render(root);
-            var well = HostTabs.ColorOf(HostTabs.Well(theme));
-            var fallback = width - Shape.CloseSlot - Shape.Gap;
+            var well = HostTabs.Well(theme);
+            var fallback = width - Shape.CloseSlot - Shape.StartBeforeClose;
             foreach (var tab in new[] { selected, unselected })
             {
                 var measured = MeasuredCloseLeft(tab);
                 Assert.Equal(width - 32, measured);
                 Assert.Equal(measured, ProjectFillShape.CloseButtonLeft(tab));
                 var brush = Assert.IsType<LinearGradientBrush>(tab.Background);
-                Assert.Equal(measured - Shape.Gap, brush.EndPoint.X);
-                Assert.NotEqual(fallback, brush.EndPoint.X);
-                Assert.Equal(Shape.FadeWidth, brush.EndPoint.X - brush.StartPoint.X);
-                // Between the measured anchor and the fallback the strip shows, not the fill.
-                Near(well, Pixel(bitmap, root, tab, measured - Shape.Gap + 0.5, 18.5), 3, "past the measured anchor");
-                Near(well, Pixel(bitmap, root, tab, fallback - 1.5, 18.5), 3, "where a right-edge fade would still be drawing");
+                Assert.Equal(measured - Shape.StartBeforeClose, brush.StartPoint.X);
+                Assert.NotEqual(fallback, brush.StartPoint.X);
+                Assert.Equal(width, brush.EndPoint.X);
+                // Where a fallback fade would still be solid, the measured one is already fading.
+                var opacity = tab.IsSelected ? 1.0 : 0.5;
+                var x = fallback - 1.5;
+                Near(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity * ShareAt(x, brush.StartPoint.X, width), well)),
+                    Pixel(bitmap, root, tab, x, 18.5), 6, "inside the measured fade");
+                Assert.NotEqual(HostTabs.ColorOf(ColorMath.Blend(Blue, opacity, well)), Pixel(bitmap, root, tab, x, 18.5));
             }
             var spec = TabDecoration.FindAdorner(selected)!.Spec;
-            var (_, end) = TabDecorationAdorner.TopAccentExtent(selected, selected.RenderSize, spec);
-            Assert.Equal(MeasuredCloseLeft(selected) - Shape.Gap, end);
+            var (fadeStart, _) = TabDecorationAdorner.TopAccentExtent(selected, selected.RenderSize, spec);
+            Assert.Equal(MeasuredCloseLeft(selected) - Shape.StartBeforeClose, fadeStart);
         });
     }
 
@@ -201,16 +222,16 @@ public class ProjectFillShapeTests
         Screenshots.RunSta(() =>
         {
             var theme = UiTheme.Light;
-            var noButton = HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 7, closeName: "SomethingElse");
+            var noButton = HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 8, closeName: "SomethingElse");
             var (_, selected, unselected) = Strip(theme, 155, original: noButton);
             foreach (var tab in new[] { selected, unselected })
             {
                 Assert.Null(TabCloseGlyph.FindButton(tab));
                 Assert.Null(ProjectFillShape.CloseButtonLeft(tab));
-                Assert.Equal(155 - Shape.CloseSlot - Shape.Gap, ((LinearGradientBrush)tab.Background).EndPoint.X);
+                Assert.Equal(155 - Shape.CloseSlot - Shape.StartBeforeClose, ((LinearGradientBrush)tab.Background).StartPoint.X);
             }
 
-            var (_, other, _) = Strip(theme, 155, original: HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 7));
+            var (_, other, _) = Strip(theme, 155, original: HostTabs.RevitLikeStyle(theme, closeWidth: 24, closeRightInset: 8));
             Assert.NotNull(ProjectFillShape.CloseButtonLeft(other));
             Assert.NotEqual(155 - Shape.CloseSlot, ProjectFillShape.CloseButtonLeft(other));
         });
@@ -219,8 +240,8 @@ public class ProjectFillShapeTests
     /// <summary>
     /// Revit shows the × only on the selected or hovered tab, but keeps its slot (Hidden). On one
     /// unselected tab: show the × (what hover does), re-evaluate the fill and render; the fill's
-    /// pixels and the anchor are the same as before. A collapsed button falls back to the 18 px slot,
-    /// which on Revit's geometry is the same anchor.
+    /// pixels and the fade are the same as before. A collapsed button falls back to the 18 px slot,
+    /// which on Revit's geometry is the same start.
     /// </summary>
     [Fact]
     public void TheFade_DoesNotMove_WhenTheCloseButtonAppears()
@@ -230,7 +251,7 @@ public class ProjectFillShapeTests
             var (root, _, tab) = Strip(UiTheme.Light, 155);
             var button = TabCloseGlyph.FindButton(tab)!;
             Assert.Equal(Visibility.Hidden, button.Visibility); // unselected: hidden, as in Revit
-            var anchor = Shape.AnchorFor(tab);
+            var fade = Shape.FadeFor(tab);
             var before = Row(Screenshots.Render(root), root, tab, 18.5);
 
             foreach (var visibility in new[] { Visibility.Visible, Visibility.Hidden, Visibility.Visible })
@@ -239,19 +260,19 @@ public class ProjectFillShapeTests
                 HostTabs.Layout(root);
                 BindingOperations.GetMultiBindingExpression(tab, Control.BackgroundProperty)!.UpdateTarget(); // re-measure now
                 HostTabs.Layout(root);
-                Assert.Equal(anchor, Shape.AnchorFor(tab));
-                Assert.Equal(anchor, ((LinearGradientBrush)tab.Background).EndPoint.X);
+                Assert.Equal(fade, Shape.FadeFor(tab));
+                Assert.Equal(fade.Start, ((LinearGradientBrush)tab.Background).StartPoint.X);
                 Assert.Equal(before, Row(Screenshots.Render(root), root, tab, 18.5)); // the row under the ×, pixel for pixel
             }
 
             button.Visibility = Visibility.Collapsed; // a template that collapses it: the fallback slot
             HostTabs.Layout(root);
             Assert.Null(ProjectFillShape.CloseButtonLeft(tab));
-            Assert.Equal(anchor, Shape.AnchorFor(tab));
+            Assert.Equal(fade, Shape.FadeFor(tab));
         });
     }
 
-    /// <summary>A tab narrower than the fade fades from its left edge; one with no room has no fill. No negative widths.</summary>
+    /// <summary>A tab narrower than the solid part fades from its left edge to the right edge. No negative widths.</summary>
     [Theory]
     [InlineData(60)]
     [InlineData(40)]
@@ -265,19 +286,13 @@ public class ProjectFillShapeTests
             Screenshots.Render(root); // draws without throwing
             foreach (var tab in new[] { selected, unselected })
             {
-                var anchor = Shape.AnchorFor(tab);
-                Assert.InRange(anchor, 0, width);
-                var (start, end) = Shape.FadeFor(anchor);
+                var (start, end) = Shape.FadeFor(tab);
                 Assert.True(start >= 0 && end >= start, $"{width}: {start}..{end}");
-                if (end <= 0)
-                    Assert.Equal(0, Assert.IsType<SolidColorBrush>(tab.Background).Color.A); // no room: no fill
-                else
-                {
-                    var brush = Assert.IsType<LinearGradientBrush>(tab.Background);
-                    Assert.Equal(start, brush.StartPoint.X);
-                    Assert.Equal(end, brush.EndPoint.X);
-                    if (end < Shape.FadeWidth) Assert.Equal(0, start); // the fade starts at the left edge
-                }
+                Assert.Equal(width, end);
+                if (width < Shape.TypicalRun) Assert.Equal(0, start);
+                var brush = Assert.IsType<LinearGradientBrush>(tab.Background);
+                Assert.Equal(start, brush.StartPoint.X);
+                Assert.Equal(end, brush.EndPoint.X);
             }
             var spec = TabDecoration.FindAdorner(selected)?.Spec;
             if (spec is not null)
@@ -290,57 +305,72 @@ public class ProjectFillShapeTests
 
     // ---- what is behind the tab ---------------------------------------------------------------------
 
-    /// <summary>The walk finds the stand-in's strip: the first solid background behind the tab.</summary>
+    /// <summary>With strip past the last tab, the rendered sample reads it; the painted search agrees.</summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TheBackdrop_IsTheFirstSolidBackgroundBehindTheTab(UiTheme theme)
+    public void TheBackdrop_IsSampledFromTheStripPastTheLastTab(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
-            var (_, selected, _) = Strip(theme, 155);
+            var (_, selected, _) = Strip(theme, 155, room: 40);
             var behind = TabBackdrop.Behind(selected);
             Assert.NotNull(behind);
             Assert.Equal(HostTabs.Well(theme), behind!.Value.Color);
-            Assert.StartsWith("rendered", behind.Value.Source); // sampled from what the window draws
-            Assert.Equal(HostTabs.Well(theme), TabBackdrop.Rendered(selected)!.Value.Color);
+            Assert.Equal("rendered, the strip past the last tab", behind.Value.Source);
+            Assert.Equal(HostTabs.Well(theme), TabBackdrop.FromTree(selected)!.Value.Color);
             Assert.Equal(HostTabs.Well(theme), TabBackdrop.Resolve(selected, selected.Background, theme).Color);
         });
     }
 
     /// <summary>
-    /// Delta review D-M1: Revit leaves Hidden tabs at stale positions, over tabs that are drawn
-    /// (vm/2026/diag-2026.txt: tab 0, 142x20, vis=Hidden). A Hidden filled tab moved over another
-    /// tab's fill must not be sampled: the backdrop is still the strip, not that fill.
+    /// #36: the rendered sample never reads our fill. Every tab carries an opaque project fill, which
+    /// runs to each tab's right edge; one Hidden filled tab is left at a stale position over the strip
+    /// past the last tab (Revit does that, vm/2026/diag-2026.txt). The sample point lies off every drawn
+    /// tab, right of the last one; the pixel just left of it is our fill, the pixel it reads is the strip.
+    /// With no strip past the last tab there is no sample at all (the painted search answers instead).
     /// </summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void AHiddenTabOverAnotherTab_IsNotSampled(UiTheme theme)
+    public void TheSample_NeverReadsOurFill(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
-            var (root, first, _) = Strip(theme, 155, Orange, titles: ["Tower - A", "Tower - B", "Tower - C"]);
+            var (root, first, _) = Strip(theme, 155, Orange, titles: ["Tower - A", "Tower - B", "Tower - C"], room: 40);
             var strip = (TabControl)ItemsControl.ItemsControlFromItemContainer(first);
-            var hidden = HostTabs.Tab(strip, 0);
-            var selected = HostTabs.Tab(strip, 1);
-            var under = HostTabs.Tab(strip, 2);
-            selected.IsSelected = true;
-            HostTabs.Layout(root);
+            var pane = (FrameworkElement)VisualTreeHelper.GetParent(first);
+            var last = HostTabs.Tab(strip, 2);
+            var hidden = HostTabs.Tab(strip, 1);
+            var point = TabBackdrop.SamplePoint(pane)!.Value;
+            var lastRight = last.TranslatePoint(new Point(last.ActualWidth, 0), pane).X;
+            Assert.InRange(point.X, lastRight + 1, lastRight + 4);
+            foreach (TabItem tab in strip.Items)
+            {
+                var bounds = new Rect(tab.TranslatePoint(new Point(0, 0), pane), tab.RenderSize);
+                Assert.False(bounds.Contains(point), $"{tab.Header} covers the sample point");
+            }
 
-            // Tab 0 is filled and unselected: it offers the gap before its (hidden) ×. Hide it and move
-            // it, as a stale position would, so that point lies over tab 2's solid fill.
-            var gapPoint = MeasuredCloseLeft(hidden) - Shape.Gap / 2;
-            var onFill = under.TranslatePoint(new Point(20, under.ActualHeight / 2), hidden);
+            // A Hidden filled tab moved over the point is not drawn, so it changes nothing.
             hidden.Visibility = Visibility.Hidden;
-            hidden.RenderTransform = new TranslateTransform(onFill.X - gapPoint, 0);
+            var hiddenLeft = hidden.TranslatePoint(new Point(0, 0), pane).X;
+            hidden.RenderTransform = new TranslateTransform(point.X - 20 - hiddenLeft, 0);
             HostTabs.Layout(root);
+            point = TabBackdrop.SamplePoint(pane)!.Value; // the last drawn tab is still tab 3
             var bitmap = Screenshots.Render(root);
-            var fill = Pixel(bitmap, root, under, 20, under.ActualHeight / 2);
-            Assert.NotEqual(HostTabs.ColorOf(HostTabs.Well(theme)), fill); // what the hidden tab's point now shows
+            var well = HostTabs.ColorOf(HostTabs.Well(theme));
+            var inRoot = pane.TransformToAncestor(root).Transform(point);
+            Assert.Equal(well, Screenshots.PixelAt(bitmap, (int)inRoot.X, (int)inRoot.Y));
+            Assert.NotEqual(well, Pixel(bitmap, root, last, last.ActualWidth - 0.5, point.Y)); // our fill, at the edge
 
-            var rendered = TabBackdrop.Rendered(under, out var failure);
+            var rendered = TabBackdrop.Rendered(first, out var failure);
             Assert.True(rendered is not null, failure);
             Assert.Equal(HostTabs.Well(theme), rendered!.Value.Color);
-            Assert.Contains("selected", rendered.Value.Source); // from the drawn, selected tab
+
+            // No strip past the last tab: no sample, never a point on a tab.
+            var (_, full, _) = Strip(theme, 155, Orange);
+            Assert.Null(TabBackdrop.SamplePoint((FrameworkElement)VisualTreeHelper.GetParent(full)));
+            Assert.Null(TabBackdrop.Rendered(full, out failure));
+            Assert.Equal("no strip past the last tab", failure);
+            Assert.Equal(HostTabs.Well(theme), TabBackdrop.Behind(full)!.Value.Color); // the painted search
         });
     }
 
@@ -384,7 +414,7 @@ public class ProjectFillShapeTests
         });
     }
 
-    // ---- the 3:1 floor at a title's end (#31) ------------------------------------------------------
+    // ---- the 3:1 floor for the title (#31) and the × (#36) ------------------------------------------
 
     private static readonly int[] Fills = [10, 20, 30, 40, 50, 60, 70, 80, 85, 90, 95, 100];
 
@@ -392,19 +422,18 @@ public class ProjectFillShapeTests
     private const int TitleSteps = 24;
 
     /// <summary>
-    /// #31, review M1: for every default project color, fill 10 to 100 % (and 85, 95), Unselected tab
+    /// #31 and #36: for every default project color, fill 10 to 100 % (and 85, 95), Unselected tab
     /// opacity 10 to 100 %, and each state (unselected, hover, selected), the factory's text color
-    /// reaches 3:1 both on the solid part and at a title's last column in the fade, each blended over
-    /// what shows behind the tab, which is also what the text is chosen against: the candidate
-    /// strips (Revit's dark tab area #454F61 from the Lane B capture, the stand-in's strip), the
-    /// theme surface (the fallback) and the settings preview's tab color. A combination where
-    /// neither black nor white reaches 3:1 at both points is counted and fails the test. Computed
-    /// with the same blend and contrast math as the factory; a handful of cases are checked against
-    /// rendered pixels below. The worst cases go to a .txt.
+    /// reaches 3:1 over the whole title (the solid part to its last column in the fade), and its ×
+    /// color reaches 3:1 over the fade under every column of the ×, each blended over what shows
+    /// behind the tab, which is also what they are chosen against: the candidate strips (Revit's,
+    /// from the VM, and the stand-in's), the theme surface (the fallback) and the settings preview's
+    /// tab color. Any case below 3:1 fails the test. Computed with the factory's own blend and
+    /// contrast math; the rendered checks below tie it to pixels. The worst cases go to a .txt.
     /// </summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TheTitleFloor_Holds_ForEveryDefaultColorFillShareAndState(UiTheme theme)
+    public void TheFloor_Holds_ForTitlesAndTheX_ForEveryDefaultColorFillShareAndState(UiTheme theme)
     {
         var palette = UiPalette.For(theme);
         var previewTab = palette[UiPalette.Hover];
@@ -413,48 +442,48 @@ public class ProjectFillShapeTests
             ("theme surface (the fallback)", theme.Surface()),
             ("stand-in strip", HostTabs.Well(theme)),
             ("settings preview tab", new Rgb(previewTab.R, previewTab.G, previewTab.B)),
+            theme == UiTheme.Dark
+                ? ("Revit dark tab strip (VM, #33)", Rgb.Parse("#454F61"))
+                : ("Revit light tab strip (VM, #33)", Rgb.Parse("#CCCCCC")),
         };
-        backdrops.Add(theme == UiTheme.Dark
-            ? ("Revit dark tab strip (VM, #33)", Rgb.Parse("#454F61"))
-            : ("Revit light tab strip (VM, #33)", Rgb.Parse("#CCCCCC")));
         var end = Shape.TitleEndShare;
-        var log = new StringBuilder($"#31 title floor, {theme}: text chosen over what shows behind the tab; min contrast over the whole title, from the solid part to its end at {end:P1} of the opacity ({TitleSteps + 1} points)\n");
+        var close = Shape.CloseShares();
+        var log = new StringBuilder($"#31/#36 floor, {theme}: text over the whole title, from the solid part to its end at {end:P1} of the opacity ({TitleSteps + 1} points); the × over the fade under its {close.Length} columns ({close[^1]:P1} to {close[0]:P1})\n");
         var failures = new List<string>();
         foreach (var (name, backdrop) in backdrops)
         {
-            var chooseOver = backdrop;
-            var worst = (Value: double.MaxValue, What: "");
-            var below = 0;
+            var worstTitle = (Value: double.MaxValue, What: "");
+            var worstX = (Value: double.MaxValue, What: "");
             var count = 0;
             foreach (var color in SplashItDefaults.ProjectColors)
             foreach (var fill in Fills)
             for (var share = 10; share <= 100; share += 10)
             {
-                var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, fill, share), chooseOver, Shape);
-                foreach (var (state, c, opacity, text) in new[]
+                var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, fill, share), backdrop, Shape);
+                foreach (var (state, c, opacity, text, glyph) in new[]
                          {
-                             ("unselected", colors.Fill, colors.MutedOpacity, colors.Text),
-                             ("hover", colors.Hover, colors.MutedOpacity, colors.HoverText),
-                             ("selected", colors.Selected, colors.Opacity, colors.SelectedText),
+                             ("unselected", colors.Fill, colors.MutedOpacity, colors.Text, colors.Glyph),
+                             ("hover", colors.Hover, colors.MutedOpacity, colors.HoverText, colors.HoverGlyph),
+                             ("selected", colors.Selected, colors.Opacity, colors.SelectedText, colors.SelectedGlyph),
                          })
                 {
                     count++;
-                    // Review n4: the whole title, from the solid part to its end in the fade, not only its two ends.
-                    var min = double.MaxValue;
+                    var what = $"{color.ToHex()} fill {fill} % unselected {share} % {state}";
+                    var title = double.MaxValue;
                     for (var k = 0; k <= TitleSteps; k++)
-                        min = Math.Min(min, ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity * (end + (1 - end) * k / TitleSteps), backdrop)));
-                    if (min < worst.Value) worst = (min, $"{color.ToHex()} fill {fill} % unselected {share} % {state}");
-                    if (min < 3)
-                    {
-                        below++; // below 3:1 somewhere along the title
-                        failures.Add($"{name}: {color.ToHex()} fill {fill} % unselected {share} % {state}: {min:0.00}:1");
-                    }
+                        title = Math.Min(title, ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity * (end + (1 - end) * k / TitleSteps), backdrop)));
+                    var x = close.Min(s => ColorMath.ContrastRatio(glyph, ColorMath.Blend(c, opacity * s, backdrop)));
+                    if (title < worstTitle.Value) worstTitle = (title, what);
+                    if (x < worstX.Value) worstX = (x, what);
+                    if (title < 3) failures.Add($"{name}: {what}: title {title:0.00}:1");
+                    if (x < 3) failures.Add($"{name}: {what}: × {x:0.00}:1");
                 }
             }
-            log.AppendLine($"{name} {backdrop.ToHex()}: worst {worst.Value:0.00}:1 ({worst.What}); below 3:1 anywhere along the title: {below} of {count}");
+            log.AppendLine($"{name} {backdrop.ToHex()}: title worst {worstTitle.Value:0.00}:1 ({worstTitle.What}); × worst {worstX.Value:0.00}:1 ({worstX.What}); {count} cases");
         }
+        log.AppendLine($"below 3:1: {failures.Count}");
         System.IO.Directory.CreateDirectory(Screenshots.Folder);
-        System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, $"project-fill-title-floor-{theme.ToString().ToLowerInvariant()}.txt"), log.ToString());
+        System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, $"project-fill-floor-{theme.ToString().ToLowerInvariant()}.txt"), log.ToString());
         Assert.True(failures.Count == 0, $"{failures.Count} below 3:1, e.g. {string.Join("; ", failures.Take(5))}");
     }
 
@@ -462,12 +491,10 @@ public class ProjectFillShapeTests
     /// The analytic floor against rendered pixels: on a long-title tab (it fills its tab, so its last
     /// column sits in the fade), the pixel under the title's last column (below the letters) is the
     /// fill at <see cref="ProjectFillShape.TitleEndShare"/> blended over what is behind the tab, and
-    /// the title really ends <see cref="ProjectFillShape.TitleGap"/> px before the ×. Includes the
-    /// review's failing cases (red at 85 and 90 %, brown at 90 %, dark).
+    /// the title really ends <see cref="ProjectFillShape.TitleGap"/> px before the ×.
     /// </summary>
     [Theory]
     [InlineData("#E15759", 90, UiTheme.Dark)]
-    [InlineData("#E15759", 85, UiTheme.Dark)]
     [InlineData("#9C755F", 90, UiTheme.Dark)]
     [InlineData("#4F8EF7", 100, UiTheme.Dark)]
     [InlineData("#F28E2B", 100, UiTheme.Light)]
@@ -481,11 +508,11 @@ public class ProjectFillShapeTests
             var bitmap = Screenshots.Render(root);
             var text = WindowCapture.Descendants<TextBlock>(tab).Single(t => t.Text == title);
             var textRight = text.TranslatePoint(new Point(text.ActualWidth, 0), tab).X;
-            var anchor = Shape.AnchorFor(tab);
+            var (start, end) = Shape.FadeFor(tab);
             Assert.Equal(MeasuredCloseLeft(tab) - Shape.TitleGap, textRight, 0); // the stand-in's title gap is Revit's
 
             var opacity = fill / 100.0;
-            var share = (anchor - (textRight - 0.5)) / Shape.FadeWidth;
+            var share = ShareAt(textRight - 0.5, start, end);
             Assert.Equal(Shape.TitleEndShare, share, 2);
             var expected = ColorMath.Blend(color, opacity * share, HostTabs.Well(theme));
             var under = Pixel(bitmap, root, tab, textRight - 0.5, 18.5);
@@ -501,33 +528,33 @@ public class ProjectFillShapeTests
 
     // ---- the × and restore -------------------------------------------------------------------------
 
-    /// <summary>The × sits on the strip in every state: black on the light strip, white on the dark one, never Revit's grey.</summary>
+    /// <summary>
+    /// #36: the × sits on the fade. Per state it is the factory's black or white, chosen over the fade
+    /// under its columns, never Revit's grey; and against the rendered pixels under it (the row below
+    /// the glyph, across the 16 px slot) it is the better of the two at its worst.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void TheCloseGlyph_IsChosenAgainstTheStripUnderIt(UiTheme theme)
+    public void TheCloseGlyph_IsChosenOverTheFadeUnderIt(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
             var (root, selected, unselected) = Strip(theme, 155, Orange);
             var bitmap = Screenshots.Render(root);
-            foreach (var tab in new[] { selected, unselected })
+            var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(Orange, 100), HostTabs.Well(theme), Shape);
+            foreach (var (tab, expected) in new[] { (selected, colors.SelectedGlyph), (unselected, colors.Glyph) })
             {
                 var button = TabCloseGlyph.FindButton(tab)!;
                 var glyph = ((SolidColorBrush)button.Foreground).Color;
-                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(HostTabs.Well(theme))), glyph); // against the strip behind the tab
-                var centre = MeasuredCloseLeft(tab) + button.ActualWidth / 2;
-                var under = Pixel(bitmap, root, tab, centre, 18.5);
-                Near(HostTabs.ColorOf(HostTabs.Well(theme)), under, 3, "the strip under the ×");
-                var underRgb = new Rgb(under.R, under.G, under.B);
-                var mine = ColorMath.ContrastRatio(new Rgb(glyph.R, glyph.G, glyph.B), underRgb);
-                var other = ColorMath.ContrastRatio(glyph == Colors.Black ? ColorMath.White : ColorMath.Black, underRgb);
-                Assert.True(mine > other, $"{theme}: {mine:0.00}:1 vs {other:0.00}:1");
-            }
-            // Dark theme: the selected orange tab's text is black, its × white.
-            if (theme == UiTheme.Dark)
-            {
-                Assert.Equal(Colors.Black, ((SolidColorBrush)selected.Foreground).Color);
-                Assert.Equal(Colors.White, ((SolidColorBrush)TabCloseGlyph.FindButton(selected)!.Foreground).Color);
+                Assert.Equal(HostTabs.ColorOf(expected), glyph);
+                Assert.NotEqual(HostTabs.CloseGrey, glyph);
+                var left = MeasuredCloseLeft(tab);
+                var under = Enumerable.Range(0, 16).Select(i => Pixel(bitmap, root, tab, left + i + 0.5, 18.5)).Select(p => new Rgb(p.R, p.G, p.B)).ToArray();
+                Assert.DoesNotContain(HostTabs.Well(theme), under); // the × is on our fill, not the bare strip
+                var mine = under.Min(u => ColorMath.ContrastRatio(new Rgb(glyph.R, glyph.G, glyph.B), u));
+                var other = under.Min(u => ColorMath.ContrastRatio(glyph == Colors.Black ? ColorMath.White : ColorMath.Black, u));
+                Assert.True(mine >= other, $"{theme}: {mine:0.00}:1 vs {other:0.00}:1");
+                Assert.True(mine >= 3, $"{theme}: {mine:0.00}:1");
             }
         });
     }

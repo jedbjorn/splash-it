@@ -550,22 +550,26 @@ public class SettingsWindowScreenshotTests
             AssertNear(ToColor(ColorMath.Blend(project2, unselected, tabRgb)), At(annex, 4, annex.ActualHeight - 3),
                 $"Annex, {width}/{opacity}/{share}");
 
-            // #30/#31 (review M2, m2): each project tab's fade ends 2 px before its measured × slot, the
-            // tab's own color shows past it, and the title's end reaches 3:1 at its worst point.
+            // #31/#36 (review M2, m2): each project tab's fade starts 26 px before its measured × slot and
+            // runs to half the opacity at the tab's right edge (never the bare tab color), and the title's
+            // end reaches 3:1 at its worst point.
             var shape = SplashIt.UI.Tabs.ProjectFillShape.Default;
             foreach (var (tab, color, tabOpacity) in new[] { (tower1, project1, opacity / 100.0), (tower2, project1, unselected), (annex, project2, unselected) })
             {
                 var close = WindowCapture.Descendants<ContentControl>(tab).Single(c => c.Name == "PART_CloseButton");
                 var closeLeft = close.TranslatePoint(new Point(0, 0), tab).X;
                 var fade = Assert.IsType<LinearGradientBrush>(tab.Background);
-                Assert.Equal(closeLeft - shape.Gap, fade.EndPoint.X);
-                Assert.Equal(shape.FadeWidth, fade.EndPoint.X - fade.StartPoint.X);
-                AssertNear(ToColor(tabRgb), At(tab, fade.EndPoint.X + 0.5, tab.ActualHeight - 3), $"past the fade, {tab.Header} {width}/{opacity}/{share}");
+                Assert.Equal(closeLeft - shape.StartBeforeClose, fade.StartPoint.X);
+                Assert.Equal(tab.ActualWidth, fade.EndPoint.X);
+                Assert.Equal((byte)Math.Round(tabOpacity * 0.5 * 255, MidpointRounding.AwayFromZero), fade.GradientStops[1].Color.A);
+                // Under the ×'s right end the fill still shows: not the bare tab color.
+                var underX = At(tab, closeLeft + close.ActualWidth - 0.5, tab.ActualHeight - 3);
+                Assert.NotEqual(ToColor(tabRgb), underX);
 
                 var title = WindowCapture.Descendants<TextBlock>(tab).Single(t => t.Text == (string)tab.Header);
                 var titleRight = title.TranslatePoint(new Point(title.ActualWidth, 0), tab).X;
                 Assert.True(closeLeft - titleRight >= shape.TitleGap - 0.5, $"the preview's title gap is Revit's: {closeLeft - titleRight}");
-                var endShare = Math.Clamp((fade.EndPoint.X - (titleRight - 0.5)) / shape.FadeWidth, 0, 1);
+                var endShare = shape.ShareAt(titleRight - 0.5 - fade.StartPoint.X, fade.EndPoint.X - fade.StartPoint.X);
                 var titleColor = ((SolidColorBrush)tab.Foreground).Color;
                 var textRgb = new Rgb(titleColor.R, titleColor.G, titleColor.B);
                 var solid = ColorMath.ContrastRatio(textRgb, ColorMath.Blend(color, tabOpacity, tabRgb));

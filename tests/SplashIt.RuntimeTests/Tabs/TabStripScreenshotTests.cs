@@ -80,14 +80,15 @@ public class TabStripScreenshotTests
     }
 
     /// <summary>
-    /// #30: the project fill fades over a fixed 24 px ending 2 px before the close ×, and the selected
-    /// tab's line takes the same shape. Rows at fill 100 % and 60 % (unselected 50 %): two Tower tabs
-    /// (blue, the first selected), a Bridge tab (orange), a family tab and a native .rte tab; then a
-    /// long view name (about 350 px), selected and not. Saved at 1x and at 2x.
+    /// #36 (supersedes #34): the project fill is solid to a fade start 26 px before the close ×, then
+    /// fades through the × to half its opacity at the tab's right edge, and the selected tab's line
+    /// takes the same shape. Rows at fill 100 % and 60 % (unselected 50 %): three Tower tabs (blue, the
+    /// first selected), two Bridge tabs (orange), a family tab and a native .rte tab; then a long view
+    /// name (about 350 px), selected and not. Saved at 1x and at 2x.
     /// </summary>
     [Theory]
     [MemberData(nameof(Themes))]
-    public void ProjectFill_FadesBeforeTheClose(UiTheme theme)
+    public void ProjectFill_FadesThroughTheClose_ToHalfAtTheEdge(UiTheme theme)
     {
         Screenshots.RunSta(() =>
         {
@@ -95,35 +96,45 @@ public class TabStripScreenshotTests
             var original = HostTabs.RevitLikeStyle(theme);
             var rows = new List<UIElement>();
             var strips = new List<TabControl>();
+            var opacities = new List<(TabItem Tab, Rgb Color, double Opacity)>();
             foreach (var fill in new[] { 100, 60 })
             {
                 var strip = Styled(factory, original, theme, selected: 0,
                     ("Tower - Floor Plan: L1", TabTreatment.ProjectFill(P1, fill)),
                     ("Tower - Sheet: A101", TabTreatment.ProjectFill(P1, fill)),
+                    ("Tower - 3D View: {3D}", TabTreatment.ProjectFill(P1, fill)),
                     ("Bridge - Floor Plan: L1", TabTreatment.ProjectFill(P2, fill)),
+                    ("Bridge - Sheet: S201", TabTreatment.ProjectFill(P2, fill)),
                     ("Door - Floor Plan: Ref. Level", TabTreatment.FamilyBar(F1, 3, 100)),
                     ("Template - 3D View: {3D}", null));
-                rows.Add(Label($"Fill {fill} %, unselected 50 %: solid, then a 24 px fade ending 2 px before the × (1st tab selected)", theme));
+                rows.Add(Label($"Fill {fill} %, unselected 50 %: solid, then a fade through the × to half at the tab's edge (1st tab selected)", theme));
                 rows.Add(strip);
-                strips.Add(strip);
+                for (var i = 0; i < 5; i++)
+                    opacities.Add((HostTabs.Tab(strip, i), i < 3 ? P1 : P2, fill / 100.0 * (i == 0 ? 1 : 0.5)));
             }
             const string longTitle = "Tower - Floor Plan: Level 01 - Architectural Coordination Model";
             var longStrip = Styled(factory, original, theme, selected: 0,
                 (longTitle, TabTreatment.ProjectFill(P1, 100)),
                 ("Bridge - " + longTitle[8..], TabTreatment.ProjectFill(P2, 100)));
-            rows.Add(Label("A long view name (about 350 px), selected and not: the fade is the same 24 px", theme));
+            rows.Add(Label("A long view name (about 350 px), selected and not: the fade starts as far before the ×", theme));
             rows.Add(longStrip);
+            opacities.Add((HostTabs.Tab(longStrip, 0), P1, 1));
+            opacities.Add((HostTabs.Tab(longStrip, 1), P2, 0.5));
             var (bitmap, root) = Shoot("tabs-project-fill", theme, rows.ToArray());
             Screenshots.Save(Screenshots.Zoom(bitmap, 2), "tabs-project-fill-" + Suffix(theme) + "-2x");
 
             var well = HostTabs.Well(theme);
             var shape = ProjectFillShape.Default;
-            foreach (var tab in strips.SelectMany(s => s.Items.Cast<TabItem>().Take(3)).Concat(longStrip.Items.Cast<TabItem>()))
+            foreach (var (tab, color, opacity) in opacities)
             {
-                var anchor = shape.AnchorFor(tab);
-                Assert.Equal(tab.ActualWidth - shape.CloseSlot - shape.Gap, anchor);
-                Near(HostTabs.ColorOf(well), PixelIn(bitmap, root, tab, anchor + 0.5, 10));      // the strip from the anchor
-                Assert.NotEqual(HostTabs.ColorOf(well), PixelIn(bitmap, root, tab, anchor - shape.FadeWidth - 1.5, 10)); // the fill before the fade
+                var (start, end) = shape.FadeFor(tab);
+                Assert.Equal(tab.ActualWidth - shape.CloseSlot - shape.StartBeforeClose, start);
+                Assert.Equal(tab.ActualWidth, end);
+                // Row 18.5, below the title and the ×: solid before the fade, half the opacity at the last column.
+                Near(Shown(color, opacity, well), PixelIn(bitmap, root, tab, start - 1.5, 18.5));
+                var last = PixelIn(bitmap, root, tab, end - 0.5, 18.5);
+                Near(Shown(color, opacity * shape.ShareAt(end - 0.5 - start, end - start), well), last, 6);
+                Assert.NotEqual(HostTabs.ColorOf(well), last); // no colorless column before the next tab
             }
             Assert.InRange(HostTabs.Tab(longStrip, 0).ActualWidth, 330, 400);
         });
@@ -153,11 +164,14 @@ public class TabStripScreenshotTests
             Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, selected, 20, 0.5));
             Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, selected, 20, 2.5)); // 3 px
             Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, selected, 20, 10));
-            // The close glyph is never Revit's grey (review M1); since #30 it sits on the strip, so on
-            // every colored tab it is black or white against the theme, not the fill.
-            foreach (var i in new[] { 0, 1, 2, 3 })
-                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(HostTabs.Well(theme))),
+            // The close glyph is never Revit's grey (review M1); since #36 it sits on the fade, so on
+            // every colored tab it is that state's black or white over the fill under it.
+            foreach (var (i, color) in new[] { (0, P1), (1, P1), (2, P2), (3, P2) })
+            {
+                var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, 100), well);
+                Assert.Equal(HostTabs.ColorOf(i == 1 ? colors.SelectedGlyph : colors.Glyph),
                     ((SolidColorBrush)TabCloseGlyph.FindButton(HostTabs.Tab(strip, i))!.Foreground).Color);
+            }
         });
     }
 
