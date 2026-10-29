@@ -10,9 +10,10 @@ using SplashIt.Core.Colors;
 namespace SplashIt.UI.Tabs;
 
 /// <summary>
-/// What shows behind a tab (decision #33): the project fill replaces the tab's own background and
-/// fades to transparent, so its fading end, and the close ×, show whatever is behind the tab, Revit's
-/// tab strip or pane. Text and × colors are chosen against that. Read-only and bounded; never throws.
+/// What shows behind a tab (decision #33): the project fill replaces the tab's own background and is
+/// translucent (it fades to half its opacity at the tab's edge, #36), so whatever is behind the tab,
+/// Revit's tab strip or pane, shows through it. Text and × colors are chosen over the fill blended on
+/// that. Read-only and bounded; never throws.
 /// The order (#33): (1) <see cref="Rendered(DependencyObject, out string?)"/>, a sample of what the
 /// window draws; (2) the painted-layer search; (3) the ancestor walk; then the caller's fallbacks,
 /// the tab's original background and the theme surface.
@@ -68,15 +69,16 @@ public static class TabBackdrop
 
     /// <summary>
     /// What is actually drawn behind the tabs of <paramref name="tab"/>'s pane (decision #33, step 1),
-    /// sampled from the rendered window at a point where a tab shows only what is behind it: on a
-    /// project tab carrying a Splash-It fill, the middle of the 2 px gap between the fill's end and its
-    /// close button (#30); on a tab that is not selected, not under the mouse, and whose close button is
-    /// hidden (Revit's are), the centre of that button's slot. Only tabs that are drawn count
-    /// (<c>Visibility</c> Visible: Revit leaves Hidden tabs at stale positions, over other tabs), and
-    /// only points inside the tabs' panel. One render at most per call. Null when no tab of the pane
-    /// offers such a point, or the sample is not opaque; <paramref name="failure"/> then says why.
-    /// The VM run on Revit 2026 showed why it comes first: the strip there (<c>#CCCCCC</c> light,
-    /// <c>#454F61</c> dark) is not an ancestor's background.
+    /// sampled from the rendered window at a point that shows only the backdrop: the tabs' panel to the
+    /// right of its last drawn tab (#36). Since #36 a project fill runs, translucent, to the tab's right
+    /// edge, so no point on a filled tab shows the backdrop alone; the strip past the last tab does,
+    /// and it is never on a tab (the point lies outside every drawn tab's bounds) nor on a decoration
+    /// (adorners draw inside their tab). Only tabs that are drawn count (<c>Visibility</c> Visible:
+    /// Revit leaves Hidden tabs at stale positions, and they are not drawn). One render at most per
+    /// call. Null when the panel has no room past its last tab (an overflowing strip: the caller falls
+    /// back to the painted-layer search), or the sample is not opaque; <paramref name="failure"/> then
+    /// says why. The VM run on Revit 2026 showed why a sample comes first: the strip there
+    /// (<c>#CCCCCC</c> light, <c>#454F61</c> dark) is not an ancestor's background.
     /// </summary>
     public static (Rgb Color, string Source)? Rendered(DependencyObject tab, out string? failure)
     {
@@ -88,20 +90,13 @@ public static class TabBackdrop
                 failure = "no laid-out tab panel";
                 return null;
             }
-            var count = VisualTreeHelper.GetChildrenCount(pane);
-            for (var i = 0; i < count; i++)
+            if (SamplePoint(pane) is not { } point)
             {
-                // Visibility, not IsVisible: IsVisible is false off-screen (no presentation source).
-                if (VisualTreeHelper.GetChild(pane, i) is not TabItem { Visibility: Visibility.Visible, ActualWidth: > 0, ActualHeight: > 0 } candidate)
-                    continue;
-                if (SamplePoint(candidate) is not { } point) continue;
-                if (!Inside(pane, candidate, point)) continue;
-                if (Sample(candidate, point) is { } color)
-                    return (color, candidate.IsSelected ? "rendered, before the selected tab's close button" : "rendered, under a tab's hidden close button");
-                failure = "the sample was not opaque";
-                return null; // one render per call: another candidate would show the same backdrop
+                failure = "no strip past the last tab";
+                return null;
             }
-            failure = "no tab offers a point yet";
+            if (Sample(pane, point) is { } color) return (color, "rendered, the strip past the last tab");
+            failure = "the sample was not opaque";
         }
         catch (Exception ex)
         {
@@ -113,33 +108,47 @@ public static class TabBackdrop
     /// <inheritdoc cref="Rendered(DependencyObject, out string?)"/>
     public static (Rgb Color, string Source)? Rendered(DependencyObject tab) => Rendered(tab, out _);
 
-    /// <summary>Whether <paramref name="point"/> of <paramref name="tab"/> lies inside the tab and inside the tabs' <paramref name="pane"/>.</summary>
-    private static bool Inside(FrameworkElement pane, FrameworkElement tab, Point point)
-    {
-        if (!new Rect(0, 0, tab.ActualWidth, tab.ActualHeight).Contains(point)) return false;
-        var inPane = tab.TransformToAncestor(pane).Transform(point);
-        return new Rect(0, 0, pane.ActualWidth, pane.ActualHeight).Contains(inPane);
-    }
-
     /// <summary>A rendered sample's outcome, for <see cref="Explain"/>.</summary>
     public static string Describe((Rgb Color, string Source)? rendered, string? failure) =>
         rendered is { } v ? $"{v.Color.ToHex()} ({v.Source})" : $"none ({failure ?? "not taken"})";
 
-    /// <summary>Where on <paramref name="tab"/> only what is behind it shows, in its own coordinates; null when nowhere.</summary>
-    private static Point? SamplePoint(TabItem tab)
+    /// <summary>
+    /// Where the tabs' <paramref name="pane"/> shows only its backdrop, in the pane's coordinates: past
+    /// the right edge of its rightmost drawn tab (by up to 4 px, and at least 1 px inside the pane), at
+    /// the height of that tab's middle; null when the pane has under 2 px there, or when the point would
+    /// still fall on a drawn tab (tabs in more than one row).
+    /// </summary>
+    internal static Point? SamplePoint(FrameworkElement pane)
     {
-        var mid = tab.ActualHeight / 2;
-        var gap = ProjectFillShape.Default.Gap;
-        if (tab.Background is LinearGradientBrush { MappingMode: BrushMappingMode.Absolute } fill
-            && ProjectFillShape.CloseButtonLeft(tab) is { } closeLeft && closeLeft - fill.EndPoint.X >= gap)
-            // The middle of the gap between the fill's end and the button: the 1 px window taken from
-            // there (floored in the window's coordinates) lies wholly inside the gap at any DPI scale.
-            return new Point(closeLeft - gap / 2, mid);
-        if (tab.IsSelected || tab.IsMouseOver || TabStyleFactory.IsDerived(tab.Style)) return null;
-        if (TabCloseGlyph.FindButton(tab) is not { Visibility: Visibility.Hidden, ActualWidth: > 0 } button) return null;
-        if (tab.Background is SolidColorBrush { Color.A: > 0 }) return null; // a native background of its own
-        var slot = button.TransformToAncestor(tab).Transform(new Point(button.ActualWidth / 2, button.ActualHeight / 2));
-        return new Point(slot.X, mid);
+        var right = double.NegativeInfinity;
+        var mid = 0.0;
+        var count = VisualTreeHelper.GetChildrenCount(pane);
+        for (var i = 0; i < count; i++)
+        {
+            // Visibility, not IsVisible: IsVisible is false off-screen (no presentation source).
+            if (VisualTreeHelper.GetChild(pane, i) is not TabItem { Visibility: Visibility.Visible, ActualWidth: > 0, ActualHeight: > 0 } tab)
+                continue;
+            var bounds = tab.TransformToAncestor(pane).TransformBounds(new Rect(0, 0, tab.ActualWidth, tab.ActualHeight));
+            if (bounds.Right > right)
+            {
+                right = bounds.Right;
+                mid = bounds.Top + bounds.Height / 2;
+            }
+        }
+        if (double.IsNegativeInfinity(right)) return null;
+        var room = pane.ActualWidth - right;
+        if (room < 2) return null;
+        var point = new Point(right + Math.Min(4, room / 2), mid);
+        if (point.Y < 0 || point.Y >= pane.ActualHeight) return null;
+        for (var i = 0; i < count; i++)
+        {
+            if (VisualTreeHelper.GetChild(pane, i) is not TabItem { Visibility: Visibility.Visible, ActualWidth: > 0, ActualHeight: > 0 } tab)
+                continue;
+            // The sample reads the pixel the point falls in (floored in the window), so 1 px to its left too must be off every drawn tab.
+            var bounds = tab.TransformToAncestor(pane).TransformBounds(new Rect(0, 0, tab.ActualWidth, tab.ActualHeight));
+            if (bounds.Left < point.X && bounds.Right > point.X - 1 && bounds.Top <= point.Y && bounds.Bottom >= point.Y) return null;
+        }
+        return point;
     }
 
     /// <summary>The opaque color the window draws at <paramref name="point"/> of <paramref name="element"/>; null when not opaque.</summary>
