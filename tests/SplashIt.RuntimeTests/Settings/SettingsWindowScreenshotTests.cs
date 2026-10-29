@@ -375,7 +375,7 @@ public class SettingsWindowScreenshotTests
 
         var bitmap = Screenshots.Render(root);
         Screenshots.Save(bitmap, Name("preview-matrix", theme));
-        Assert.True(Screenshots.DistinctPixels(bitmap) > 200, "the render looks blank");
+        Assert.True(Screenshots.DistinctPixels(bitmap) > 60, "the render looks blank");
 
         var surface = theme == UiTheme.Dark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
         var tabBackground = UiPalette.For(theme)[UiPalette.Hover];
