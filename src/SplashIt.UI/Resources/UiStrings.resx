@@ -114,7 +114,7 @@
     <value>Tab colors</value>
   </data>
   <data name="Settings_Subheading" xml:space="preserve">
-    <value>Colors every open file's tabs so you can see which tab belongs to which model. Projects get a solid fill, families a bar on the left edge; templates and other files keep Revit's look.</value>
+    <value>Colors every open file's tabs so you can see which tab belongs to which model. Projects get a solid fill, families a colored L (left bar and thin top line); templates and other files keep Revit's look.</value>
   </data>
   <data name="Status_Active" xml:space="preserve">
     <value>Active: open tabs are colored by file.</value>
@@ -151,7 +151,7 @@
     <value>Family colors</value>
   </data>
   <data name="Settings_FamilyColorsHint" xml:space="preserve">
-    <value>Left-edge bar; each family takes the first free color.</value>
+    <value>A colored L (left bar, top line); first free color.</value>
   </data>
   <data name="Settings_ProjectColorN" xml:space="preserve">
     <value>Project color {0}</value>
