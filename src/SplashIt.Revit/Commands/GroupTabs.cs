@@ -10,8 +10,8 @@ namespace SplashIt.Revit.Commands;
 
 /// <summary>
 /// The Group Tabs ribbon button (spec #2): one click puts each file's tabs next to each other in
-/// every pane of the main window, files in the order of their leftmost tab. A one-shot command;
-/// nothing keeps sorting afterwards.
+/// every pane of the main window, the active file first, then the others in the order of their
+/// leftmost tab (decision #28). A one-shot command; nothing keeps sorting afterwards.
 /// <list type="bullet">
 /// <item><b>Reuse</b>: the tabs and their documents come from the colorizer's own
 /// <see cref="RevitTabSurface"/> and <see cref="RevitDocuments"/> (the longest-match title rule
@@ -19,9 +19,11 @@ namespace SplashIt.Revit.Commands;
 /// or off. <see cref="AvalonDockPane"/> is the only reach into AvalonDock.</item>
 /// <item><b>UI thread, one operation</b>: Revit runs external commands on its UI thread, and
 /// everything here runs synchronously inside <see cref="Execute"/>.</item>
-/// <item><b>Never throws into Revit</b>: when the tab strip has an unexpected shape a short
-/// dialog says so and nothing moves; when a move fails partway it stops and says so. The
-/// reason is logged either way. No model data, transaction or undo is involved.</item>
+/// <item><b>Never throws into Revit</b>: the dialog it ends with is chosen from what happened
+/// (<see cref="TabGroupResult.Notice"/>): "can't group tabs on this Revit build" when nothing
+/// moved, "stopped partway" when a move failed, and a generic error for an unexpected
+/// exception. The reason is logged either way. No model data, transaction or undo is
+/// involved.</item>
 /// </list>
 /// </summary>
 [Transaction(TransactionMode.ReadOnly)]
@@ -29,23 +31,23 @@ public sealed class GroupTabs : IExternalCommand
 {
     private const string NotStartedReason = "Splash-It's tab surface did not start (see the startup lines).";
 
-    /// <summary>One finder for the session, so the AvalonDock version is logged once.</summary>
+    /// <summary>One finder for the session, so the AvalonDock version is logged once, on the first click.</summary>
     private static AvalonDockPane.Finder? _finder;
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
-        TabGroupResult result;
+        TabGroupNotice notice;
         try
         {
-            result = Run();
+            notice = Run().Notice;
         }
         catch (Exception ex)
         {
-            App.Log.Error("group tabs: failed (" + ex.GetType().Name + " in " + (ex.TargetSite?.Name ?? "?") + ").");
-            result = TabGroupResult.Unavailable(ex.GetType().Name);
+            App.Log.Error("group tabs: failed unexpectedly (" + ex.GetType().Name + " in " + (ex.TargetSite?.Name ?? "?") + ").");
+            notice = TabGroupNotice.UnexpectedError;
         }
 
-        if (result.Outcome is TabGroupOutcome.Unavailable or TabGroupOutcome.Failed) Tell(result.Outcome);
+        if (notice != TabGroupNotice.None) Tell(notice);
         return Result.Succeeded;
     }
 
@@ -53,7 +55,7 @@ public sealed class GroupTabs : IExternalCommand
     {
         if (App.Documents is not { } documents || App.TabSurface is not { } surface)
         {
-            App.Log.Warn("group tabs: unavailable. " + NotStartedReason);
+            App.Log.Warn("group tabs: unavailable; nothing moved. " + NotStartedReason);
             return TabGroupResult.Unavailable(NotStartedReason);
         }
 
@@ -71,15 +73,21 @@ public sealed class GroupTabs : IExternalCommand
     }
 
     /// <summary>The short dialog (spec #2, Behavior 7). Never throws.</summary>
-    private static void Tell(TabGroupOutcome outcome)
+    private static void Tell(TabGroupNotice notice)
     {
         try
         {
-            var stopped = outcome == TabGroupOutcome.Failed;
+            var (instruction, content) = notice switch
+            {
+                TabGroupNotice.CantGroup => (RevitStrings.GroupTabs_Unavailable, RevitStrings.GroupTabs_UnavailableDetail),
+                TabGroupNotice.Stopped => (RevitStrings.GroupTabs_Stopped, RevitStrings.GroupTabs_StoppedDetail),
+                TabGroupNotice.StoppedSelectionMayHaveChanged => (RevitStrings.GroupTabs_Stopped, RevitStrings.GroupTabs_StoppedSelectionDetail),
+                _ => (RevitStrings.GroupTabs_Error, RevitStrings.GroupTabs_ErrorDetail),
+            };
             var dialog = new TaskDialog(App.PanelName)
             {
-                MainInstruction = stopped ? RevitStrings.GroupTabs_Stopped : RevitStrings.GroupTabs_Unavailable,
-                MainContent = stopped ? RevitStrings.GroupTabs_StoppedDetail : RevitStrings.GroupTabs_UnavailableDetail,
+                MainInstruction = instruction,
+                MainContent = content,
                 CommonButtons = TaskDialogCommonButtons.Close,
             };
             dialog.Show();

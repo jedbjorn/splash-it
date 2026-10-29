@@ -224,7 +224,11 @@ public sealed class AvalonDockPane : IDocumentPane
 
         private static DocumentPaneLookup Unavailable(string reason) => DocumentPaneLookup.Unavailable(reason);
 
-        /// <summary>AC4 step 1: the AvalonDock assembly and whether MoveChild exists, once.</summary>
+        /// <summary>
+        /// AC4 step 1: the AvalonDock assembly and whether MoveChild exists, once per finder. The
+        /// command keeps one finder for the session, so the line appears on the first click (not
+        /// at startup), before that click's result line.
+        /// </summary>
         private void LogVersion(Type paneType, bool hasMoveChild)
         {
             if (_versionLogged) return;
@@ -236,7 +240,7 @@ public sealed class AvalonDockPane : IDocumentPane
                 var file = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "?";
                 var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
                 _log.Write(hasMoveChild ? LogLevel.Info : LogLevel.Warn, string.Create(CultureInfo.InvariantCulture,
-                    $"group tabs: {paneType.Name} from {name.Name} {name.Version} (file {file}, product {informational}); MoveChild {(hasMoveChild ? "found" : "NOT found")}."));
+                    $"group tabs: first click this session: {paneType.Name} from {name.Name} {name.Version} (file {file}, product {informational}); MoveChild {(hasMoveChild ? "found" : "NOT found")}."));
             }
             catch (Exception ex)
             {
