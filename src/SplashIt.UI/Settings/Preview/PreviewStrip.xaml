@@ -28,13 +28,18 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="TabItem">
                             <Grid Margin="0,0,2,0" SnapsToDevicePixels="True">
+                                <!-- Under the fill, the tab's own color: a project fill (#30) fades out to it, as the
+                                     preview's colors assume (PreviewStrip.Restyle), not to the window behind the strip. -->
+                                <Border Background="{StaticResource HoverBrush}" BorderThickness="1,1,1,0" BorderBrush="Transparent" />
                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="1,1,1,0" Padding="8,6,6,6">
                                     <!-- Like Revit's tabs, a narrow tab trims its title; the close glyph stays. The glyph
-                                         is a named control, as Revit's mDocumentCloseButton, so the project fill (#30)
-                                         ends just before it and the factory gives it its own black or white. -->
+                                         is a named control, as Revit's mDocumentCloseButton, in a 16 px slot 12 px after the
+                                         title, as Revit's, so the project fill (#30) ends just before it and the factory gives
+                                         it its own black or white. -->
                                     <DockPanel>
-                                        <ContentControl x:Name="PART_CloseButton" DockPanel.Dock="Right" Margin="6,1,0,0" VerticalAlignment="Center"
+                                        <ContentControl x:Name="PART_CloseButton" DockPanel.Dock="Right" Margin="12,1,0,0" Width="16"
+                                                        HorizontalContentAlignment="Center" VerticalAlignment="Center"
                                                         Focusable="False" IsTabStop="False"
                                                         Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}">
                                             <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8" />

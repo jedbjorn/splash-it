@@ -17,8 +17,9 @@ internal interface IPreviewTabStyler
     /// A project tab (spec, Shapes and settings; decision #23): the selected tab shows
     /// <paramref name="color"/> at <paramref name="fillOpacity"/> percent over <paramref name="backdrop"/>
     /// with a 3 px darker line along its top; the project's other tabs show it at fill ×
-    /// <paramref name="unselectedShare"/> percent. Text and the close glyph are black or white,
-    /// whichever reads better on the color as shown. <see cref="Style.BasedOn"/> is <paramref name="baseStyle"/>.
+    /// <paramref name="unselectedShare"/> percent, fading out before the close glyph (#30). Text and
+    /// the close glyph are black or white, whichever reads better (#31) over <paramref name="backdrop"/>,
+    /// the color the fill is drawn over. <see cref="Style.BasedOn"/> is <paramref name="baseStyle"/>.
     /// </summary>
     Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, int unselectedShare, Rgb backdrop);
 
@@ -33,8 +34,8 @@ internal interface IPreviewTabStyler
 /// The preview's styler: the colorizer's own <see cref="TabStyleFactory"/> (Lane B), so the
 /// preview is exactly what the tabs get, including the adorner-drawn top line and bar (the
 /// strip has its own adorner layer). It keeps its own factory instance, so dragging a slider
-/// never churns the colorizer's style cache. The backdrop given is the color the tabs sit on;
-/// text contrast is measured against it.
+/// never churns the colorizer's style cache. The backdrop given is the color under the fill (the
+/// tab's own color, laid under it by the preview's template); text contrast is measured against it.
 /// </summary>
 internal sealed class FactoryTabStyler : IPreviewTabStyler
 {
