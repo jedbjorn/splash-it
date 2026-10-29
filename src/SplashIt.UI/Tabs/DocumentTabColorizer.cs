@@ -274,6 +274,23 @@ public sealed class DocumentTabColorizer
     }
 
     /// <summary>
+    /// Runs the document scan now (the SC-004 fallback scan, without waiting for a request): for
+    /// a caller that is already where <see cref="IDocumentInfo.GetOpenDocuments(List{object}, out int)"/>
+    /// may run, such as a Revit command (Group Tabs, spec #2, review n3). Documents no event
+    /// announced are registered, those no longer open are forgotten, a changed kind is handled
+    /// like a Save As, and when anything changed (a title too) the tabs resolve again and are
+    /// restyled. Returns false, and lists nothing, while not running (coloring off, faulted or
+    /// blocked); the caller then refreshes the documents itself. Never throws.
+    /// </summary>
+    public bool ScanDocuments()
+    {
+        _dispatcher.VerifyAccess();
+        if (!_running) return false;
+        OnDocumentScan();
+        return true;
+    }
+
+    /// <summary>
     /// Reassigns every open file's color from the start of its list, in current tab order
     /// (files with no tab follow, in the order they were registered), then restyles.
     /// Does nothing while not running. Never throws.

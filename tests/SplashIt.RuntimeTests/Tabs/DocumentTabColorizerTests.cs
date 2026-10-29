@@ -1076,6 +1076,48 @@ public class DocumentTabColorizerTests
     }
 
     /// <summary>
+    /// Spec #2 review n3: a Group Tabs click runs the same scan at once (<see cref="DocumentTabColorizer.ScanDocuments"/>),
+    /// so what its refresh finds reaches the colorizer: a kind changed with no event is handled
+    /// like a Save As, and a document no event announced is registered and colored. Stopped, it
+    /// lists nothing and says so, and the command refreshes the documents itself.
+    /// </summary>
+    [Fact]
+    public void ScanDocuments_RunsTheScanNow_AndReturnsFalseWhileNotRunning()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Surface.IsKnown = rig.Documents.IsRegistered;
+            rig.Colorizer.Start();
+            Assert.True(TabStyleFactory.IsDerived(rig.Tab(2).Style));
+
+            rig.Documents.OnNextListing = () =>
+            {
+                rig.Documents.Kinds[rig.P2] = FileKind.Other; // saved as .rte, no event
+                return 1;
+            };
+            var p3 = new DocKey("P3");
+            rig.Documents.AddUnannounced(p3, FileKind.Project);
+            var tab = new TabItem { Header = "P3 - L1", Style = rig.Original };
+            rig.Strip.Items.Add(tab);
+            rig.Surface.Bind(tab, p3);
+            var listings = rig.Documents.Listings;
+
+            Assert.True(rig.Colorizer.ScanDocuments());
+
+            Assert.Equal(listings + 1, rig.Documents.Listings);
+            Assert.Same(rig.Original, rig.Tab(2).Style);                 // reclassified like a Save As
+            Assert.True(TabStyleFactory.IsDerived(tab.Style));           // registered and colored
+            Assert.Contains(rig.Log.Lines, l => l.Contains("registered 1 documents no event announced (1 project, 0 family, 0 other); 1 changed title or kind, 1 reclassified"));
+
+            rig.Colorizer.Stop();
+            listings = rig.Documents.Listings;
+            Assert.False(rig.Colorizer.ScanDocuments());
+            Assert.Equal(listings, rig.Documents.Listings);
+        });
+    }
+
+    /// <summary>
     /// SC-004, the rc.1 root cause: an Edit Family document (announced, classified Family, no
     /// path, title "Support - Steel Bar") whose tab reads "Support - Steel Bar.rfa - 3D View: View 1"
     /// resolves through its title forms and gets the bar, beside a project titled "Support".
