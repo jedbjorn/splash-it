@@ -1,5 +1,5 @@
 // Copied from gantt-it src/GanttIt.Revit/UI/Dialogs/MessageDialog.xaml.cs (gantt-it commit aa83f35, MIT, same owner).
-// Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; gantt-it's dialog ids replaced by Splash-It's.
+// Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; gantt-it's dialog ids (DeleteConfirmId, NoLegendId) are replaced by DiscardChangesId.
 
 using System.Windows;
 using System.Windows.Automation;

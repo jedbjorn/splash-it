@@ -1,5 +1,5 @@
 // Copied from gantt-it src/GanttIt.Revit/UI/Swatches/ColorPicker.xaml.cs (gantt-it commit aa83f35, MIT, same owner).
-// Changes: namespaces.
+// Changes: namespaces; comments cite gantt-it's spec sections as "gantt-it §".
 
 using System.Windows.Controls;
 

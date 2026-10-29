@@ -1,6 +1,6 @@
 <!--
     Copied from gantt-it src/GanttIt.Revit/UI/Swatches/ColorPicker.xaml (gantt-it commit aa83f35, MIT, same owner).
-    Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing.
+    Changes: namespaces; strings from SplashIt.UI's UiStrings.resx (English, decision #8) instead of gantt-it's localization plumbing; comments cite gantt-it's spec sections as "gantt-it §".
 -->
 <UserControl x:Class="SplashIt.UI.Swatches.ColorPicker"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

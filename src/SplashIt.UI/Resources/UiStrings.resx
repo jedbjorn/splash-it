@@ -4,6 +4,11 @@
     SplashIt.UI's user-facing strings: the settings window, the vendored gantt-it color
     picker and dialogs. English only in v1 (decision #8). UiStrings.cs has one accessor
     per entry; the runtime test UiStringsTests checks every accessor resolves here.
+
+    Partly copied from gantt-it src/GanttIt.Revit/Resources/Strings.resx (gantt-it commit
+    aa83f35, MIT, same owner): the Common_, Dialog_, Edit_, Color_ and Pick_ entries, word
+    for word, except Color_DialogTitle ("Section color" there, "Color" here). The Settings_,
+    Status_ and Preview_ entries are Splash-It's own.
   -->
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -228,6 +233,10 @@
   <data name="Preview_Template" xml:space="preserve">
     <value>Template - 3D</value>
     <comment>Sample tab: a .rte template, never colored.</comment>
+  </data>
+  <data name="Preview_Off" xml:space="preserve">
+    <value>Coloring is off: every tab keeps Revit's own look.</value>
+    <comment>Under the preview when Color document tabs is unchecked.</comment>
   </data>
   <data name="Settings_Export" xml:space="preserve">
     <value>Export…</value>
