@@ -194,8 +194,8 @@
                         <ColumnDefinition Width="56" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{x:Static res:UiStrings.Settings_FillOpacity}" Style="{StaticResource LabelText}" />
-                    <Slider Grid.Column="1" Minimum="{x:Static settings:SettingsViewModel.MinOpacity}"
-                            Maximum="{x:Static settings:SettingsViewModel.MaxOpacity}"
+                    <Slider Grid.Column="1" Minimum="{Binding Source={x:Static settings:SettingsViewModel.MinOpacity}, Mode=OneTime}"
+                            Maximum="{Binding Source={x:Static settings:SettingsViewModel.MaxOpacity}, Mode=OneTime}"
                             Value="{Binding ProjectFillOpacity}"
                             AutomationProperties.AutomationId="Settings.ProjectFillOpacity"
                             AutomationProperties.Name="{x:Static res:UiStrings.Settings_FillOpacity}" />
@@ -222,8 +222,8 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="{x:Static res:UiStrings.Settings_BarWidth}" Style="{StaticResource LabelText}" />
-                    <Slider Grid.Column="1" Minimum="{x:Static settings:SettingsViewModel.MinBarWidth}"
-                            Maximum="{x:Static settings:SettingsViewModel.MaxBarWidth}" LargeChange="1"
+                    <Slider Grid.Column="1" Minimum="{Binding Source={x:Static settings:SettingsViewModel.MinBarWidth}, Mode=OneTime}"
+                            Maximum="{Binding Source={x:Static settings:SettingsViewModel.MaxBarWidth}, Mode=OneTime}" LargeChange="1"
                             Value="{Binding FamilyBarWidth}"
                             AutomationProperties.AutomationId="Settings.FamilyBarWidth"
                             AutomationProperties.Name="{x:Static res:UiStrings.Settings_BarWidth}" />
@@ -232,8 +232,8 @@
 
                     <TextBlock Grid.Row="1" Text="{x:Static res:UiStrings.Settings_BarOpacity}" Style="{StaticResource LabelText}"
                                Margin="0,6,8,0" />
-                    <Slider Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Minimum="{x:Static settings:SettingsViewModel.MinOpacity}"
-                            Maximum="{x:Static settings:SettingsViewModel.MaxOpacity}"
+                    <Slider Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Minimum="{Binding Source={x:Static settings:SettingsViewModel.MinOpacity}, Mode=OneTime}"
+                            Maximum="{Binding Source={x:Static settings:SettingsViewModel.MaxOpacity}, Mode=OneTime}"
                             Value="{Binding FamilyBarOpacity}"
                             AutomationProperties.AutomationId="Settings.FamilyBarOpacity"
                             AutomationProperties.Name="{x:Static res:UiStrings.Settings_BarOpacity}" />
