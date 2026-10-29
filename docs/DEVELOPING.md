@@ -157,7 +157,8 @@ The `SplashIt-Debug-R<yy>` artifacts are laid out like an `Addins\<year>\` folde
 
 ```text
 SplashIt.addin
-SplashIt\SplashIt.Revit.dll, SplashIt.UI.dll, SplashIt.Core.dll, PDBs, SplashIt.Revit.deps.json
+SplashIt\SplashIt.Revit.dll, SplashIt.UI.dll, SplashIt.Core.dll, PDBs, SplashIt.Revit.deps.json,
+         Resources\icons\splash_16.png, splash_32.png (+ _dark variants)
 ```
 
 Download them, or the screenshots, with:
