@@ -20,6 +20,7 @@ src/
     Settings/            SplashItSettings (Read/Write/Validate), SplashItDefaults,
                          SettingsExchange (export/import), the shared JSON reader
     Resources/           CoreStrings.resx (user-facing messages) + CoreStrings.cs
+    Logging/             FileLog (%LocalAppData%\SplashIt\logs, 7 days), ILog
   SplashIt.UI/           net8.0-windows;net10.0-windows, WPF, NO Revit references:
                          the tab style factory, the colorizer engine (against
                          ITabSurface and a document-info abstraction), the settings
@@ -32,11 +33,22 @@ src/
     Settings/            SettingsWindow + SettingsViewModel, ISettingsHost (the
                          Revit-facing calls), SettingsLauncher.Show(owner, host),
                          Preview/ (the sample tab strip)
+    Tabs/                TabStyleFactory (ITabStyleFactory), TabTreatment,
+                         TabDecoration (adorner: family bar, selected accent),
+                         DocumentTabColorizer, ITabSurface + TreeTabSurface (the
+                         tree walk by type name), LayoutPulse, PyRevitGuard
   SplashIt.Revit/        the add-in (net8.0-windows for 2025 and 2026,
                          net10.0-windows for 2027): App, the command, the Revit tab
                          surface, Revit event and theme adapters, logger wiring.
                          References SplashIt.UI and SplashIt.Core.
-    App.cs               IExternalApplication (skeleton for now)
+    App.cs               IExternalApplication: ribbon button, icons, colorizer start
+    Commands/            OpenSettings → SettingsLauncher.Show (the settings window),
+                         over ColorizerSettingsHost
+    Tabs/                RevitTabSurface (the only class touching Revit's UI tree),
+                         RevitDocuments (keys, titles, kinds; API context only),
+                         RevitColorizerEvents, TabDiagnostics (Debug only)
+    Theming/             RevitThemeDetector.Detect() → UiTheme, pushed into SplashItTheme
+    Resources/           RevitStrings.resx; icons\splash_{16,32}[_dark].png
     SplashIt.addin       manifest (VendorId DSOS; the ClientId never changes)
 tests/
   SplashIt.Core.Tests/   xUnit, net8.0;net10.0; runs on any OS (CI runs it on Linux
@@ -46,7 +58,8 @@ tests/
 docs/                    this file, RELEASING.md
 installer/               the per-user WiX MSI (Product.wxs, SplashIt.Installer.wixproj),
                          stage.sh, inspect-msi.ps1, test-detection.ps1, branding/
-tools/                   make_installer_branding.py (setup artwork, license page)
+tools/                   glyph.py (the splash glyph), make_icons.py (ribbon icons),
+                         make_installer_branding.py (setup artwork, license page)
 ```
 
 ## Configurations
@@ -145,7 +158,8 @@ The `SplashIt-Debug-R<yy>` artifacts are laid out like an `Addins\<year>\` folde
 
 ```text
 SplashIt.addin
-SplashIt\SplashIt.Revit.dll, SplashIt.UI.dll, SplashIt.Core.dll, PDBs, SplashIt.Revit.deps.json
+SplashIt\SplashIt.Revit.dll, SplashIt.UI.dll, SplashIt.Core.dll, PDBs, SplashIt.Revit.deps.json,
+         Resources\icons\splash_16.png, splash_32.png (+ _dark variants)
 ```
 
 Download them, or the screenshots, with:
@@ -221,3 +235,38 @@ importing.
 so the next Save rewrites it as schema 1 and drops the fields this version doesn't know.
 A user who goes back to v1 after a future v2 loses the v2-only settings. Import, by
 contrast, refuses a newer schema outright.
+
+## The tab colorizer
+
+`DocumentTabColorizer` (SplashIt.UI) colors document tabs through `ITabSurface`; in Revit
+the surface is `RevitTabSurface`, which finds AvalonDock's `LayoutDocumentPaneControl` under
+Revit's main window by type name and resolves each tab to its document by title
+(`TabTitleMatcher` in Core): the tab's tool tip is `"<document> - <view>"`, matched against
+the document's title, its saved file name, each with and without the Revit extension, and
+its titles before a Save As; ordinal, `" - "`-separated, the longest wins, and a tie between
+two documents leaves the tab uncolored. No reflection probe runs on Revit's internals (none
+finds a document handle on 2026 or 2027).
+
+Styles come from `TabStyleFactory` (decisions #22 and #23): the selected project tab shows the
+color at the fill opacity with a 3 px darker top line; the project's other tabs show it at the
+Unselected tab opacity (a share of the fill opacity, default 50 %). The fill is
+`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family bar and the top
+line are drawn by an adorner (`TabDecoration`), so they do not depend on Revit's template.
+Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
+(`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
+AvalonDock theme), so `TabCloseGlyph` sets it to the text color per state and puts the
+button's own value back when the original style returns. All of this was checked in Revit
+2026 and 2027 on the VM (`shared/evidence/lane-b/vm/`).
+
+- Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and
+  kinds there); the hot path runs from WPF layout passes and reads only WPF and the cache.
+- The log (`%LocalAppData%\SplashIt\logs\splashit-<yyyyMMdd>.log`) records counts, kinds
+  and type names, never titles or paths. The start cost is logged as
+  `colorizer: start took <n> ms`, split into the settings read, the pyRevit check, theme
+  detection, the document listing, the subscriptions and the first pass.
+- **Debug builds only:** create `%LocalAppData%\SplashIt\diag.on` (looked for once a second)
+  and the surface writes `diag-<n>.txt` beside it: every tab's title, the members behind it,
+  its visual tree with brushes, and where the close button's color comes from. That file
+  holds titles, so it never exists in a Release build.
+- Ribbon icons: `python3 tools/make_icons.py` (Pillow) regenerates
+  `src/SplashIt.Revit/Resources/icons/`. The glyph is in `tools/glyph.py`.

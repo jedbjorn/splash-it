@@ -7,11 +7,8 @@ wordmark and underline on the welcome/exit dialog, and a white banner with the
 product mark in the right corner over a navy rule. The mark is the ribbon-icon
 tile: a #D9D9D9 rounded tile with a #4F8EF7 glyph (spec #1, App).
 
-TEMPORARY GLYPH: the Splash-It glyph belongs to tools/glyph.py, which the
-colorizer lane is writing alongside this one. Until it lands, `temporary_mark`
-below draws a stand-in (a drop on the tile). When tools/glyph.py is on main,
-replace `temporary_mark` with its tile renderer and rerun this script, so the
-installer and the ribbon share one mark.
+The mark is tools/glyph.py's tile, the same renderer as the ribbon icons
+(tools/make_icons.py), so the installer and the ribbon share one mark.
 
 The license page is generated from the repository's LICENSE (MIT), so the two
 never drift apart.
@@ -29,11 +26,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from glyph import BLUE as GLYPH, TILE, tile
+
 NAVY = (0x3B, 0x59, 0x98)  # rst-c installer sidebar / rule colour, as gantt-it
 WHITE = (0xFF, 0xFF, 0xFF)
-TILE = (0xD9, 0xD9, 0xD9, 0xFF)
-GLYPH = (0x4F, 0x8E, 0xF7, 0xFF)
-SUPERSAMPLE = 8
 
 FONTS = [
     "/usr/share/fonts/TTF/OpenSans-Bold.ttf",
@@ -48,25 +44,9 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "installer" / "branding"
 
 
-def temporary_mark(size: int) -> Image.Image:
-    """TEMPORARY stand-in for tools/glyph.py: a #4F8EF7 drop on the #D9D9D9 tile.
-
-    Drawn on a 32 px grid and scaled, supersampled, then box-filtered down so
-    the edges anti-alias.
-    """
-    s = SUPERSAMPLE
-    k = size * s / 32
-    big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(big)
-    draw.rounded_rectangle((0, 0, size * s - 1, size * s - 1), radius=3 * k, fill=TILE)
-    # The drop: a round body (centre 16,19.5, radius 7.5) under a pointed top at (16,5).
-    cx, cy, r = 16 * k, 19.5 * k, 7.5 * k
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=GLYPH)
-    draw.polygon([(16 * k, 5 * k), (cx - r * 0.86, cy - r * 0.5), (cx + r * 0.86, cy - r * 0.5)], fill=GLYPH)
-    return big.reduce(s)
-
-
-mark = temporary_mark
+def mark(size: int) -> Image.Image:
+    """The Splash-It mark at `size` px: tools/glyph.py's #4F8EF7 splash on the #D9D9D9 tile."""
+    return tile(size, TILE, GLYPH)
 
 
 def font(px: int) -> ImageFont.FreeTypeFont:

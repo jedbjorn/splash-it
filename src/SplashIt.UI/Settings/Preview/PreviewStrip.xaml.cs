@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using SplashIt.Core.Colors;
 using SplashIt.Core.Settings;
+using SplashIt.Core.Theming;
 using SplashIt.UI.Resources;
 using SplashIt.UI.Theming;
 
@@ -31,11 +32,8 @@ public partial class PreviewStrip : UserControl
         Restyle();
     }
 
-    /// <summary>
-    /// The style source. The placeholder until Lane B's tab style factory lands; then an
-    /// adapter over that factory, so the preview and the colorizer share one implementation.
-    /// </summary>
-    internal static IPreviewTabStyler Styler { get; set; } = new PlaceholderTabStyler();
+    /// <summary>The style source: the colorizer's <see cref="SplashIt.UI.Tabs.TabStyleFactory"/>, so the preview is what the tabs get.</summary>
+    internal static IPreviewTabStyler Styler { get; set; } = new FactoryTabStyler();
 
     /// <summary>The values to show; null shows the defaults.</summary>
     public SplashItSettings? Settings
@@ -58,7 +56,9 @@ public partial class PreviewStrip : UserControl
             return;
         }
 
-        var backdrop = SplashItTheme.IsDark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
+        // What the tabs sit on: the strip's window color. Text contrast is measured against it.
+        var well = UiPalette.For(SplashItTheme.Current)[UiPalette.Window];
+        var backdrop = new Rgb(well.R, well.G, well.B);
 
         // The window may hold out-of-range values until Save rejects them; draw the nearest valid ones.
         var fill = Math.Clamp(s.ProjectFillOpacity, SplashItDefaults.MinOpacity, SplashItDefaults.MaxOpacity);
