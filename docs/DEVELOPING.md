@@ -332,7 +332,9 @@ returns. All of this was checked in Revit
   handled like a Save As) and, when anything changed (a title too), drops the surface's
   cached resolutions and restyles.
 - Each document is logged once when registered:
-  `documents: doc#<n> registered by <event|start|fallback>: <kind> (rule <api|template-ext>); <count> open.`
+  `documents: doc#<n> registered by <event|start|fallback|group-tabs>: <kind> (rule <api|template-ext>); <count> open.`
+  (`group-tabs`: listed by a Group Tabs click, which runs the same scan at once while the
+  colorizer runs, so what it finds reaches the colorizer; spec #2, review m3 and n3.)
   The kind comes from `Document.IsFamilyDocument` (`api`); only `.rte` (projects) and
   `.rft` (families) demote to Other (`template-ext`). A scan that found or changed something,
   or whose unresolved count moved, logs
