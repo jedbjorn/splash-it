@@ -92,14 +92,20 @@ public class TabStripScreenshotTests
                 ("Project2 - Floor Plan: L1", TabTreatment.ProjectFill(P2, 100)),
                 ("Project2 - 3D View: {3D}", TabTreatment.ProjectFill(P2, 100)));
             var (bitmap, root) = Shoot("tabs-two-projects", theme,
-                Label("Two projects (Project colors 1 and 2), the second tab selected: full color with a 2 px darker top accent", theme), strip);
+                Label("Two projects (colors 1 and 2), the 2nd tab selected: the fill with a 3 px darker top line; the others at 50 % (#23)", theme), strip);
 
+            var well = HostTabs.Well(theme);
             var unselected = HostTabs.Tab(strip, 0);
             var selected = HostTabs.Tab(strip, 1);
-            Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, unselected, 3, 10));
-            Near(HostTabs.ColorOf(P2), PixelIn(bitmap, root, HostTabs.Tab(strip, 2), 3, 10));
+            Near(Shown(P1, 0.5, well), PixelIn(bitmap, root, unselected, 3, 10));
+            Near(Shown(P2, 0.5, well), PixelIn(bitmap, root, HostTabs.Tab(strip, 2), 3, 10));
             Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, selected, 20, 0.5));
+            Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, selected, 20, 2.5)); // 3 px
             Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, selected, 20, 10));
+            // The close glyph follows the text (review M1), on every colored tab.
+            foreach (var i in new[] { 0, 1, 2, 3 })
+                Assert.Equal(((SolidColorBrush)HostTabs.Tab(strip, i).Foreground).Color,
+                    ((SolidColorBrush)TabCloseGlyph.FindButton(HostTabs.Tab(strip, i))!.Foreground).Color);
         });
     }
 
@@ -155,16 +161,51 @@ public class TabStripScreenshotTests
                     ("Project1 - Sheet: A101", TabTreatment.ProjectFill(P1, opacity)),
                     ("Project3 - Floor Plan: L1", TabTreatment.ProjectFill(SplashItDefaults.ProjectColors[6], opacity)));
                 strips[opacity] = strip;
-                rows.Add(Label($"Project fill at {opacity} % (third tab selected: always full color)", theme));
+                rows.Add(Label($"Project fill at {opacity} %, unselected tabs at 50 % of it (third tab selected)", theme));
                 rows.Add(strip);
             }
             var (bitmap, root) = Shoot("tabs-fill-opacity", theme, rows.ToArray());
 
             // Unselected: the fill blended over the strip behind the tab (Revit-like tabs are transparent).
             var well = HostTabs.Well(theme);
-            Near(Shown(P1, 0.3, well), PixelIn(bitmap, root, HostTabs.Tab(strips[30], 0), 3, 10));
-            Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, HostTabs.Tab(strips[100], 0), 3, 10));
-            Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, HostTabs.Tab(strips[30], 2), 3, 10)); // selected
+            Near(Shown(P1, 0.15, well), PixelIn(bitmap, root, HostTabs.Tab(strips[30], 0), 3, 10));  // 50 % of 30 %
+            Near(Shown(P1, 0.5, well), PixelIn(bitmap, root, HostTabs.Tab(strips[100], 0), 3, 10));
+            Near(Shown(P1, 0.3, well), PixelIn(bitmap, root, HostTabs.Tab(strips[30], 2), 3, 10));   // selected: the fill
+            Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, HostTabs.Tab(strips[100], 2), 3, 10));
+        });
+    }
+
+    /// <summary>#23: the Unselected tab opacity at 20, 50 (default) and 100 % of a 100 % fill.</summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void UnselectedTabOpacity_At20_50And100(ThemeKind theme)
+    {
+        Screenshots.RunSta(() =>
+        {
+            var factory = new TabStyleFactory();
+            var original = HostTabs.RevitLikeStyle(theme);
+            var rows = new List<UIElement>();
+            var strips = new Dictionary<int, TabControl>();
+            foreach (var share in new[] { 20, 50, 100 })
+            {
+                var strip = Styled(factory, original, theme, selected: 1,
+                    ("Project1 - Floor Plan: L1", TabTreatment.ProjectFill(P1, 100, share)),
+                    ("Project1 - Sheet: A101", TabTreatment.ProjectFill(P1, 100, share)),
+                    ("Project2 - Floor Plan: L1", TabTreatment.ProjectFill(P2, 100, share)),
+                    ("Project2 - 3D View: {3D}", TabTreatment.ProjectFill(P2, 100, share)));
+                strips[share] = strip;
+                rows.Add(Label($"Unselected tab opacity {share} % of a 100 % fill (2nd tab selected){(share == 100 ? ": only the top line marks it" : "")}", theme));
+                rows.Add(strip);
+            }
+            var (bitmap, root) = Shoot("tabs-unselected-opacity", theme, rows.ToArray());
+
+            var well = HostTabs.Well(theme);
+            foreach (var (share, strip) in strips)
+            {
+                Near(Shown(P1, share / 100.0, well), PixelIn(bitmap, root, HostTabs.Tab(strip, 0), 3, 10));
+                Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, HostTabs.Tab(strip, 1), 20, 10));
+                Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, HostTabs.Tab(strip, 1), 20, 1.5));
+            }
         });
     }
 
@@ -181,12 +222,14 @@ public class TabStripScreenshotTests
             var a = Styled(factory, original, theme, selected: 0, first);
             var b = Styled(factory, original, theme, selected: 5, second);
             var (bitmap, root) = Shoot("tabs-twelve-projects", theme,
-                Label("12 projects, the 12 default Project colors in order (P1 and P12 selected)", theme), a, b);
+                Label("The 12 default Project colors (each its own project; P1 and P12 selected, the rest at 50 %)", theme), a, b);
 
+            var well = HostTabs.Well(theme);
+            Near(HostTabs.ColorOf(SplashItDefaults.ProjectColors[0]), PixelIn(bitmap, root, HostTabs.Tab(a, 0), 3, 10));
             for (var i = 1; i < 6; i++)
-                Near(HostTabs.ColorOf(SplashItDefaults.ProjectColors[i]), PixelIn(bitmap, root, HostTabs.Tab(a, i), 3, 10));
+                Near(Shown(SplashItDefaults.ProjectColors[i], 0.5, well), PixelIn(bitmap, root, HostTabs.Tab(a, i), 3, 10));
             for (var i = 0; i < 5; i++)
-                Near(HostTabs.ColorOf(SplashItDefaults.ProjectColors[6 + i]), PixelIn(bitmap, root, HostTabs.Tab(b, i), 3, 10));
+                Near(Shown(SplashItDefaults.ProjectColors[6 + i], 0.5, well), PixelIn(bitmap, root, HostTabs.Tab(b, i), 3, 10));
         });
     }
 
@@ -231,7 +274,7 @@ public class TabStripScreenshotTests
             var (bitmap, root) = Shoot("tabs-aero2", theme,
                 Label("WPF's stock (Aero2) TabItem template: it paints its own selected background over the fill", theme), strip);
 
-            Near(HostTabs.ColorOf(P2), PixelIn(bitmap, root, HostTabs.Tab(strip, 2), 4, 8));
+            Near(Shown(P2, 0.5, theme.Surface()), PixelIn(bitmap, root, HostTabs.Tab(strip, 2), 4, 8));
             Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, HostTabs.Tab(strip, 3), 0.5, 8));
         });
     }
