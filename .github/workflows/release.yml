@@ -141,7 +141,15 @@ jobs:
           for f in "SplashIt-$VERSION.msi" "SplashIt-$VERSION-Revit2025.zip" "SplashIt-$VERSION-Revit2026.zip" "SplashIt-$VERSION-Revit2027.zip"; do
             [[ -s "dist/$f" ]] || { echo "::error::missing release asset $f"; exit 1; }
           done
-          (cd dist && sha256sum -- * | tee SHA256SUMS.txt)
+          # Diverges from gantt-it (aa83f35) on purpose: there, `sha256sum -- * |
+          # tee SHA256SUMS.txt` races tee's file creation against the glob, so
+          # SHA256SUMS.txt can list itself with a wrong hash. Write the sums
+          # outside dist/ first, then move them in.
+          sums="$RUNNER_TEMP/SHA256SUMS.txt"
+          (cd dist && sha256sum -- *) > "$sums"
+          mv "$sums" dist/SHA256SUMS.txt
+          cat dist/SHA256SUMS.txt
+          (cd dist && sha256sum -c SHA256SUMS.txt)
 
       - name: Planned release
         env:

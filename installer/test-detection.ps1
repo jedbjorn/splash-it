@@ -3,7 +3,10 @@
   (spec #1 AC10, CI part). Windows only, and ADMIN only: it writes fake Revit
   uninstall entries under HKLM and fake Revit folders under Program Files.
   Meant for a throwaway CI runner (the MSI job of .github/workflows/_build.yml);
-  it cleans up after itself, but do not run it on a machine with Revit.
+  it cleans up after itself, but do not run it on a machine with Revit. It
+  refuses to run outside GitHub Actions ($env:GITHUB_ACTIONS = 'true') unless
+  -IUnderstandThisDeletesUserFolders is given: it deletes Addins\2025\ and
+  2026\ and %AppData%\SplashIt\ of the user running it.
 
     powershell -File installer/test-detection.ps1 -Msi <SplashIt-<v>.msi> -OutDir <folder> [-Expected <folder>]
 
@@ -28,7 +31,7 @@
 
   Cases:
     1   no Revit at all: the first install is blocked by the launch condition
-        (nonzero exit, the message in the log), nothing installed;
+        (exit 1603, the message in the log), nothing installed;
     2   2026 in a custom folder, found through the registry -> only 2026;
     3   a 2025 entry whose folder has no Revit.exe, and 2027 in the default
         folder only -> only 2027;
@@ -54,10 +57,20 @@
 param(
   [Parameter(Mandatory = $true)] [string] $Msi,
   [Parameter(Mandatory = $true)] [string] $OutDir,
-  [string] $Expected
+  [string] $Expected,
+  # Required to run anywhere but GitHub Actions: the script deletes and
+  # recreates %AppData%\Autodesk\Revit\Addins\2025\ and 2026\, overwrites and
+  # then deletes %AppData%\SplashIt\, and writes fake Revit entries under HKLM.
+  [switch] $IUnderstandThisDeletesUserFolders
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($env:GITHUB_ACTIONS -ne 'true' -and -not $IUnderstandThisDeletesUserFolders) {
+  throw ('test-detection.ps1 is meant for a throwaway CI runner. It deletes %AppData%\Autodesk\Revit\Addins\2025\ and 2026\ ' +
+    'and %AppData%\SplashIt\ (your settings), and writes fake Revit entries under HKLM. Outside GitHub Actions, pass ' +
+    '-IUnderstandThisDeletesUserFolders to run it anyway, on a machine you can throw away.')
+}
 $UpgradeCode = '{080648F4-EEC7-4DB6-A793-683A1C008BFC}'
 $Years = '2025', '2026', '2027'
 $LaunchMessage = 'Splash-It needs Revit 2025, 2026 or 2027, and none was found on this computer.'
@@ -255,12 +268,14 @@ try {
   Say ''; Say 'Case 1: no Revit at all -> first install blocked'
   $run = Install-Msi 'case1-install'
   $p = @()
-  if ($run.ExitCode -eq 0) { $p += 'install succeeded; the launch condition should have blocked it' }
+  # 1603 (ERROR_INSTALL_FAILURE) is what a failed launch condition returns;
+  # setup bundles that chain the MSI rely on it (docs/RELEASING.md).
+  if ($run.ExitCode -ne 1603) { $p += "install exit $($run.ExitCode), expected 1603 (blocked by the launch condition)" }
   # msiexec writes its log as UTF-16 (with a BOM) or ANSI; ReadAllText reads either.
   if (-not ([System.IO.File]::ReadAllText($run.Log).Contains($LaunchMessage))) { $p += 'the launch condition message is not in the log' }
   $p += Test-State @()
   if ((Get-InstalledProducts).Count) { $p += 'Splash-It is registered as installed' }
-  Record '1' 'no Revit' 'install' 'blocked (nonzero exit, launch-condition message), no folders' $p (Observed $run)
+  Record '1' 'no Revit' 'install' 'blocked (exit 1603, launch-condition message), no folders' $p (Observed $run)
   Remove-AllFakes
 
   # Case 2 ---------------------------------------------------------------
