@@ -28,4 +28,7 @@ internal static class RevitStrings
     internal static string GroupTabs_UnavailableDetail => Get(nameof(GroupTabs_UnavailableDetail));
     internal static string GroupTabs_Stopped => Get(nameof(GroupTabs_Stopped));
     internal static string GroupTabs_StoppedDetail => Get(nameof(GroupTabs_StoppedDetail));
+    internal static string GroupTabs_StoppedSelectionDetail => Get(nameof(GroupTabs_StoppedSelectionDetail));
+    internal static string GroupTabs_Error => Get(nameof(GroupTabs_Error));
+    internal static string GroupTabs_ErrorDetail => Get(nameof(GroupTabs_ErrorDetail));
 }
