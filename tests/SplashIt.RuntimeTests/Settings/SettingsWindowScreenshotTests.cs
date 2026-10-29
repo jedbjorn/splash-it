@@ -228,10 +228,10 @@ public class SettingsWindowScreenshotTests
         else
         {
             Assert.Equal(Visibility.Collapsed, note.Visibility);
-            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over what the
-            // tabs sit on (the strip's window color), drawn by the colorizer's TabStyleFactory.
-            var well = Palette(theme, UiPalette.Window);
-            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, new Rgb(well.R, well.G, well.B)));
+            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over the tab's own
+            // color (laid under the fill, #30), drawn by the colorizer's TabStyleFactory.
+            var tabColor = Palette(theme, UiPalette.Hover);
+            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, new Rgb(tabColor.R, tabColor.G, tabColor.B)));
             Assert.True(Distance(expected, tower2Pixel) <= 3, $"preview tab is {tower2Pixel}, expected {expected}");
         }
     });
