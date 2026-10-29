@@ -307,6 +307,43 @@ public class ProjectFillShapeTests
         });
     }
 
+    /// <summary>
+    /// Delta review D-M1: Revit leaves Hidden tabs at stale positions, over tabs that are drawn
+    /// (vm/2026/diag-2026.txt: tab 0, 142x20, vis=Hidden). A Hidden filled tab moved over another
+    /// tab's fill must not be sampled: the backdrop is still the strip, not that fill.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void AHiddenTabOverAnotherTab_IsNotSampled(UiTheme theme)
+    {
+        Screenshots.RunSta(() =>
+        {
+            var (root, first, _) = Strip(theme, 155, Orange, titles: ["Tower - A", "Tower - B", "Tower - C"]);
+            var strip = (TabControl)ItemsControl.ItemsControlFromItemContainer(first);
+            var hidden = HostTabs.Tab(strip, 0);
+            var selected = HostTabs.Tab(strip, 1);
+            var under = HostTabs.Tab(strip, 2);
+            selected.IsSelected = true;
+            HostTabs.Layout(root);
+
+            // Tab 0 is filled and unselected: it offers the gap before its (hidden) ×. Hide it and move
+            // it, as a stale position would, so that point lies over tab 2's solid fill.
+            var gapPoint = MeasuredCloseLeft(hidden) - Shape.Gap / 2;
+            var onFill = under.TranslatePoint(new Point(20, under.ActualHeight / 2), hidden);
+            hidden.Visibility = Visibility.Hidden;
+            hidden.RenderTransform = new TranslateTransform(onFill.X - gapPoint, 0);
+            HostTabs.Layout(root);
+            var bitmap = Screenshots.Render(root);
+            var fill = Pixel(bitmap, root, under, 20, under.ActualHeight / 2);
+            Assert.NotEqual(HostTabs.ColorOf(HostTabs.Well(theme)), fill); // what the hidden tab's point now shows
+
+            var rendered = TabBackdrop.Rendered(under, out var failure);
+            Assert.True(rendered is not null, failure);
+            Assert.Equal(HostTabs.Well(theme), rendered!.Value.Color);
+            Assert.Contains("selected", rendered.Value.Source); // from the drawn, selected tab
+        });
+    }
+
     /// <summary>A translucent strip is blended over what is behind it.</summary>
     [Fact]
     public void ATranslucentStrip_IsBlendedOverWhatIsBehindIt()
@@ -351,6 +388,9 @@ public class ProjectFillShapeTests
 
     private static readonly int[] Fills = [10, 20, 30, 40, 50, 60, 70, 80, 85, 90, 95, 100];
 
+    /// <summary>Steps across the title span (from the fade under its last column to the solid part) the floor checks.</summary>
+    private const int TitleSteps = 24;
+
     /// <summary>
     /// #31, review M1: for every default project color, fill 10 to 100 % (and 85, 95), Unselected tab
     /// opacity 10 to 100 %, and each state (unselected, hover, selected), the factory's text color
@@ -374,9 +414,11 @@ public class ProjectFillShapeTests
             ("stand-in strip", HostTabs.Well(theme)),
             ("settings preview tab", new Rgb(previewTab.R, previewTab.G, previewTab.B)),
         };
-        if (theme == UiTheme.Dark) backdrops.Add(("Revit dark tab area (Lane B capture; AC11 to confirm)", Rgb.Parse("#454F61")));
+        backdrops.Add(theme == UiTheme.Dark
+            ? ("Revit dark tab strip (VM, #33)", Rgb.Parse("#454F61"))
+            : ("Revit light tab strip (VM, #33)", Rgb.Parse("#CCCCCC")));
         var end = Shape.TitleEndShare;
-        var log = new StringBuilder($"#31 title floor, {theme}: text chosen over what shows behind the tab; min contrast over (solid, title end at {end:P1} of the opacity)\n");
+        var log = new StringBuilder($"#31 title floor, {theme}: text chosen over what shows behind the tab; min contrast over the whole title, from the solid part to its end at {end:P1} of the opacity ({TitleSteps + 1} points)\n");
         var failures = new List<string>();
         foreach (var (name, backdrop) in backdrops)
         {
@@ -397,17 +439,19 @@ public class ProjectFillShapeTests
                          })
                 {
                     count++;
-                    var min = Math.Min(ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity, backdrop)),
-                        ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity * end, backdrop)));
+                    // Review n4: the whole title, from the solid part to its end in the fade, not only its two ends.
+                    var min = double.MaxValue;
+                    for (var k = 0; k <= TitleSteps; k++)
+                        min = Math.Min(min, ColorMath.ContrastRatio(text, ColorMath.Blend(c, opacity * (end + (1 - end) * k / TitleSteps), backdrop)));
                     if (min < worst.Value) worst = (min, $"{color.ToHex()} fill {fill} % unselected {share} % {state}");
                     if (min < 3)
                     {
-                        below++; // max-min chose the better of the two, so neither black nor white reaches 3:1 here
+                        below++; // below 3:1 somewhere along the title
                         failures.Add($"{name}: {color.ToHex()} fill {fill} % unselected {share} % {state}: {min:0.00}:1");
                     }
                 }
             }
-            log.AppendLine($"{name} {backdrop.ToHex()}: worst {worst.Value:0.00}:1 ({worst.What}); neither black nor white reaches 3:1: {below} of {count}");
+            log.AppendLine($"{name} {backdrop.ToHex()}: worst {worst.Value:0.00}:1 ({worst.What}); below 3:1 anywhere along the title: {below} of {count}");
         }
         System.IO.Directory.CreateDirectory(Screenshots.Folder);
         System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, $"project-fill-title-floor-{theme.ToString().ToLowerInvariant()}.txt"), log.ToString());
