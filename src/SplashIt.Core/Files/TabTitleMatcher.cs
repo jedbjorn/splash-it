@@ -95,9 +95,10 @@ public static class TabTitleMatcher
     /// tabs read "Tower26.rvt - Floor Plan: L1"; the extension shows or not with the Windows
     /// setting.
     /// <para>
-    /// When <paramref name="isFamilyDocument"/> is given, the title with its kind's extension is
-    /// a form too: <c>.rfa</c> for a family, <c>.rvt</c> for a project, unless the title already
-    /// ends in it. This is the rc.1 root cause of SC-004: a family opened with Edit Family has
+    /// When <paramref name="isFamilyDocument"/> is given and the document has <b>no path</b>, the
+    /// title with its kind's extension is a form too: <c>.rfa</c> for a family, <c>.rvt</c> for a
+    /// project, unless the title already ends in it. With a path, its file name already carries
+    /// the real extension, and an added one could only make new ties (delta review d2). This is the rc.1 root cause of SC-004: a family opened with Edit Family has
     /// an empty path and the title "Support - Steel Bar", while its tabs read
     /// "Support - Steel Bar.rfa - 3D View: View 1", so no other form matched. A family opened
     /// from disk matched only through its path's file name.
@@ -118,7 +119,7 @@ public static class TabTitleMatcher
         var fileName = FileNameOf(path);
         Add(fileName);
         Add(WithoutRevitExtension(fileName));
-        if (isFamilyDocument is { } family && !string.IsNullOrEmpty(title))
+        if (isFamilyDocument is { } family && !string.IsNullOrEmpty(title) && string.IsNullOrWhiteSpace(path))
         {
             var extension = family ? ".rfa" : ".rvt";
             if (!title.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) Add(title + extension);

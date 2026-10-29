@@ -196,4 +196,45 @@ public class TabTitleMatcherTests
         Assert.Equal(new[] { "Door", "Door.rfa" }, forms);
         Assert.Equal(0, TabTitleMatcher.Find("Door.rfa - Ref. Level", [forms]).Index);
     }
+
+    /// <summary>
+    /// Delta review d2: the kind's extension is added only for a document with no path. With a
+    /// path, its file name carries the real extension, so no new tie is made.
+    /// </summary>
+    [Fact]
+    public void TheKindsExtension_IsAddedOnlyWithNoPath()
+    {
+        // A family template whose title has no extension: no "Generic Model.rfa" to tie a real family.
+        Assert.Equal(new[] { "Generic Model", "Generic Model.rft" },
+            TabTitleMatcher.TitleForms("Generic Model", @"C:\Templates\Generic Model.rft", isFamilyDocument: true));
+        IReadOnlyList<IReadOnlyList<string>> docs =
+        [
+            TabTitleMatcher.TitleForms("Generic Model", @"C:\Templates\Generic Model.rft", isFamilyDocument: true),
+            TabTitleMatcher.TitleForms("Generic Model", @"C:\Families\Generic Model.rfa", isFamilyDocument: true),
+        ];
+        Assert.Equal(1, TabTitleMatcher.Find("Generic Model.rfa - Ref. Level", docs).Index);
+        // A cloud project whose path has no extension: nothing added.
+        Assert.Equal(new[] { "Tower" }, TabTitleMatcher.TitleForms("Tower", "BIM 360://Project X/Tower", isFamilyDocument: false));
+        // No path (null, empty or blank): added.
+        foreach (var none in new[] { null, "", "  " })
+            Assert.Equal(new[] { "Door", "Door.rfa" }, TabTitleMatcher.TitleForms("Door", none, isFamilyDocument: true));
+    }
+
+    /// <summary>
+    /// Known limitation (delta review d2): a library Door.rfa opened from disk and an Edit Family
+    /// "Door" both carry "Door.rfa", so their identical tabs tie and both stay native. A wrong
+    /// color would be worse than none.
+    /// </summary>
+    [Fact]
+    public void ALibraryFamilyAndAnEditFamilyOfTheSameName_Tie()
+    {
+        IReadOnlyList<IReadOnlyList<string>> docs =
+        [
+            TabTitleMatcher.TitleForms("Door", @"C:\Families\Door.rfa", isFamilyDocument: true),
+            TabTitleMatcher.TitleForms("Door", "", isFamilyDocument: true),
+        ];
+        var match = TabTitleMatcher.Find("Door.rfa - Ref. Level", docs);
+        Assert.True(match.Tied);
+        Assert.Equal(-1, match.Index);
+    }
 }
