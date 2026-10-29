@@ -123,9 +123,16 @@ public sealed class RevitDocuments : IDocumentInfo
     /// API context (it lists Revit's documents). Re-reads the open, non-linked documents,
     /// adding new ones and forgetting closed ones, then lists their keys.
     /// </summary>
-    public void GetOpenDocuments(List<object> into)
+    public void GetOpenDocuments(List<object> into) => GetOpenDocuments(into, out _);
+
+    /// <summary>
+    /// As <see cref="GetOpenDocuments(List{object})"/>; <paramref name="changed"/> counts the known
+    /// documents whose title or kind changed since they were last read (review m1).
+    /// </summary>
+    public void GetOpenDocuments(List<object> into, out int changed)
     {
         into.Clear();
+        changed = 0;
         try
         {
             if (_application() is { } app)
@@ -134,6 +141,12 @@ public sealed class RevitDocuments : IDocumentInfo
                 foreach (Document document in app.Documents)
                 {
                     if (document.IsLinked) continue;
+                    if (Find(document) is { } known)
+                    {
+                        if (known.Read()) changed++;
+                        open.Add(known);
+                        continue;
+                    }
                     var key = Register(document, ListingSource);
                     open.Add(_entries.First(e => ReferenceEquals(e.Key, key)));
                 }

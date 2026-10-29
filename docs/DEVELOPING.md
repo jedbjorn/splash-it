@@ -266,13 +266,15 @@ button's own value back when the original style returns. All of this was checked
 - Registration fallback (SC-004): when a pass finds tabs that resolve to no document, the
   colorizer asks for a document scan (at most once a second, at most 3 times per change of
   the tabs). A layout pass is outside the API context, so `RevitColorizerEvents` only sets
-  a flag; the next `Idling` (API context) lists `Application.Documents` and registers every
-  open, non-linked document no event announced.
+  a flag; the next `Idling` (API context) lists `Application.Documents`, registers every
+  open, non-linked document no event announced, re-reads the known ones (a changed kind is
+  handled like a Save As) and, when anything changed (a title too), drops the surface's
+  cached resolutions and restyles.
 - Each document is logged once when registered:
   `documents: doc#<n> registered by <event|start|fallback>: <kind> (rule <api|template-ext>); <count> open.`
   The kind comes from `Document.IsFamilyDocument` (`api`); only `.rte` (projects) and
-  `.rft` (families) demote to Other (`template-ext`). A fallback that found documents adds
-  `colorizer: a document scan registered <n> documents no event announced (…)`.
+  `.rft` (families) demote to Other (`template-ext`). Every scan logs
+  `colorizer: a document scan registered <n> documents no event announced (…); <n> changed title or kind, <n> reclassified; <n> no longer open; <n> unresolved.`
 - The log (`%LocalAppData%\SplashIt\logs\splashit-<yyyyMMdd>.log`) records counts, kinds
   and type names, never titles or paths. The start cost is logged as
   `colorizer: start took <n> ms`, split into the settings read, the pyRevit check, theme
