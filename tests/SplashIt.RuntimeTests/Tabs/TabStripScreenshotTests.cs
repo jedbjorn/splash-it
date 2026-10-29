@@ -226,7 +226,7 @@ public class TabStripScreenshotTests
                 ("Project1 - L2", TabTreatment.ProjectFill(P1, 100)),
                 ("Project2 - L1", TabTreatment.ProjectFill(P2, 100)),
                 ("Family1 - Ref. Level", TabTreatment.FamilyBar(F1, 3, 100)));
-            strip.Template = null; // WPF's own TabControl template too
+            strip.ClearValue(Control.TemplateProperty); // WPF's own TabControl template too
             strip.ClearValue(Control.BackgroundProperty);
             var (bitmap, root) = Shoot("tabs-aero2", theme,
                 Label("WPF's stock (Aero2) TabItem template: it paints its own selected background over the fill", theme), strip);
