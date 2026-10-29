@@ -257,8 +257,15 @@ selected tab's top line takes the same shape. The `Background` value is a bindin
 width (`ProjectFillConverter`), because the fade's position depends on where that tab's close
 button is: the button's layout slot (Revit keeps it `Hidden`, not collapsed, on tabs that are
 not selected or hovered, so hovering moves nothing), else the tab's right edge less 18 px. A
-tab too narrow for the fade fades from its left edge. The text keeps the solid part's black or
-white; the × is chosen against the strip. The family marks (#27: the
+tab too narrow for the fade fades from its left edge. Contrast (#31): the text is black or white,
+whichever has the higher *minimum* contrast over two points, the solid part and the fade under a
+title's last column (Revit leaves 12 px between a title and its ×, so a title that fills its tab
+ends 10.5 px into the 24 px fade, at about 44 % of the opacity); the × is black or white against
+the backdrop alone. Both are measured against the tab's *original* background (blended over the
+theme surface; Revit's tab backgrounds are transparent, so in practice the theme surface). What
+actually shows through the fade's transparent end, and under the ×, is whatever is behind the tab
+(the fill replaces the tab's own background): Revit's tab strip. The two are close in Revit's
+themes, but the choice does not see the strip itself; AC11 samples it. The family marks (#27: the
 side bar of the bar width, plus a fixed 2 px top bar from the left edge over 95 % of the tab,
 fading out over its last 15 % (#29), `FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
 (`TabDecoration`), so they do not depend on Revit's template, follow a resize, and go with
@@ -266,7 +273,8 @@ the original style.
 Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
 (`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
 AvalonDock theme), so `TabCloseGlyph` sets it to black or white (since #30, chosen against the
-strip it sits on) and puts the button's own value back when the original style returns. All of this was checked in Revit
+tab's original background, see above) and puts the button's own value back when the original
+style returns. All of this was checked in Revit
 2026 and 2027 on the VM (`shared/evidence/lane-b/vm/`).
 
 - Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and
