@@ -30,10 +30,15 @@
                             <Grid Margin="0,0,2,0" SnapsToDevicePixels="True">
                                 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="1,1,1,0" Padding="8,6,6,6">
-                                    <!-- Like Revit's tabs, a narrow tab trims its title; the close glyph stays. -->
+                                    <!-- Like Revit's tabs, a narrow tab trims its title; the close glyph stays. The glyph
+                                         is a named control, as Revit's mDocumentCloseButton, so the project fill (#30)
+                                         ends just before it and the factory gives it its own black or white. -->
                                     <DockPanel>
-                                        <TextBlock DockPanel.Dock="Right" Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8"
-                                                   Margin="6,1,0,0" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}" />
+                                        <ContentControl x:Name="PART_CloseButton" DockPanel.Dock="Right" Margin="6,1,0,0" VerticalAlignment="Center"
+                                                        Focusable="False" IsTabStop="False"
+                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}">
+                                            <TextBlock Text="&#xE711;" FontFamily="{StaticResource IconFont}" FontSize="8" />
+                                        </ContentControl>
                                         <TextBlock Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                                    Foreground="{TemplateBinding Foreground}" />
                                     </DockPanel>
