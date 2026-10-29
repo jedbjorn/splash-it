@@ -153,9 +153,10 @@ public class TabStripScreenshotTests
             Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, selected, 20, 0.5));
             Near(HostTabs.ColorOf(ColorMath.Darken(P1, TabStyleFactory.AccentDarken)), PixelIn(bitmap, root, selected, 20, 2.5)); // 3 px
             Near(HostTabs.ColorOf(P1), PixelIn(bitmap, root, selected, 20, 10));
-            // The close glyph follows the text (review M1), on every colored tab.
+            // The close glyph is never Revit's grey (review M1); since #30 it sits on the strip, so on
+            // every colored tab it is black or white against the theme, not the fill.
             foreach (var i in new[] { 0, 1, 2, 3 })
-                Assert.Equal(((SolidColorBrush)HostTabs.Tab(strip, i).Foreground).Color,
+                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(theme.Surface())),
                     ((SolidColorBrush)TabCloseGlyph.FindButton(HostTabs.Tab(strip, i))!.Foreground).Color);
         });
     }
