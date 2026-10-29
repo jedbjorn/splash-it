@@ -90,6 +90,63 @@ public class GroupTabsRunnerTests
         });
     }
 
+    /// <summary>
+    /// SC-004 / PR #8's kind-aware title forms, reused through <see cref="TabTitleMatcher"/>: a
+    /// family opened with Edit Family has no path, and its tabs read "&lt;title&gt;.rfa - &lt;view&gt;".
+    /// They group with that family, not with the project "Support" whose title is their prefix.
+    /// A family template (.rft) and a project template (.rte) each group as their own file.
+    /// </summary>
+    [Fact]
+    public void Run_EditFamilyTabs_GroupWithTheirFamily_AndTemplatesGroupAsTheirOwnFiles()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var documents = new (string Key, IReadOnlyList<string> Forms)[]
+            {
+                ("project", TabTitleMatcher.TitleForms("Support", @"C:\Models\Support.rvt", isFamilyDocument: false)),
+                ("edit-family", TabTitleMatcher.TitleForms("Support - Steel Bar", "", isFamilyDocument: true)),
+                ("rft", TabTitleMatcher.TitleForms("Metric Generic Model.rft", @"C:\Templates\Metric Generic Model.rft", isFamilyDocument: true)),
+                ("rte", TabTitleMatcher.TitleForms("Default.rte", @"C:\Templates\Default.rte", isFamilyDocument: false)),
+            };
+            var forms = documents.Select(d => d.Forms).ToArray();
+            object? Resolve(TabItem tab, string title)
+            {
+                var match = TabTitleMatcher.Find(title, forms);
+                return match.IsMatch ? documents[match.Index].Key : null;
+            }
+
+            var (root, models) = Tree(new[]
+            {
+                "Support - Floor Plan: L1",
+                "Support - Steel Bar.rfa - 3D View: View 1",
+                "Metric Generic Model.rft - Ref. Level",
+                "Support - Sheet: A101",
+                "Default.rte - Level 1",
+                "Support - Steel Bar.rfa - Front",
+                "Metric Generic Model.rft - Front",
+                "Default.rte - Level 2",
+            });
+            var model = models[0];
+            model.SelectedContentIndex = 0;
+            var log = new ListLog();
+            var surface = new TreeTabSurface(roots => roots.Add(root), () => true, Resolve, log);
+
+            var result = GroupTabsRunner.Run(surface, new AvalonDockPane.Finder(log).Find, log);
+
+            Assert.Equal(TabGroupOutcome.Grouped, result.Outcome);
+            Assert.Equal(
+                new[]
+                {
+                    "Support - Floor Plan: L1", "Support - Sheet: A101",
+                    "Support - Steel Bar.rfa - 3D View: View 1", "Support - Steel Bar.rfa - Front",
+                    "Metric Generic Model.rft - Ref. Level", "Metric Generic Model.rft - Front",
+                    "Default.rte - Level 1", "Default.rte - Level 2",
+                },
+                Titles(model));
+            Assert.Equal("Support - Floor Plan: L1", Selected(model));
+        });
+    }
+
     [Fact]
     public void Run_TwoPanes_EachIsGroupedWithinItself()
     {
