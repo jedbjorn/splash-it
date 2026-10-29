@@ -23,10 +23,23 @@ internal static class TabDiagnostics
 
     private static string _lastShape = "";
     private static int _serial;
+    private static bool _enabled;
+    private static long _checkedAt = long.MinValue / 2; // far enough back that "now - _checkedAt" cannot overflow
 
-    public static bool Enabled => File.Exists(Path.Combine(Folder, "diag.on"));
+    /// <summary>Whether <c>diag.on</c> exists; the file is looked for at most once a second (review n5).</summary>
+    public static bool Enabled
+    {
+        get
+        {
+            var now = Environment.TickCount64;
+            if (now - _checkedAt < 1000) return _enabled;
+            _checkedAt = now;
+            _enabled = File.Exists(Path.Combine(Folder, "diag.on"));
+            return _enabled;
+        }
+    }
 
-    public static void Dump(IReadOnlyList<SurfaceTab> tabs, IEnumerable<string> documentTitles)
+    public static void Dump(IReadOnlyList<SurfaceTab> tabs, Func<IEnumerable<string>> documentTitles)
     {
         try
         {
@@ -36,7 +49,7 @@ internal static class TabDiagnostics
             _lastShape = shape;
 
             var sb = new StringBuilder();
-            sb.AppendLine($"tabs: {tabs.Count}; documents: {string.Join(" | ", documentTitles)}");
+            sb.AppendLine($"tabs: {tabs.Count}; documents: {string.Join(" | ", documentTitles())}");
             for (var i = 0; i < tabs.Count; i++)
             {
                 var t = tabs[i];
@@ -47,6 +60,15 @@ internal static class TabDiagnostics
                 sb.AppendLine($"    Background={Brush(tab.Background)} Foreground={Brush(tab.Foreground)} BorderBrush={Brush(tab.BorderBrush)} Template={Describe(tab.Template)}");
                 if (i == 0 && tab.DataContext is { } model) Members(sb, model, "    model", 0);
                 if (i < 2) Tree(sb, tab, 1);
+                if (i < 2) CloseButton(sb, tab);
+            }
+            // The close button of a tab Splash-It has not recolored (a family's, or a native one): where Revit's grey comes from.
+            foreach (var t in tabs)
+            {
+                if (SplashIt.UI.Tabs.TabCloseGlyph.FindRecolored(t.Tab) is not null || SplashIt.UI.Tabs.TabCloseGlyph.FindButton(t.Tab) is null) continue;
+                sb.AppendLine("--- native close button:");
+                CloseButton(sb, t.Tab);
+                break;
             }
             Directory.CreateDirectory(Folder);
             File.WriteAllText(Path.Combine(Folder, $"diag-{++_serial}.txt"), sb.ToString());
@@ -55,6 +77,52 @@ internal static class TabDiagnostics
         {
             // Diagnostics never matter more than the add-in.
         }
+    }
+
+    /// <summary>Where the close button's Foreground comes from (review M1).</summary>
+    private static void CloseButton(StringBuilder sb, TabItem tab)
+    {
+        var button = SplashIt.UI.Tabs.TabCloseGlyph.FindButton(tab);
+        if (button is null)
+        {
+            sb.AppendLine("    close button: not found");
+            return;
+        }
+        var source = DependencyPropertyHelper.GetValueSource(button, Control.ForegroundProperty);
+        sb.AppendLine($"    close button {button.GetType().FullName}#{button.Name}: Foreground={Brush(button.Foreground)} source={source.BaseValueSource} expression={source.IsExpression} local={Describe(button.ReadLocalValue(Control.ForegroundProperty))} style={Describe(button.Style)}");
+        if (button.Style is { } style)
+            foreach (var setter in style.Setters.OfType<Setter>())
+                sb.AppendLine($"      style setter {setter.Property?.Name} = {Describe(setter.Value)}{(setter.Value is DynamicResourceExtension d ? " key=" + d.ResourceKey : "")}");
+        for (DependencyObject? node = button; node is not null; node = VisualTreeHelper.GetChild(node, 0))
+        {
+            if (node is TextBlock text)
+            {
+                var ts = DependencyPropertyHelper.GetValueSource(text, TextBlock.ForegroundProperty);
+                sb.AppendLine($"      glyph TextBlock \"{text.Text}\" Foreground={Brush(text.Foreground)} source={ts.BaseValueSource} expression={ts.IsExpression}");
+                break;
+            }
+            if (VisualTreeHelper.GetChildrenCount(node) == 0) break;
+        }
+        // Resource keys holding the button's color, from the button up to the application.
+        if (button.Foreground is SolidColorBrush grey)
+        {
+            for (DependencyObject? node = button; node is not null; node = VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node))
+                if (node is FrameworkElement fe && fe.Resources is { } r) Keys(sb, r, grey.Color, fe.GetType().Name, 0);
+            if (Application.Current?.Resources is { } app) Keys(sb, app, grey.Color, "Application", 0);
+        }
+    }
+
+    private static void Keys(StringBuilder sb, ResourceDictionary dictionary, Color color, string owner, int depth)
+    {
+        if (depth > 6) return;
+        foreach (var key in dictionary.Keys)
+        {
+            object? value;
+            try { value = dictionary[key]; } catch (Exception) { continue; }
+            if (value is SolidColorBrush b && b.Color == color) sb.AppendLine($"      resource {owner}: key={key} ({key?.GetType().Name})");
+            if (value is Color c && c == color) sb.AppendLine($"      resource {owner}: color key={key}");
+        }
+        foreach (var merged in dictionary.MergedDictionaries) Keys(sb, merged, color, owner + ">" + (merged.Source?.ToString() ?? "merged"), depth + 1);
     }
 
     private static void Members(StringBuilder sb, object value, string prefix, int depth)
