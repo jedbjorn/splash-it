@@ -30,8 +30,14 @@ public static class HostTabs
     /// (here the grid's 1 px gap plus 1 px), 12 px after the title as Revit's, and Hidden,
     /// keeping its slot, unless the tab is
     /// selected or under the mouse.
+    /// <para>
+    /// The optional numbers make a variant whose close button is NOT where Revit's is (review M2:
+    /// so a test can tell an anchor measured from the button from one at the right edge), or one
+    /// with no named close button (<paramref name="closeName"/> another name: the fallback slot).
+    /// </para>
     /// </summary>
-    public static Style RevitLikeStyle(UiTheme theme)
+    public static Style RevitLikeStyle(UiTheme theme, double closeWidth = 16, double closeRightInset = 1,
+        string closeName = "mDocumentCloseButton")
     {
         var dark = theme == UiTheme.Dark;
         var text = dark ? "#FFF5F5F5" : "#FF3C3C3C";
@@ -51,8 +57,8 @@ public static class HostTabs
                   <ControlTemplate TargetType="TabItem">
                     <Grid x:Name="mGrid" Height="20" Margin="0,0,1,0">
                       <Border x:Name="mBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" />
-                      <DockPanel Margin="4,2,1,2">
-                        <Button x:Name="mDocumentCloseButton" DockPanel.Dock="Right" Content="×" Width="16" Height="16" Margin="12,0,0,0"
+                      <DockPanel Margin="4,2,{{closeRightInset}},2">
+                        <Button x:Name="{{closeName}}" DockPanel.Dock="Right" Content="×" Width="{{closeWidth}}" Height="16" Margin="12,0,0,0"
                                 VerticalAlignment="Center" Focusable="False" Visibility="Hidden">
                           <Button.Style>
                             <Style TargetType="Button">
@@ -72,8 +78,8 @@ public static class HostTabs
                       </DockPanel>
                     </Grid>
                     <ControlTemplate.Triggers>
-                      <Trigger Property="IsSelected" Value="True"><Setter TargetName="mDocumentCloseButton" Property="Visibility" Value="Visible" /></Trigger>
-                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="mDocumentCloseButton" Property="Visibility" Value="Visible" /></Trigger>
+                      <Trigger Property="IsSelected" Value="True"><Setter TargetName="{{closeName}}" Property="Visibility" Value="Visible" /></Trigger>
+                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="{{closeName}}" Property="Visibility" Value="Visible" /></Trigger>
                     </ControlTemplate.Triggers>
                   </ControlTemplate>
                 </Setter.Value>
