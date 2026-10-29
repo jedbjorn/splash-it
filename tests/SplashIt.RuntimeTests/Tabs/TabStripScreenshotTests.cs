@@ -46,7 +46,7 @@ public class TabStripScreenshotTests
         {
             var tab = HostTabs.Tab(strip, i);
             if (tabs[i].Treatment is { } treatment)
-                tab.Style = factory.Create(original, treatment, tab.Background, theme);
+                tab.Style = factory.Create(original, treatment, HostTabs.Brush(HostTabs.Well(theme)), theme); // what is behind the tabs (the colorizer walks to it)
         }
         HostTabs.Tab(strip, selected).IsSelected = true;
         return strip;
@@ -156,7 +156,7 @@ public class TabStripScreenshotTests
             // The close glyph is never Revit's grey (review M1); since #30 it sits on the strip, so on
             // every colored tab it is black or white against the theme, not the fill.
             foreach (var i in new[] { 0, 1, 2, 3 })
-                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(theme.Surface())),
+                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(HostTabs.Well(theme))),
                     ((SolidColorBrush)TabCloseGlyph.FindButton(HostTabs.Tab(strip, i))!.Foreground).Color);
         });
     }

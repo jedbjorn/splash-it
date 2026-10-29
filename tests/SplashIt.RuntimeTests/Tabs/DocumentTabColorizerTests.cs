@@ -529,6 +529,57 @@ public class DocumentTabColorizerTests
         });
     }
 
+    /// <summary>
+    /// #30/#31 (coordinator's resolution of review m1): a project tab's text and × are chosen against
+    /// what is behind the tab, found once per pane by walking its visual parents, logged, and found
+    /// again after a theme change. Here the strip is the stand-in's well; a near-black strip makes the
+    /// same project's × white where the light surface would make it black.
+    /// </summary>
+    [Fact]
+    public void ProjectContrast_IsChosenAgainstWhatIsBehindTheTabs_FoundOncePerPane()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#1E1E1E")); // a dark strip under a light-theme tab style
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+            rig.Colorizer.Start();
+            HostTabs.Layout(root);
+
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E"));
+            Assert.Contains(rig.Log.Lines, l => l.Contains("tabs sit on #1E1E1E (Border"));
+            // The × is chosen against the dark strip: white, though the theme surface is white.
+            var close = TabCloseGlyph.FindButton(rig.Tab(0))!;
+            Assert.Equal(Colors.White, ((SolidColorBrush)close.Foreground).Color);
+
+            // Passes reuse it: no new walk, no new log line.
+            rig.Colorizer.Apply(SplashItSettings.Default);
+            HostTabs.Layout(root);
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on"));
+
+            // A theme change finds it again.
+            rig.Strip.Background = HostTabs.Brush(Rgb.Parse("#F0F0F0"));
+            rig.Events.Sink!.OnThemeChanged(UiTheme.Light);
+            HostTabs.Layout(root);
+            Assert.Single(rig.Log.Lines, l => l.Contains("tabs sit on #F0F0F0"));
+            Assert.Equal(Colors.Black, ((SolidColorBrush)TabCloseGlyph.FindButton(rig.Tab(0))!.Foreground).Color);
+        });
+    }
+
+    /// <summary>A tab with nothing solid behind it (not in a tree yet) keeps the old rule: its own background, else the surface.</summary>
+    [Fact]
+    public void ProjectContrast_FallsBackToTheTabsOwnBackground_WhenNothingIsBehindIt()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            rig.Colorizer.Start(); // never laid out: no pane
+            Assert.DoesNotContain(rig.Log.Lines, l => l.Contains("tabs sit on"));
+            Assert.Equal(Colors.Black, ((SolidColorBrush)rig.Tab(0).Foreground).Color); // over the light surface
+        });
+    }
+
     [Fact]
     public void Stop_PutsTheCloseButtonsOwnColorBack()
     {
