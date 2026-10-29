@@ -310,8 +310,9 @@ public class ProjectFillShapeTests
             ("theme surface (the factory's backdrop for Revit's transparent tabs)", theme.Surface(), true),
             ("settings preview tab", new Rgb(previewTab.R, previewTab.G, previewTab.B), true),
             ("stand-in strip (what renders under the stand-in's fade)", HostTabs.Well(theme), false),
-            ("Revit dark tab area #454F61 (Lane B capture; AC11 to confirm)", Rgb.Parse("#454F61"), false),
         };
+        if (theme == UiTheme.Dark)
+            backdrops = [.. backdrops, ("Revit dark tab area (Lane B capture; AC11 to confirm)", Rgb.Parse("#454F61"), false)];
         var end = Shape.TitleEndShare;
         var log = new StringBuilder($"#31 title floor, {theme}: text chosen over the backdrop; min contrast over (solid, title end at {end:P1} of the opacity)\n");
         var failures = new List<string>();
