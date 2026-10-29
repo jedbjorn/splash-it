@@ -250,8 +250,11 @@ finds a document handle on 2026 or 2027).
 Styles come from `TabStyleFactory` (decisions #22 and #23): the selected project tab shows the
 color at the fill opacity with a 3 px darker top line; the project's other tabs show it at the
 Unselected tab opacity (a share of the fill opacity, default 50 %). The fill is
-`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family bar and the top
-line are drawn by an adorner (`TabDecoration`), so they do not depend on Revit's template.
+`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family marks (#27: the
+side bar of the bar width, plus a fixed 2 px top bar from the left edge over 95 % of the tab,
+fading out over its last 15 % (#29), `FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
+(`TabDecoration`), so they do not depend on Revit's template, follow a resize, and go with
+the original style.
 Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
 (`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
 AvalonDock theme), so `TabCloseGlyph` sets it to the text color per state and puts the
@@ -260,6 +263,19 @@ button's own value back when the original style returns. All of this was checked
 
 - Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and
   kinds there); the hot path runs from WPF layout passes and reads only WPF and the cache.
+- Registration fallback (SC-004): when a pass finds tabs that resolve to no document, the
+  colorizer asks for a document scan (at most once a second, at most 3 times per change of
+  the tabs; the pass a scan forces is not a change). A layout pass is outside the API context, so `RevitColorizerEvents` only sets
+  a flag; the next `Idling` (API context) lists `Application.Documents`, registers every
+  open, non-linked document no event announced, re-reads the known ones (a changed kind is
+  handled like a Save As) and, when anything changed (a title too), drops the surface's
+  cached resolutions and restyles.
+- Each document is logged once when registered:
+  `documents: doc#<n> registered by <event|start|fallback>: <kind> (rule <api|template-ext>); <count> open.`
+  The kind comes from `Document.IsFamilyDocument` (`api`); only `.rte` (projects) and
+  `.rft` (families) demote to Other (`template-ext`). A scan that found or changed something,
+  or whose unresolved count moved, logs
+  `colorizer: a document scan registered <n> documents no event announced (…); <n> changed title or kind, <n> reclassified; <n> no longer open; <n> unresolved.`
 - The log (`%LocalAppData%\SplashIt\logs\splashit-<yyyyMMdd>.log`) records counts, kinds
   and type names, never titles or paths. The start cost is logged as
   `colorizer: start took <n> ms`, split into the settings read, the pyRevit check, theme

@@ -9,7 +9,7 @@ public enum TabTreatmentKind
     /// <summary>A project's tab: a solid fill.</summary>
     ProjectFill = 0,
 
-    /// <summary>A family's tab: a bar on the left edge; everything else native.</summary>
+    /// <summary>A family's tab: a bar on the left edge plus a fixed top bar (#27); everything else native.</summary>
     FamilyBar,
 }
 
