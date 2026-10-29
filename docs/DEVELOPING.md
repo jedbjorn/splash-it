@@ -35,7 +35,10 @@ tests/
                          and on Windows)
   SplashIt.RuntimeTests/ xUnit, net8.0-windows with WPF, references SplashIt.UI, no
                          Revit; runs on Windows only (CI). Renders WPF off-screen to PNG.
-docs/                    this file
+docs/                    this file, RELEASING.md
+installer/               the per-user WiX MSI (Product.wxs, SplashIt.Installer.wixproj),
+                         stage.sh, inspect-msi.ps1, test-detection.ps1, branding/
+tools/                   make_installer_branding.py (setup artwork, license page)
 ```
 
 ## Configurations
@@ -116,6 +119,11 @@ reusable `_build.yml`. Every job is required:
 | Core tests | `ubuntu-latest` | `SplashIt.Core.Tests` on `net8.0` and `net10.0` |
 | Build `<configuration>` × 6 | `ubuntu-latest` | `SplashIt.sln` in each configuration; the Debug legs upload `SplashIt-Debug-R25` / `-R26` / `-R27` |
 | Windows tests (Core + runtime, WPF) | `windows-latest` | `SplashIt.Core.Tests` on `net8.0` and `net10.0` again, for Windows file semantics; then `SplashIt.RuntimeTests`; uploads the PNGs as `SplashIt-screenshots` |
+| MSI (Release R25 + R26 + R27) | `windows-latest` | builds, stages and packs the per-user MSI, checks it with `installer/inspect-msi.ps1`; uploads `SplashIt-msi` and `SplashIt-zips` |
+| MSI detection (silent installs, fake Revit) | `windows-latest` | `installer/test-detection.ps1`: real `msiexec /qn` installs against fake Revit installs; uploads `SplashIt-detection` |
+
+The installer, the release workflow and the detection test are described in
+[RELEASING.md](RELEASING.md).
 
 The `SplashIt-Debug-R<yy>` artifacts are laid out like an `Addins\<year>\` folder:
 
