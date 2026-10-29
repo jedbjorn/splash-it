@@ -14,7 +14,8 @@ namespace SplashIt.UI.Tabs;
 /// this attached property on the tab, per state (unselected, hover, selected), to the same
 /// black or white as the text. While it is set, the button found by name under the tab gets
 /// that brush as a local <c>Foreground</c>; when it clears (the tab's original style is back),
-/// the button's own local value is put back exactly (or cleared, when it had none). A style
+/// the button's own local value is put back exactly (or cleared, when it had none); a button
+/// whose local value is something else (a resource reference set in code) is not recolored. A style
 /// resource override was not used: a resource has one value per style, but the glyph needs
 /// the text color of each state.
 /// </para>
@@ -125,6 +126,9 @@ public static class TabCloseGlyph
             if (!ReferenceEquals(state.Button, button))
             {
                 state.Restore(); // a rebuilt template: the old button is gone
+                // A local value that could not be put back exactly (a resource reference set in
+                // code, say) is left alone: the glyph keeps its color (re-review r2).
+                if (!IsRestorable(button.ReadLocalValue(Control.ForegroundProperty))) return;
                 state.Capture(button);
             }
             if (!Equals(button.ReadLocalValue(Control.ForegroundProperty), brush))
@@ -135,6 +139,10 @@ public static class TabCloseGlyph
             // Never into the dispatcher: the glyph keeps whatever color it has.
         }
     }
+
+    /// <summary>Whether a local Foreground can be captured and put back exactly: none, a brush, or a binding.</summary>
+    private static bool IsRestorable(object? local) =>
+        local == DependencyProperty.UnsetValue || local is Brush || local is System.Windows.Data.BindingExpressionBase;
 
     private sealed class State(FrameworkElement tab)
     {

@@ -41,6 +41,7 @@ public sealed class RevitDocuments : IDocumentInfo
     private readonly List<Entry> _entries = new();
     private readonly Dictionary<int, RevitDocumentKey> _closing = new();
     private readonly List<IReadOnlyList<string>> _titles = new();
+    private readonly List<IReadOnlyList<string>> _kept = new();
     private int _serial;
 
     public RevitDocuments(Func<RevitApplication?> application, ILog? log = null)
@@ -149,16 +150,22 @@ public sealed class RevitDocuments : IDocumentInfo
     public RevitDocumentKey? FindByTitle(string tabTitle, out bool tied)
     {
         _titles.Clear();
-        foreach (var entry in _entries) _titles.Add(entry.Titles);
-        var match = TabTitleMatcher.Find(tabTitle, _titles);
+        _kept.Clear();
+        foreach (var entry in _entries)
+        {
+            _titles.Add(entry.Titles);
+            _kept.Add(entry.KeptTitles);
+        }
+        var match = TabTitleMatcher.Find(tabTitle, _titles, _kept);
         _titles.Clear();
+        _kept.Clear();
         tied = match.Tied;
         return match.IsMatch ? _entries[match.Index].Key : null;
     }
 
 #if DEBUG
     /// <summary>Debug diagnostics only: the cached titles.</summary>
-    internal IEnumerable<string> DebugTitles() => _entries.SelectMany(e => e.Titles);
+    internal IEnumerable<string> DebugTitles() => _entries.SelectMany(e => e.Titles.Concat(e.KeptTitles));
 #endif
 
     private Entry? Find(Document document)
@@ -185,16 +192,22 @@ public sealed class RevitDocuments : IDocumentInfo
 
         public RevitDocumentKey Key { get; } = key;
 
-        /// <summary>The most titles kept per document (the current forms plus earlier ones).</summary>
-        private const int MaxTitles = 6;
+        /// <summary>The most earlier titles kept per document.</summary>
+        private const int MaxKeptTitles = 6;
 
         /// <summary>
-        /// The title, and the title without its Revit extension when it has one
-        /// (<see cref="TabTitleMatcher.TitleForms"/>), followed by the titles it had before a
-        /// Save As (review m4): Revit may refresh a tab's tool tip after its event, so a tab
-        /// still showing the old title keeps its color.
+        /// The document's current titles as its tabs may show them
+        /// (<see cref="TabTitleMatcher.TitleForms"/>: the title and the saved file name, each with
+        /// and without the Revit extension).
         /// </summary>
         public IReadOnlyList<string> Titles { get; private set; } = [];
+
+        /// <summary>
+        /// The titles it had before a Save As (review m4): Revit may refresh a tab's tool tip
+        /// after its event, so a tab still showing an old title keeps its color. A current title
+        /// of another document outranks these at the same length (re-review r1).
+        /// </summary>
+        public IReadOnlyList<string> KeptTitles { get; private set; } = [];
 
         public FileKind Kind { get; private set; } = FileKind.Other;
 
@@ -207,10 +220,12 @@ public sealed class RevitDocuments : IDocumentInfo
             var current = TabTitleMatcher.TitleForms(Document.Title ?? "", Document.PathName);
             var kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud);
             var changed = kind != Kind || Titles.Count == 0 || !string.Equals(Titles[0], current.Count > 0 ? current[0] : "", StringComparison.Ordinal);
-            var titles = new List<string>(current);
-            foreach (var old in Titles)
-                if (titles.Count < MaxTitles && !titles.Contains(old, StringComparer.Ordinal)) titles.Add(old);
-            Titles = titles;
+            var kept = new List<string>();
+            foreach (var old in Titles.Concat(KeptTitles))
+                if (kept.Count < MaxKeptTitles && !current.Contains(old, StringComparer.Ordinal) && !kept.Contains(old, StringComparer.Ordinal))
+                    kept.Add(old);
+            Titles = current;
+            KeptTitles = kept;
             Kind = kind;
             return changed;
         }

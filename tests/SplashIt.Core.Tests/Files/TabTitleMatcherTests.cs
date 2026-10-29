@@ -93,4 +93,46 @@ public class TabTitleMatcherTests
         Assert.Equal(0, TabTitleMatcher.Find("Tower - Floor Plan: L1", docs).Index);
         Assert.Equal(1, TabTitleMatcher.Find("Project2 - Floor Plan: L1", docs).Index);
     }
+
+    /// <summary>Re-review r1: Save As "Tower" as "Tower v2", then reopen the original Tower.rvt.</summary>
+    [Fact]
+    public void AReopenedOriginal_BeatsAnotherFilesKeptTitle()
+    {
+        IReadOnlyList<IReadOnlyList<string>> current = [TabTitleMatcher.TitleForms("Tower v2"), TabTitleMatcher.TitleForms("Tower")];
+        IReadOnlyList<IReadOnlyList<string>> kept = [TabTitleMatcher.TitleForms("Tower"), []];
+
+        Assert.Equal(1, TabTitleMatcher.Find("Tower - Floor Plan: L1", current, kept).Index);    // the reopened file
+        Assert.Equal(0, TabTitleMatcher.Find("Tower v2 - Floor Plan: L1", current, kept).Index); // the saved-as file
+    }
+
+    [Fact]
+    public void AKeptTitle_StillMatches_WhenNoCurrentTitleDoes()
+    {
+        IReadOnlyList<IReadOnlyList<string>> current = [["Tower v2"], ["Annex"]];
+        IReadOnlyList<IReadOnlyList<string>> kept = [["Tower"], []];
+        Assert.Equal(0, TabTitleMatcher.Find("Tower - Floor Plan: L1", current, kept).Index); // the tool tip not yet refreshed
+    }
+
+    [Fact]
+    public void KeptVsKept_AndCurrentVsCurrent_StillTie()
+    {
+        IReadOnlyList<IReadOnlyList<string>> current = [["A v2"], ["B v2"], ["Door"], ["Door"]];
+        IReadOnlyList<IReadOnlyList<string>> kept = [["Tower"], ["Tower"], [], []];
+
+        var keptTie = TabTitleMatcher.Find("Tower - L1", current, kept);
+        Assert.True(keptTie.Tied);
+        Assert.False(keptTie.IsMatch);
+
+        var currentTie = TabTitleMatcher.Find("Door - Ref. Level", current, kept);
+        Assert.True(currentTie.Tied);
+        Assert.False(currentTie.IsMatch);
+    }
+
+    [Fact]
+    public void ALongerKeptTitle_StillBeatsAShorterCurrentOne()
+    {
+        IReadOnlyList<IReadOnlyList<string>> current = [["A"], ["X"]];
+        IReadOnlyList<IReadOnlyList<string>> kept = [[], ["A - B"]];
+        Assert.Equal(1, TabTitleMatcher.Find("A - B - L1", current, kept).Index);
+    }
 }

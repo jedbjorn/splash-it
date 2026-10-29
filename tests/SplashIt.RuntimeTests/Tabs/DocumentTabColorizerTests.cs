@@ -567,4 +567,34 @@ public class DocumentTabColorizerTests
             Assert.Contains(rig.Log.Lines, l => l.Contains("status listener failed"));
         });
     }
+
+    /// <summary>Re-review r2: a close button whose local color cannot be put back exactly is left alone.</summary>
+    [Fact]
+    public void ACloseButtonWithAnUnknownLocalValue_IsNotRecolored()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var rig = new Rig();
+            var root = HostTabs.Host(rig.Strip, SplashItDefaults.LightSurface);
+            HostTabs.Layout(root);
+            var tab = rig.Tab(2);
+            var close = TabCloseGlyph.FindButton(tab)!;
+            var grey = HostTabs.Brush(Rgb.Parse("#808080"));
+            tab.Resources["GlyphBrush"] = grey;
+            close.SetResourceReference(Control.ForegroundProperty, "GlyphBrush"); // reads back as an expression
+            var local = close.ReadLocalValue(Control.ForegroundProperty);
+
+            rig.Colorizer.Start();
+            HostTabs.Layout(root);
+            Assert.True(TabStyleFactory.IsDerived(tab.Style));
+            Assert.Same(grey, close.Foreground);                                 // not recolored
+            Assert.Null(TabCloseGlyph.FindRecolored(tab));
+
+            rig.Colorizer.Stop();
+            HostTabs.Layout(root);
+            Assert.Same(local.GetType(), close.ReadLocalValue(Control.ForegroundProperty).GetType()); // still the resource reference
+            Assert.Same(grey, close.Foreground);
+            Assert.NotEqual(DependencyProperty.UnsetValue, close.ReadLocalValue(Control.ForegroundProperty));
+        });
+    }
 }
