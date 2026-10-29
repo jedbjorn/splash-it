@@ -18,14 +18,23 @@ src/
     Settings/            SplashItSettings (Read/Write/Validate), SplashItDefaults,
                          SettingsExchange (export/import), the shared JSON reader
     Resources/           CoreStrings.resx (user-facing messages) + CoreStrings.cs
+  SplashIt.UI/           net8.0-windows;net10.0-windows, WPF, NO Revit references:
+                         the tab style factory, the colorizer engine (against
+                         ITabSurface and a document-info abstraction), the settings
+                         window and view-models, the vendored theme and color picker.
+                         Theme detection reaches it as an input. Holds only a
+                         placeholder type until the colorizer and window lanes land.
   SplashIt.Revit/        the add-in (net8.0-windows for 2025 and 2026,
-                         net10.0-windows for 2027)
+                         net10.0-windows for 2027): App, the command, the Revit tab
+                         surface, Revit event and theme adapters, logger wiring.
+                         References SplashIt.UI and SplashIt.Core.
     App.cs               IExternalApplication (skeleton for now)
     SplashIt.addin       manifest (VendorId DSOS; the ClientId never changes)
 tests/
-  SplashIt.Core.Tests/   xUnit, net8.0;net10.0; runs on any OS
-  SplashIt.RuntimeTests/ xUnit, net8.0-windows with WPF, no Revit; runs on Windows
-                         only (CI). Renders WPF off-screen to PNG.
+  SplashIt.Core.Tests/   xUnit, net8.0;net10.0; runs on any OS (CI runs it on Linux
+                         and on Windows)
+  SplashIt.RuntimeTests/ xUnit, net8.0-windows with WPF, references SplashIt.UI, no
+                         Revit; runs on Windows only (CI). Renders WPF off-screen to PNG.
 docs/                    this file
 ```
 
@@ -40,8 +49,16 @@ The MSBuild configuration picks the Revit year (`Directory.Build.props`):
 | `Debug R27`, `Release R27` | 2027 | `net10.0-windows` |
 
 `SplashIt.Core` and its tests ignore the Revit suffix and build `net8.0` and `net10.0`
-in every configuration; `SplashIt.RuntimeTests` is `net8.0-windows` in every
-configuration. The Revit API comes from the reference-only `Nice3point.Revit.Api.*`
+in every configuration. `SplashIt.UI` builds `net8.0-windows` and `net10.0-windows` in
+every configuration, and each consumer picks the nearest: `SplashIt.Revit` gets the
+`net8.0-windows` build for R25 and R26 and the `net10.0-windows` build for R27, and
+`SplashIt.RuntimeTests` (`net8.0-windows` in every configuration) gets `net8.0-windows`.
+
+The split exists for testing (spec #1, Project split, decision #16): the Nice3point
+packages are reference-only, so a test that loads a type touching the Revit API fails
+at runtime, and R27's `net10.0-windows` add-in can't be referenced from a
+`net8.0-windows` test project. Everything the runtime tests exercise lives in
+`SplashIt.UI`, which never references Revit; `SplashIt.Revit` stays a thin adapter. The Revit API comes from the reference-only `Nice3point.Revit.Api.*`
 packages (versions per year in `Directory.Packages.props`, which manages every package
 version centrally), so everything builds without Revit installed, including on Linux.
 
@@ -84,11 +101,10 @@ thread, `Render` lays an element out off-screen and renders it with `RenderTarge
 and `Save` writes `<repo>/TestResults/screenshots/<name>.png` (or under
 `$SPLASHIT_SCREENSHOTS` when set). `ScreenshotPipelineTests` is the smoke test: it draws
 both default color lists on the light and dark theme surfaces and checks the PNG is not
-blank.
+blank. `UiProjectTests` checks that `SplashIt.UI` loads here and references no Revit
+assembly.
 
-A runtime test that needs `SplashIt.Revit` types must mind the target frameworks: the
-add-in is `net10.0-windows` in the R27 configurations, which a `net8.0-windows` test
-project cannot reference.
+Runtime tests reference `SplashIt.UI` and `SplashIt.Core`, never `SplashIt.Revit`.
 
 ## CI
 
@@ -99,13 +115,13 @@ reusable `_build.yml`. Every job is required:
 |---|---|---|
 | Core tests | `ubuntu-latest` | `SplashIt.Core.Tests` on `net8.0` and `net10.0` |
 | Build `<configuration>` × 6 | `ubuntu-latest` | `SplashIt.sln` in each configuration; the Debug legs upload `SplashIt-Debug-R25` / `-R26` / `-R27` |
-| Runtime tests (Windows, WPF) | `windows-latest` | `SplashIt.RuntimeTests`; uploads the PNGs as `SplashIt-screenshots` |
+| Windows tests (Core + runtime, WPF) | `windows-latest` | `SplashIt.Core.Tests` on `net8.0` and `net10.0` again, for Windows file semantics; then `SplashIt.RuntimeTests`; uploads the PNGs as `SplashIt-screenshots` |
 
 The `SplashIt-Debug-R<yy>` artifacts are laid out like an `Addins\<year>\` folder:
 
 ```text
 SplashIt.addin
-SplashIt\SplashIt.Revit.dll, SplashIt.Core.dll, PDBs, SplashIt.Revit.deps.json
+SplashIt\SplashIt.Revit.dll, SplashIt.UI.dll, SplashIt.Core.dll, PDBs, SplashIt.Revit.deps.json
 ```
 
 Download them, or the screenshots, with:
@@ -124,7 +140,13 @@ launch.
 
 ## Settings file
 
-`%AppData%\SplashIt\settings.json`, written atomically (temp file, then replace):
+`%AppData%\SplashIt\settings.json`, written atomically: a temp file in the same folder,
+flushed, then `File.Replace` over the existing file (or `File.Move` when there is none).
+Windows refuses that replace while another process holds the file open without
+`FileShare.Delete` (a scanner, a sync client), so it is retried up to 5 times over about
+0.3 s, each retry logged; after that the error surfaces and the previous file is kept.
+Anything that reads the file must open it with `FileShare.ReadWrite | FileShare.Delete`,
+as `SplashItSettings.Read` does.
 
 ```json
 {
@@ -142,3 +164,13 @@ Opacities are whole percents (10–100) and the bar width whole pixels (1–6). 
 or corrupt file reads as the defaults (enabled); a value out of range is clamped when
 read from disk, and rejected by `Validate` everywhere else. An export has
 `"format": "splash-it-settings"` first and never `enabled`.
+
+A string that can't be decoded (an escaped lone surrogate such as `"\ud800"`, legal
+JSON) counts as a bad value: dropped when reading the settings file, reported when
+importing.
+
+**Newer schema (known, accepted for v1):** a `settings.json` with a newer
+`schemaVersion` is read for the fields this version knows and comes back as schema 1,
+so the next Save rewrites it as schema 1 and drops the fields this version doesn't know.
+A user who goes back to v1 after a future v2 loses the v2-only settings. Import, by
+contrast, refuses a newer schema outright.
