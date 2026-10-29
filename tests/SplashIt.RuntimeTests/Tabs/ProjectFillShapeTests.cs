@@ -72,14 +72,16 @@ public class ProjectFillShapeTests
     {
         original ??= HostTabs.RevitLikeStyle(theme);
         var strip = HostTabs.Strip(original, theme, titles ?? ["Tower - Floor Plan: L1", "Tower - Sheet: A101"]);
+        var root = HostTabs.Host(strip, theme.Surface(), padding: 12);
+        HostTabs.Layout(root); // in a tree, so the backdrop walk finds what is behind the tabs
         var factory = new TabStyleFactory();
         foreach (TabItem tab in strip.Items)
         {
             if (!double.IsNaN(width)) tab.Width = width;
-            tab.Style = factory.Create(original, TabTreatment.ProjectFill(color ?? Blue, fill), tab.Background, theme);
+            var backdrop = TabBackdrop.Resolve(tab, tab.Background, theme).Color;
+            tab.Style = factory.Create(original, TabTreatment.ProjectFill(color ?? Blue, fill), HostTabs.Brush(backdrop), theme);
         }
         HostTabs.Tab(strip, 0).IsSelected = true;
-        var root = HostTabs.Host(strip, theme.Surface(), padding: 12);
         HostTabs.Layout(root);
         return (root, HostTabs.Tab(strip, 0), HostTabs.Tab(strip, 1));
     }
@@ -286,6 +288,64 @@ public class ProjectFillShapeTests
         });
     }
 
+    // ---- what is behind the tab ---------------------------------------------------------------------
+
+    /// <summary>The walk finds the stand-in's strip: the first solid background behind the tab.</summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void TheBackdrop_IsTheFirstSolidBackgroundBehindTheTab(UiTheme theme)
+    {
+        Screenshots.RunSta(() =>
+        {
+            var (_, selected, _) = Strip(theme, 155);
+            var behind = TabBackdrop.Behind(selected);
+            Assert.NotNull(behind);
+            Assert.Equal(HostTabs.Well(theme), behind!.Value.Color);
+            Assert.StartsWith("Border", behind.Value.Source);
+            Assert.Equal(HostTabs.Well(theme), TabBackdrop.Resolve(selected, selected.Background, theme).Color);
+        });
+    }
+
+    /// <summary>A translucent strip is blended over what is behind it.</summary>
+    [Fact]
+    public void ATranslucentStrip_IsBlendedOverWhatIsBehindIt()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var theme = UiTheme.Light;
+            var strip = HostTabs.Strip(HostTabs.RevitLikeStyle(theme), theme, "Tower - L1");
+            strip.Background = new SolidColorBrush(Color.FromArgb(128, 255, 0, 0));
+            var root = HostTabs.Host(strip, theme.Surface(), padding: 12);
+            HostTabs.Layout(root);
+            var behind = TabBackdrop.Behind(HostTabs.Tab(strip, 0))!.Value;
+            Assert.Equal(ColorMath.Blend(new Rgb(255, 0, 0), 128 / 255.0, theme.Surface()), behind.Color);
+            Assert.Contains("translucent", behind.Source);
+        });
+    }
+
+    /// <summary>Nothing solid behind the tab: its own background, else the theme surface.</summary>
+    [Fact]
+    public void WithNothingBehind_TheTabsOwnBackground_ElseTheSurface()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var theme = UiTheme.Dark;
+            var strip = HostTabs.Strip(HostTabs.RevitLikeStyle(theme), theme, "Tower - L1");
+            strip.Background = null;
+            var root = new System.Windows.Documents.AdornerDecorator { Child = new Grid { Children = { strip } } };
+            HostTabs.Layout(root);
+            var tab = HostTabs.Tab(strip, 0);
+            Assert.Null(TabBackdrop.Behind(tab));
+            var surface = TabBackdrop.Resolve(tab, new SolidColorBrush(Color.FromArgb(0, 255, 255, 255)), theme);
+            Assert.Equal(theme.Surface(), surface.Color);
+            Assert.Contains("theme surface", surface.Source);
+            var own = TabBackdrop.Resolve(tab, HostTabs.Brush(Rgb.Parse("#112233")), theme);
+            Assert.Equal(Rgb.Parse("#112233"), own.Color);
+            Assert.Contains("own background", own.Source);
+            Assert.Null(TabBackdrop.Behind(new TabItem())); // not in a tree
+        });
+    }
+
     // ---- the 3:1 floor at a title's end (#31) ------------------------------------------------------
 
     private static readonly int[] Fills = [10, 20, 30, 40, 50, 60, 70, 80, 85, 90, 95, 100];
@@ -294,10 +354,12 @@ public class ProjectFillShapeTests
     /// #31, review M1: for every default project color, fill 10 to 100 % (and 85, 95), Unselected tab
     /// opacity 10 to 100 %, and each state (unselected, hover, selected), the factory's text color
     /// reaches 3:1 both on the solid part and at a title's last column in the fade, each blended over
-    /// the backdrop the factory is given: the theme surface (Revit's tabs have a transparent background)
-    /// and the settings preview's tab color. Computed with the same blend and contrast math as the
-    /// factory; a handful of cases are checked against rendered pixels below. The worst cases, and
-    /// the same choices measured over the stand-in's strip and Revit's dark tab area, go to a .txt.
+    /// what shows behind the tab, which is also what the text is chosen against: the candidate
+    /// strips (Revit's dark tab area #454F61 from the Lane B capture, the stand-in's strip), the
+    /// theme surface (the fallback) and the settings preview's tab color. A combination where
+    /// neither black nor white reaches 3:1 at both points is counted and fails the test. Computed
+    /// with the same blend and contrast math as the factory; a handful of cases are checked against
+    /// rendered pixels below. The worst cases go to a .txt.
     /// </summary>
     [Theory]
     [MemberData(nameof(Themes))]
@@ -305,20 +367,19 @@ public class ProjectFillShapeTests
     {
         var palette = UiPalette.For(theme);
         var previewTab = palette[UiPalette.Hover];
-        var backdrops = new (string Name, Rgb Color, bool Asserted)[]
+        var backdrops = new List<(string Name, Rgb Color)>
         {
-            ("theme surface (the factory's backdrop for Revit's transparent tabs)", theme.Surface(), true),
-            ("settings preview tab", new Rgb(previewTab.R, previewTab.G, previewTab.B), true),
-            ("stand-in strip (what renders under the stand-in's fade)", HostTabs.Well(theme), false),
+            ("theme surface (the fallback)", theme.Surface()),
+            ("stand-in strip", HostTabs.Well(theme)),
+            ("settings preview tab", new Rgb(previewTab.R, previewTab.G, previewTab.B)),
         };
-        if (theme == UiTheme.Dark)
-            backdrops = [.. backdrops, ("Revit dark tab area (Lane B capture; AC11 to confirm)", Rgb.Parse("#454F61"), false)];
+        if (theme == UiTheme.Dark) backdrops.Add(("Revit dark tab area (Lane B capture; AC11 to confirm)", Rgb.Parse("#454F61")));
         var end = Shape.TitleEndShare;
-        var log = new StringBuilder($"#31 title floor, {theme}: text chosen over the backdrop; min contrast over (solid, title end at {end:P1} of the opacity)\n");
+        var log = new StringBuilder($"#31 title floor, {theme}: text chosen over what shows behind the tab; min contrast over (solid, title end at {end:P1} of the opacity)\n");
         var failures = new List<string>();
-        foreach (var (name, backdrop, asserted) in backdrops)
+        foreach (var (name, backdrop) in backdrops)
         {
-            var chooseOver = asserted ? backdrop : theme.Surface(); // unasserted rows: the factory still chooses over the surface
+            var chooseOver = backdrop;
             var worst = (Value: double.MaxValue, What: "");
             var below = 0;
             var count = 0;
@@ -340,12 +401,12 @@ public class ProjectFillShapeTests
                     if (min < worst.Value) worst = (min, $"{color.ToHex()} fill {fill} % unselected {share} % {state}");
                     if (min < 3)
                     {
-                        below++;
-                        if (asserted) failures.Add($"{name}: {color.ToHex()} fill {fill} % unselected {share} % {state}: {min:0.00}:1");
+                        below++; // max-min chose the better of the two, so neither black nor white reaches 3:1 here
+                        failures.Add($"{name}: {color.ToHex()} fill {fill} % unselected {share} % {state}: {min:0.00}:1");
                     }
                 }
             }
-            log.AppendLine($"{name} {backdrop.ToHex()}: worst {worst.Value:0.00}:1 ({worst.What}); below 3:1: {below} of {count}{(asserted ? "" : " (not asserted)")}");
+            log.AppendLine($"{name} {backdrop.ToHex()}: worst {worst.Value:0.00}:1 ({worst.What}); neither black nor white reaches 3:1: {below} of {count}");
         }
         System.IO.Directory.CreateDirectory(Screenshots.Folder);
         System.IO.File.WriteAllText(System.IO.Path.Combine(Screenshots.Folder, $"project-fill-title-floor-{theme.ToString().ToLowerInvariant()}.txt"), log.ToString());
@@ -386,8 +447,10 @@ public class ProjectFillShapeTests
             Near(HostTabs.ColorOf(expected), under, 4, $"{hex} {fill} % under the title's last column");
 
             var chosen = ((SolidColorBrush)tab.Foreground).Color;
-            var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, fill), theme.Surface(), Shape);
-            Assert.Equal(HostTabs.ColorOf(colors.SelectedText), chosen);
+            var colors = TabStyleFactory.FillColors(TabTreatment.ProjectFill(color, fill), HostTabs.Well(theme), Shape);
+            Assert.Equal(HostTabs.ColorOf(colors.SelectedText), chosen); // chosen against the strip behind the tab
+            foreach (var point in new[] { ColorMath.Blend(color, opacity, HostTabs.Well(theme)), expected })
+                Assert.True(ColorMath.ContrastRatio(colors.SelectedText, point) >= 3, $"{hex} {fill} %: {ColorMath.ContrastRatio(colors.SelectedText, point):0.00}:1");
         });
     }
 
@@ -406,7 +469,7 @@ public class ProjectFillShapeTests
             {
                 var button = TabCloseGlyph.FindButton(tab)!;
                 var glyph = ((SolidColorBrush)button.Foreground).Color;
-                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(theme.Surface())), glyph);
+                Assert.Equal(HostTabs.ColorOf(ColorMath.TextColorFor(HostTabs.Well(theme))), glyph); // against the strip behind the tab
                 var centre = MeasuredCloseLeft(tab) + button.ActualWidth / 2;
                 var under = Pixel(bitmap, root, tab, centre, 18.5);
                 Near(HostTabs.ColorOf(HostTabs.Well(theme)), under, 3, "the strip under the ×");
