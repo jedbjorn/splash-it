@@ -1,0 +1,293 @@
+<!--
+    Laid out after gantt-it src/GanttIt.Revit/UI/Settings/SettingsWindow.xaml (gantt-it commit
+    aa83f35, MIT, same owner): its window chrome, heading, banners, single settings panel with
+    section headings and shared label column, and its Save / Cancel row. Splash-It's sections
+    are its own (spec #1, Settings window).
+-->
+<Window x:Class="SplashIt.UI.Settings.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:settings="clr-namespace:SplashIt.UI.Settings"
+        xmlns:preview="clr-namespace:SplashIt.UI.Settings.Preview"
+        xmlns:res="clr-namespace:SplashIt.UI.Resources"
+        Title="{x:Static res:UiStrings.Settings_WindowTitle}"
+        Width="640" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource WindowBrush}" Foreground="{DynamicResource TextBrush}"
+        AutomationProperties.AutomationId="SettingsWindow">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/SplashIt.UI;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- A color chip: the color with its number; a ring marks the selected chip. -->
+            <Style x:Key="ChipButton" TargetType="Button">
+                <Setter Property="Width" Value="34" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Ring" CornerRadius="5" BorderThickness="2" BorderBrush="Transparent"
+                                    Background="Transparent" Padding="2">
+                                <Border x:Name="Chip" CornerRadius="3" Background="{TemplateBinding Background}"
+                                        BorderBrush="{StaticResource ChipBorderBrush}" BorderThickness="1">
+                                    <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                               FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Chip" Property="BorderBrush" Value="{StaticResource ChipHoverBorderBrush}" />
+                                    <Setter TargetName="Chip" Property="BorderThickness" Value="2" />
+                                </Trigger>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Ring" Property="BorderBrush" Value="{StaticResource AccentForegroundBrush}" />
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Square glyph buttons beside a list (add, remove, move). -->
+            <Style x:Key="GlyphButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Margin" Value="0,0,4,0" />
+                <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+                <Setter Property="FontSize" Value="11" />
+            </Style>
+
+            <!-- A color list: its chips, then add / remove / move left / move right, the count and Reset. -->
+            <DataTemplate x:Key="ColorListEditor" DataType="{x:Type settings:ColorListViewModel}">
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Chips}" Focusable="False" Margin="-2,0,0,6"
+                                  AutomationProperties.AutomationId="{Binding Tag, RelativeSource={RelativeSource AncestorType=ContentControl}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type settings:ColorChipViewModel}">
+                                <Button Style="{StaticResource ChipButton}" Background="{Binding Brush}" Foreground="{Binding LabelBrush}"
+                                        Content="{Binding Number}" ToolTip="{Binding ToolTip}"
+                                        Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.AutomationId="{Binding AutomationId}"
+                                        AutomationProperties.Name="{Binding AutomationName}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <DockPanel LastChildFill="False">
+                        <Button DockPanel.Dock="Left" Style="{StaticResource GlyphButton}" Content="&#xE710;" Command="{Binding AddCommand}"
+                                ToolTip="{x:Static res:UiStrings.Settings_AddColor}"
+                                AutomationProperties.Name="{x:Static res:UiStrings.Settings_AddColor}" />
+                        <Button DockPanel.Dock="Left" Style="{StaticResource GlyphButton}" Content="&#xE738;" Command="{Binding RemoveCommand}"
+                                ToolTip="{x:Static res:UiStrings.Settings_RemoveColor}"
+                                AutomationProperties.Name="{x:Static res:UiStrings.Settings_RemoveColor}" />
+                        <Button DockPanel.Dock="Left" Style="{StaticResource GlyphButton}" Content="&#xE76B;" Command="{Binding MoveLeftCommand}"
+                                ToolTip="{x:Static res:UiStrings.Settings_MoveLeft}"
+                                AutomationProperties.Name="{x:Static res:UiStrings.Settings_MoveLeft}" />
+                        <Button DockPanel.Dock="Left" Style="{StaticResource GlyphButton}" Content="&#xE76C;" Command="{Binding MoveRightCommand}"
+                                ToolTip="{x:Static res:UiStrings.Settings_MoveRight}"
+                                AutomationProperties.Name="{x:Static res:UiStrings.Settings_MoveRight}" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding CountText}" Style="{StaticResource MutedText}"
+                                   FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Settings_ResetColors}" Command="{Binding ResetCommand}"
+                                ToolTip="{x:Static res:UiStrings.Settings_ResetColorsTip}" />
+                    </DockPanel>
+                </StackPanel>
+            </DataTemplate>
+
+            <!-- The status line: a colored dot and the state, on a banner that matches its weight. -->
+            <Style x:Key="StatusBanner" TargetType="Border" BasedOn="{StaticResource InfoBanner}">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="Off">
+                        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="Unavailable">
+                        <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource WarningBorderBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="BlockedByPyRevit">
+                        <Setter Property="Background" Value="{StaticResource WarningSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource WarningBorderBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="Faulted">
+                        <Setter Property="Background" Value="{StaticResource ErrorSoftBrush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource ErrorBorderBrush}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="StatusDot" TargetType="Ellipse">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Height" Value="8" />
+                <Setter Property="Margin" Value="0,4,8,0" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+                <Setter Property="Fill" Value="{StaticResource AccentForegroundBrush}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="Off">
+                        <Setter Property="Fill" Value="{StaticResource MutedTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="Unavailable">
+                        <Setter Property="Fill" Value="{StaticResource WarningTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="BlockedByPyRevit">
+                        <Setter Property="Fill" Value="{StaticResource WarningTextBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding StatusKind}" Value="Faulted">
+                        <Setter Property="Fill" Value="{StaticResource ErrorBrush}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style x:Key="ValueText" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="Margin" Value="10,0,0,0" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding CloseCommand}" />
+    </Window.InputBindings>
+
+    <StackPanel Margin="16">
+        <TextBlock Text="{x:Static res:UiStrings.Settings_Heading}" Style="{StaticResource HeadingText}" />
+        <TextBlock Text="{x:Static res:UiStrings.Settings_Subheading}"
+                   Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,2,0,12" />
+
+        <Border Style="{StaticResource StatusBanner}" Margin="0,0,0,10" AutomationProperties.AutomationId="Settings.Status">
+            <DockPanel>
+                <Ellipse Style="{StaticResource StatusDot}" />
+                <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}"
+                           AutomationProperties.AutomationId="Settings.StatusText" />
+            </DockPanel>
+        </Border>
+
+        <Border Style="{StaticResource Panel}">
+            <StackPanel Grid.IsSharedSizeScope="True">
+                <CheckBox Content="{x:Static res:UiStrings.Settings_Enabled}" IsChecked="{Binding Enabled}"
+                          ToolTip="{x:Static res:UiStrings.Settings_EnabledTip}" Margin="0,0,0,14"
+                          AutomationProperties.AutomationId="Settings.Enabled" />
+
+                <!-- Project colors -->
+                <TextBlock Text="{x:Static res:UiStrings.Settings_ProjectColors}" Style="{StaticResource SectionText}" Margin="0,0,0,2" />
+                <TextBlock Text="{x:Static res:UiStrings.Settings_ProjectColorsHint}" Style="{StaticResource MutedText}"
+                           FontSize="11" Margin="0,0,0,6" />
+                <ContentControl Content="{Binding ProjectColors}" ContentTemplate="{StaticResource ColorListEditor}"
+                                Tag="Settings.ProjectColors" Focusable="False" />
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="110" SharedSizeGroup="SettingsLabel" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="56" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{x:Static res:UiStrings.Settings_FillOpacity}" Style="{StaticResource LabelText}" />
+                    <Slider Grid.Column="1" Minimum="{x:Static settings:SettingsViewModel.MinOpacity}"
+                            Maximum="{x:Static settings:SettingsViewModel.MaxOpacity}"
+                            Value="{Binding ProjectFillOpacity}"
+                            AutomationProperties.AutomationId="Settings.ProjectFillOpacity"
+                            AutomationProperties.Name="{x:Static res:UiStrings.Settings_FillOpacity}" />
+                    <TextBlock Grid.Column="2" Text="{Binding ProjectFillOpacityText}" Style="{StaticResource ValueText}"
+                               AutomationProperties.AutomationId="Settings.ProjectFillOpacityValue" />
+                </Grid>
+
+                <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14,0,12" />
+
+                <!-- Family colors -->
+                <TextBlock Text="{x:Static res:UiStrings.Settings_FamilyColors}" Style="{StaticResource SectionText}" Margin="0,0,0,2" />
+                <TextBlock Text="{x:Static res:UiStrings.Settings_FamilyColorsHint}" Style="{StaticResource MutedText}"
+                           FontSize="11" Margin="0,0,0,6" />
+                <ContentControl Content="{Binding FamilyColors}" ContentTemplate="{StaticResource ColorListEditor}"
+                                Tag="Settings.FamilyColors" Focusable="False" />
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="110" SharedSizeGroup="SettingsLabel" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="56" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="{x:Static res:UiStrings.Settings_BarWidth}" Style="{StaticResource LabelText}" />
+                    <Slider Grid.Column="1" Minimum="{x:Static settings:SettingsViewModel.MinBarWidth}"
+                            Maximum="{x:Static settings:SettingsViewModel.MaxBarWidth}" LargeChange="1"
+                            Value="{Binding FamilyBarWidth}"
+                            AutomationProperties.AutomationId="Settings.FamilyBarWidth"
+                            AutomationProperties.Name="{x:Static res:UiStrings.Settings_BarWidth}" />
+                    <TextBlock Grid.Column="2" Text="{Binding FamilyBarWidthText}" Style="{StaticResource ValueText}"
+                               AutomationProperties.AutomationId="Settings.FamilyBarWidthValue" />
+
+                    <TextBlock Grid.Row="1" Text="{x:Static res:UiStrings.Settings_BarOpacity}" Style="{StaticResource LabelText}"
+                               Margin="0,6,8,0" />
+                    <Slider Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" Minimum="{x:Static settings:SettingsViewModel.MinOpacity}"
+                            Maximum="{x:Static settings:SettingsViewModel.MaxOpacity}"
+                            Value="{Binding FamilyBarOpacity}"
+                            AutomationProperties.AutomationId="Settings.FamilyBarOpacity"
+                            AutomationProperties.Name="{x:Static res:UiStrings.Settings_BarOpacity}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Margin="10,6,0,0" Text="{Binding FamilyBarOpacityText}"
+                               Style="{StaticResource ValueText}"
+                               AutomationProperties.AutomationId="Settings.FamilyBarOpacityValue" />
+                </Grid>
+
+                <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14,0,12" />
+
+                <!-- Preview -->
+                <TextBlock Text="{x:Static res:UiStrings.Settings_Preview}" Style="{StaticResource SectionText}" Margin="0,0,0,2" />
+                <TextBlock Text="{x:Static res:UiStrings.Settings_PreviewHint}" Style="{StaticResource MutedText}"
+                           FontSize="11" Margin="0,0,0,6" />
+                <preview:PreviewStrip x:Name="Preview" Settings="{Binding Current}" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource InfoBanner}" Margin="0,10,0,0"
+                Visibility="{Binding Notice, Converter={StaticResource NullToCollapsed}}">
+            <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Foreground="{StaticResource TextBrush}"
+                       AutomationProperties.AutomationId="Settings.Notice" />
+        </Border>
+        <Border Style="{StaticResource ErrorBanner}" Margin="0,10,0,0"
+                Visibility="{Binding HasErrors, Converter={StaticResource BoolToVisible}}">
+            <StackPanel>
+                <TextBlock Text="{Binding ErrorHeading}" Style="{StaticResource ErrorText}" FontWeight="SemiBold"
+                           AutomationProperties.AutomationId="Settings.ErrorHeading" />
+                <ItemsControl ItemsSource="{Binding Errors}" Focusable="False" Margin="0,2,0,0"
+                              AutomationProperties.AutomationId="Settings.Errors">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding StringFormat='•  {0}'}" Style="{StaticResource ErrorText}" Margin="0,2,0,0"
+                                       AutomationProperties.Name="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <DockPanel Margin="0,16,0,0" LastChildFill="False">
+            <Button DockPanel.Dock="Left" Content="{x:Static res:UiStrings.Settings_Export}" Command="{Binding ExportCommand}"
+                    ToolTip="{x:Static res:UiStrings.Settings_ExportTip}" AutomationProperties.AutomationId="Settings.Export" />
+            <Button DockPanel.Dock="Left" Content="{x:Static res:UiStrings.Settings_Import}" Command="{Binding ImportCommand}"
+                    ToolTip="{x:Static res:UiStrings.Settings_ImportTip}" Margin="8,0,0,0"
+                    AutomationProperties.AutomationId="Settings.Import" />
+            <Button DockPanel.Dock="Left" Content="{x:Static res:UiStrings.Settings_ResetAssignments}"
+                    Command="{Binding ResetAssignmentsCommand}" Margin="8,0,0,0"
+                    ToolTip="{x:Static res:UiStrings.Settings_ResetAssignmentsTip}" ToolTipService.ShowOnDisabled="True"
+                    AutomationProperties.AutomationId="Settings.ResetAssignments" />
+            <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Settings_Close}" Command="{Binding CloseCommand}"
+                    Margin="8,0,0,0" MinWidth="88" AutomationProperties.AutomationId="Settings.Close" />
+            <Button DockPanel.Dock="Right" Content="{x:Static res:UiStrings.Settings_Save}" Command="{Binding SaveCommand}"
+                    IsDefault="True" Style="{StaticResource PrimaryButton}" AutomationProperties.AutomationId="Settings.Save" />
+        </DockPanel>
+    </StackPanel>
+</Window>
