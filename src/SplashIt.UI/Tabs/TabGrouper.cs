@@ -1,4 +1,5 @@
 using System.Globalization;
+using SplashIt.Core.Logging;
 using SplashIt.Core.Tabs;
 
 namespace SplashIt.UI.Tabs;
@@ -53,15 +54,16 @@ public sealed class TabGrouper
     public const string NoPaneReason = "No document tab pane was found.";
 
     private readonly Func<object, object?> _keyOf;
-    private readonly Action<string> _log;
+    private readonly ILog _log;
 
     /// <param name="keyOf">The document key of a pane item (a tab), or null when it matches no
     /// document. Keys are compared with their own equality.</param>
-    /// <param name="log">Receives one line per run: the counts, or the reason it stopped.</param>
-    public TabGrouper(Func<object, object?> keyOf, Action<string>? log = null)
+    /// <param name="log">Receives one line per run: the counts (info), why it was unavailable
+    /// (warning), or why it stopped (error).</param>
+    public TabGrouper(Func<object, object?> keyOf, ILog? log = null)
     {
         _keyOf = keyOf ?? throw new ArgumentNullException(nameof(keyOf));
-        _log = log ?? (_ => { });
+        _log = log ?? NullLog.Instance;
     }
 
     /// <summary>Groups every pane in turn. <see cref="TabGroupOutcome.Unavailable"/> when there is no pane.</summary>
@@ -168,13 +170,21 @@ public sealed class TabGrouper
     {
         try
         {
-            _log(result.Outcome switch
+            switch (result.Outcome)
             {
-                TabGroupOutcome.Grouped => Inv($"group tabs: {result.Moves} moves over {tabs} tabs in {result.Panes} panes."),
-                TabGroupOutcome.AlreadyGrouped => Inv($"group tabs: already grouped ({tabs} tabs in {result.Panes} panes); nothing moved."),
-                TabGroupOutcome.Unavailable => "group tabs: unavailable. " + result.Reason,
-                _ => Inv($"group tabs: stopped after {result.Moves} moves. {result.Reason}"),
-            });
+                case TabGroupOutcome.Grouped:
+                    _log.Info(Inv($"group tabs: {result.Moves} moves over {tabs} tabs in {result.Panes} panes."));
+                    break;
+                case TabGroupOutcome.AlreadyGrouped:
+                    _log.Info(Inv($"group tabs: already grouped ({tabs} tabs in {result.Panes} panes); nothing moved."));
+                    break;
+                case TabGroupOutcome.Unavailable:
+                    _log.Warn("group tabs: unavailable. " + result.Reason);
+                    break;
+                default:
+                    _log.Error(Inv($"group tabs: stopped after {result.Moves} moves. {result.Reason}"));
+                    break;
+            }
         }
         catch (Exception)
         {

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using SplashIt.Core.Logging;
 using SplashIt.UI.Tabs;
 
 namespace SplashIt.Revit.Tabs;
@@ -173,14 +174,6 @@ public sealed class AvalonDockPane : IDocumentPane
         return false;
     }
 
-    /// <summary>The panes found for a set of tabs, or why there are none.</summary>
-    /// <param name="Panes">The distinct panes, in the order their first tab was given.</param>
-    /// <param name="Reason">Null when <paramref name="Panes"/> is usable; otherwise why nothing may move.</param>
-    public readonly record struct Lookup(IReadOnlyList<IDocumentPane> Panes, string? Reason)
-    {
-        public bool IsAvailable => Reason is null;
-    }
-
     /// <summary>
     /// Finds the panes of the given tabs' <c>LayoutDocument</c>s (in Revit, each tab's
     /// <c>DataContext</c>) through their <c>Parent</c>. If any tab's parent is not a
@@ -192,12 +185,12 @@ public sealed class AvalonDockPane : IDocumentPane
     {
         public const string NoTabsReason = "No document tab's layout model was found.";
 
-        private readonly Action<string> _log;
+        private readonly ILog _log;
         private bool _versionLogged;
 
-        public Finder(Action<string>? log = null) => _log = log ?? (_ => { });
+        public Finder(ILog? log = null) => _log = log ?? NullLog.Instance;
 
-        public Lookup Find(IEnumerable<object?> documents)
+        public DocumentPaneLookup Find(IEnumerable<object?> documents)
         {
             try
             {
@@ -221,7 +214,7 @@ public sealed class AvalonDockPane : IDocumentPane
                     if (pane is null) return Unavailable(reason!);
                     panes.Add(pane);
                 }
-                return panes.Count == 0 ? Unavailable(NoTabsReason) : new Lookup(panes, null);
+                return panes.Count == 0 ? Unavailable(NoTabsReason) : new DocumentPaneLookup(panes, null);
             }
             catch (Exception ex)
             {
@@ -229,7 +222,7 @@ public sealed class AvalonDockPane : IDocumentPane
             }
         }
 
-        private static Lookup Unavailable(string reason) => new([], reason);
+        private static DocumentPaneLookup Unavailable(string reason) => DocumentPaneLookup.Unavailable(reason);
 
         /// <summary>AC4 step 1: the AvalonDock assembly and whether MoveChild exists, once.</summary>
         private void LogVersion(Type paneType, bool hasMoveChild)
@@ -242,12 +235,12 @@ public sealed class AvalonDockPane : IDocumentPane
                 var name = assembly.GetName();
                 var file = assembly.GetCustomAttribute<AssemblyFileVersionAttribute>()?.Version ?? "?";
                 var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
-                _log(string.Create(CultureInfo.InvariantCulture,
+                _log.Write(hasMoveChild ? LogLevel.Info : LogLevel.Warn, string.Create(CultureInfo.InvariantCulture,
                     $"group tabs: {paneType.Name} from {name.Name} {name.Version} (file {file}, product {informational}); MoveChild {(hasMoveChild ? "found" : "NOT found")}."));
             }
             catch (Exception ex)
             {
-                _log("group tabs: reading the AvalonDock version failed (" + ex.GetType().Name + ").");
+                _log.Warn("group tabs: reading the AvalonDock version failed (" + ex.GetType().Name + ").");
             }
         }
     }
