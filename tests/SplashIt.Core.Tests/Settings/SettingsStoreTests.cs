@@ -420,6 +420,105 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Contains(_log, l => l.Contains("after 5 attempts"));
     }
 
+    /// <summary>
+    /// Reproduces Windows behavior on any OS: a rename over a target another handle has
+    /// open is refused, and ReplaceFile may remove the target and then fail (1176).
+    /// </summary>
+    private sealed class WindowsLikeOps(bool moveAlwaysFails, bool replaceRemovesTargetThenFails) : AtomicFile.FileOps
+    {
+        public int Moves;
+        public int Replaces;
+
+        public override void Move(string source, string destination, bool overwrite)
+        {
+            Moves++;
+            if (moveAlwaysFails) throw new IOException("simulated: move refused");
+            if (overwrite && File.Exists(destination))
+                throw new UnauthorizedAccessException("simulated: target held open by another handle");
+            base.Move(source, destination, overwrite);
+        }
+
+        public override void Replace(string source, string destination)
+        {
+            Replaces++;
+            if (!replaceRemovesTargetThenFails)
+            {
+                base.Replace(source, destination);
+                return;
+            }
+            File.Delete(destination);
+            throw new IOException("simulated: ERROR_UNABLE_TO_MOVE_REPLACEMENT (1176)");
+        }
+    }
+
+    private static IDisposable UseOps(AtomicFile.FileOps ops)
+    {
+        AtomicFile.OpsOverride.Value = ops;
+        return new Restore();
+    }
+
+    private sealed class Restore : IDisposable
+    {
+        public void Dispose() => AtomicFile.OpsOverride.Value = null;
+    }
+
+    [Fact]
+    public void Write_WhenTheMoveIsRefused_FallsBackToReplaceFile()
+    {
+        var path = _temp.File("settings.json");
+        SplashItSettings.Default.Write(path);
+        var ops = new WindowsLikeOps(moveAlwaysFails: false, replaceRemovesTargetThenFails: false);
+
+        using (UseOps(ops)) Custom().Write(path, _log.Add);
+
+        Assert.Equal(Custom(), SplashItSettings.Read(path));
+        Assert.Equal(1, ops.Moves);
+        Assert.Equal(1, ops.Replaces);
+        Assert.Equal(["settings.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void Write_WhenReplaceFileFailsAfterRemovingTheTarget_PutsTheNewFileInPlace()
+    {
+        // ERROR_UNABLE_TO_MOVE_REPLACEMENT: without the guard, settings.json would be gone
+        // and the next Read would switch coloring back on for a user who turned it off.
+        var path = _temp.File("settings.json");
+        SplashItSettings.Default.Write(path);
+        var off = Custom(); // Enabled = false
+        var ops = new WindowsLikeOps(moveAlwaysFails: false, replaceRemovesTargetThenFails: true);
+
+        using (UseOps(ops)) off.Write(path, _log.Add);
+
+        var read = SplashItSettings.Read(path);
+        Assert.Equal(off, read);
+        Assert.False(read.Enabled);
+        Assert.Equal(["settings.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
+        Assert.Contains(_log, l => l.Contains("moved the new file into place"));
+    }
+
+    [Fact]
+    public void Write_WhenEverySwapFailsAfterTheTargetIsGone_KeepsTheNewContents()
+    {
+        var path = _temp.File("settings.json");
+        SplashItSettings.Default.Write(path);
+        var ops = new WindowsLikeOps(moveAlwaysFails: true, replaceRemovesTargetThenFails: true);
+
+        Exception? ex;
+        using (UseOps(ops)) ex = Record.Exception(() => Custom().Write(path, _log.Add));
+
+        Assert.IsType<IOException>(ex);
+        // Attempt 1: the move is refused, ReplaceFile removes the target and fails, the
+        // rescue move fails. Attempts 2-5: a plain move into the free name, refused.
+        Assert.Equal(1, ops.Replaces);
+        Assert.Equal(6, ops.Moves);
+        // The temp file is not deleted while settings.json is missing: the new contents survive.
+        var kept = Assert.Single(Directory.GetFiles(_temp.Path));
+        Assert.StartsWith(".settings.json.", Path.GetFileName(kept));
+        Assert.Equal(Custom(), SplashItSettings.FromJson(File.ReadAllText(kept)));
+        Assert.Contains(_log, l => l.Contains("its new contents are kept in"));
+        Assert.DoesNotContain(_log, l => l.Contains("the previous file is kept"));
+    }
+
     [Fact]
     public void Write_WhileAReaderHoldsTheFileOpenWithShareDelete_Succeeds()
     {

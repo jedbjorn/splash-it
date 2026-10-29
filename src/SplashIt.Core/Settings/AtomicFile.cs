@@ -3,32 +3,54 @@ using System.Text;
 namespace SplashIt.Core.Settings;
 
 /// <summary>
-/// Writes a file so a reader never sees it half-written: the text goes to a temp
-/// file in the same folder, is flushed to disk, then replaces the target in one
-/// rename, <see cref="File.Move(string, string, bool)"/> with overwrite (MoveFileEx with
-/// MOVEFILE_REPLACE_EXISTING on Windows, rename(2) elsewhere). A failure at any point
-/// leaves the previous file untouched and no temp file behind.
-/// <para>
-/// Not <see cref="File.Replace(string, string, string?)"/>: Win32 ReplaceFile can fail
-/// with ERROR_UNABLE_TO_MOVE_REPLACEMENT (1176) after the target is already gone, and if
-/// every retry failed too, the temp file would be cleaned up and no settings.json would
-/// be left; the next Read would give the defaults and switch coloring back on for a
-/// user who had turned it off. A move with overwrite never leaves the target missing.
-/// </para>
-/// <para>
-/// On Windows the replace is refused while another process (a reader without
-/// <see cref="FileShare.Delete"/>, an antivirus scanner, a sync client) holds the target
-/// open, so it is retried a few times, briefly, before the error surfaces. Readers of
-/// files written here should open them with <c>FileShare.ReadWrite | FileShare.Delete</c>.
-/// </para>
+/// Writes a file so a reader never sees it half-written, and so the target is never
+/// left missing: the text goes to a temp file in the same folder, is flushed to disk,
+/// then takes the target's place.
+/// <list type="number">
+/// <item>The swap is <see cref="File.Move(string, string, bool)"/> with overwrite: one
+/// rename (MoveFileEx with MOVEFILE_REPLACE_EXISTING on Windows, rename(2) elsewhere)
+/// that never leaves the target missing.</item>
+/// <item>Windows refuses that rename while any other handle has the target open, even
+/// one opened with <see cref="FileShare.Delete"/> (a reader of ours, an antivirus scanner,
+/// a sync client). Only then, and only when the target exists, the swap falls back to
+/// <see cref="File.Replace(string, string, string?)"/> (Win32 ReplaceFile), which does work
+/// over a reader that shares delete.</item>
+/// <item>ReplaceFile can fail with ERROR_UNABLE_TO_MOVE_REPLACEMENT (1176) after it has
+/// already removed the target. Whenever a ReplaceFile call fails and the target is gone,
+/// the temp file is moved into place at once (nothing holds the name any more).</item>
+/// <item>The whole swap is retried a few times, briefly, each failure logged; then the
+/// error surfaces with the previous file kept.</item>
+/// <item>The temp file is deleted at the end only while the target exists. In the one
+/// case where every attempt failed and the target is gone, the temp file holding the new
+/// contents is kept (and logged) rather than deleted.</item>
+/// </list>
+/// Readers of files written here should open them with
+/// <c>FileShare.ReadWrite | FileShare.Delete</c> (<see cref="ReadAllText"/> does).
 /// </summary>
 internal static class AtomicFile
 {
-    /// <summary>How many times the final replace is tried.</summary>
+    /// <summary>How many times the swap is tried.</summary>
     internal const int ReplaceAttempts = 5;
 
     /// <summary>The wait before the first retry; it doubles each time (about 0.3 s in all).</summary>
     internal const int FirstRetryDelayMs = 20;
+
+    /// <summary>The file-system calls the swap makes; tests substitute them to reproduce Windows failures.</summary>
+    internal class FileOps
+    {
+        public virtual void Move(string source, string destination, bool overwrite) =>
+            File.Move(source, destination, overwrite);
+
+        public virtual void Replace(string source, string destination) =>
+            File.Replace(source, destination, destinationBackupFileName: null);
+    }
+
+    private static readonly FileOps RealOps = new();
+
+    /// <summary>Test seam, scoped to the calling async flow so parallel tests are unaffected.</summary>
+    internal static readonly AsyncLocal<FileOps?> OpsOverride = new();
+
+    private static FileOps Ops => OpsOverride.Value ?? RealOps;
 
     public static void WriteAllText(string path, string contents, Action<string>? log = null)
     {
@@ -50,7 +72,11 @@ internal static class AtomicFile
         }
         finally
         {
-            TryDelete(temp);
+            if (Path.Exists(full) || !File.Exists(temp))
+                TryDelete(temp);
+            else
+                log?.Invoke(FormattableString.Invariant(
+                    $"settings: {Path.GetFileName(full)} is missing; its new contents are kept in {Path.GetFileName(temp)}."));
         }
     }
 
@@ -89,8 +115,7 @@ internal static class AtomicFile
         {
             try
             {
-                // One call whether or not the target exists: it never leaves the target missing.
-                File.Move(temp, target, overwrite: true);
+                SwapOnce(temp, target, log);
                 if (attempt > 1)
                     log?.Invoke(FormattableString.Invariant($"settings: replaced {Path.GetFileName(target)} on attempt {attempt}."));
                 return;
@@ -99,8 +124,11 @@ internal static class AtomicFile
             {
                 if (attempt >= ReplaceAttempts)
                 {
-                    log?.Invoke(FormattableString.Invariant(
-                        $"settings: replacing {Path.GetFileName(target)} failed ({ex.GetType().Name}) after {ReplaceAttempts} attempts; the previous file is kept."));
+                    log?.Invoke(Path.Exists(target)
+                        ? FormattableString.Invariant(
+                            $"settings: replacing {Path.GetFileName(target)} failed ({ex.GetType().Name}) after {ReplaceAttempts} attempts; the previous file is kept.")
+                        : FormattableString.Invariant(
+                            $"settings: replacing {Path.GetFileName(target)} failed ({ex.GetType().Name}) after {ReplaceAttempts} attempts."));
                     throw;
                 }
                 log?.Invoke(FormattableString.Invariant(
@@ -108,6 +136,37 @@ internal static class AtomicFile
                 Thread.Sleep(delay);
                 delay *= 2;
             }
+        }
+    }
+
+    /// <summary>One swap: a move with overwrite, else (target held open on Windows) ReplaceFile, never leaving the target missing.</summary>
+    private static void SwapOnce(string temp, string target, Action<string>? log)
+    {
+        var ops = Ops;
+        try
+        {
+            ops.Move(temp, target, overwrite: true);
+            return;
+        }
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && File.Exists(target))
+        {
+            // Refused because another handle has the target open; ReplaceFile copes with
+            // a handle that shares delete. Fall through.
+        }
+
+        try
+        {
+            ops.Replace(temp, target);
+        }
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException)
+                                   && !Path.Exists(target) && File.Exists(temp))
+        {
+            // ERROR_UNABLE_TO_MOVE_REPLACEMENT (1176): ReplaceFile removed the target, then
+            // could not rename the temp file. Put it in place now; nothing holds the name.
+            // If this move fails too, the retry loop tries again and the temp file is kept.
+            ops.Move(temp, target, overwrite: false);
+            log?.Invoke(FormattableString.Invariant(
+                $"settings: ReplaceFile failed after removing {Path.GetFileName(target)} ({ex.GetType().Name}); moved the new file into place."));
         }
     }
 

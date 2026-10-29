@@ -140,13 +140,28 @@ launch.
 
 ## Settings file
 
-`%AppData%\SplashIt\settings.json`, written atomically: a temp file in the same folder,
-flushed, then moved over the target with `File.Move(..., overwrite: true)` (one rename,
-which never leaves the target missing; `File.Replace` is avoided because Win32
-`ReplaceFile` can fail after the target is already gone).
-Windows refuses that replace while another process holds the file open without
-`FileShare.Delete` (a scanner, a sync client), so it is retried up to 5 times over about
-0.3 s, each retry logged; after that the error surfaces and the previous file is kept.
+`%AppData%\SplashIt\settings.json` is written atomically (`AtomicFile`), and the file
+is never left missing. Losing it would turn coloring back on for a user who had turned it off.
+
+1. **Write a temp file.** The new text goes to a temp file in the same folder and is
+   flushed to disk.
+2. **Move it over the target.** `File.Move(temp, target, overwrite: true)` is one rename,
+   and a rename never leaves the target missing.
+3. **Fall back to `File.Replace` only if the move is refused.** Windows refuses that
+   rename while any other handle has the target open, even one opened with
+   `FileShare.Delete`. In that case only, and only when the target exists, the write
+   uses `File.Replace` (Win32 `ReplaceFile`), which works over a reader that shares
+   delete.
+4. **Put the file back if `ReplaceFile` removed it.** `ReplaceFile` can fail with
+   `ERROR_UNABLE_TO_MOVE_REPLACEMENT` (1176) after it has already removed the target.
+   Whenever a `ReplaceFile` call fails and the target is gone, the temp file is moved
+   into place at once.
+5. **Retry, then give up.** The swap is tried up to 5 times over about 0.3 s, each
+   failure logged, which covers a scanner or sync client that holds the file without
+   `FileShare.Delete`. After that the error surfaces and the previous file is kept.
+6. **Never delete the new contents while the target is gone.** If the target is missing
+   and every attempt failed, the temp file is kept, and the log names it.
+
 Anything that reads the file must open it with `FileShare.ReadWrite | FileShare.Delete`,
 as `SplashItSettings.Read` does.
 
