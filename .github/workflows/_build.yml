@@ -15,8 +15,9 @@ name: _build (reusable)
 #                (SplashIt.addin + SplashIt\ folder):
 #                  gh run download <run-id> -n SplashIt-Debug-R26
 #                (SplashIt-Debug-R25 / -R26 / -R27).
-#   • runtime  — Windows runner: SplashIt.RuntimeTests (WPF, no Revit). The
-#                tests render WPF off-screen to PNG under
+#   • runtime  — Windows runner: SplashIt.Core.Tests again (Windows file
+#                semantics), then SplashIt.RuntimeTests (SplashIt.UI and WPF,
+#                no Revit). The runtime tests render WPF off-screen to PNG under
 #                TestResults/screenshots/, uploaded as SplashIt-screenshots:
 #                  gh run download <run-id> -n SplashIt-screenshots
 #
@@ -113,7 +114,7 @@ jobs:
           if-no-files-found: error
 
   runtime:
-    name: Runtime tests (Windows, WPF)
+    name: Windows tests (Core + runtime, WPF)
     runs-on: windows-latest
     defaults:
       run:
@@ -125,6 +126,14 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
+
+      # The Core tests again, on Windows file semantics (atomic replace while a
+      # reader holds settings.json, sharing violations, retries).
+      - name: dotnet test SplashIt.Core.Tests (Windows, net8.0 + net10.0)
+        run: >-
+          dotnet test tests/SplashIt.Core.Tests/SplashIt.Core.Tests.csproj
+          -c "Release R26" --nologo
+          --logger "console;verbosity=normal"
 
       - name: dotnet test SplashIt.RuntimeTests
         run: >-
