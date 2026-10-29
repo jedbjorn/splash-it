@@ -111,7 +111,19 @@ public sealed class DocumentTabColorizer
         public Brush? Brush;
         public Brush? Guess;
         public int Retries;
+
+        /// <summary>The color settled before the last theme change: a sample still showing it, while the tree says otherwise, is the old theme's paint (rc.3 F1).</summary>
+        public Rgb? Stale;
+
+        /// <summary>A sample that disagreed with the tree, waiting for a second, later sample to confirm it.</summary>
+        public Rgb? Candidate;
     }
+
+    /// <summary>Takes the rendered sample (<see cref="TabBackdrop.Rendered(DependencyObject, out string?)"/>); replaceable in tests.</summary>
+    internal delegate (Rgb Color, string Source)? RenderedSampler(DependencyObject tab, out string? failure);
+
+    /// <summary>The rendered sample (#33, step 1). Tests replace it to stand in for a window that has not repainted yet.</summary>
+    internal RenderedSampler SampleRendered { get; set; } = TabBackdrop.Rendered;
     private readonly List<SurfaceTab> _read = new();
     private readonly List<Signature> _signature = new();
     private readonly List<TabItem> _drop = new();
@@ -490,7 +502,7 @@ public sealed class DocumentTabColorizer
             _log.Info(Inv($"colorizer: theme changed to {theme}; restyling."));
             Theme = theme;
             RestoreAll();           // originals back on every tab...
-            _backdrops.Clear();     // ...what is behind the tabs found again...
+            ForgetBackdrops();      // ...what is behind the tabs found again, the old color remembered as stale...
             _backdropNeedsLayout = true; // what is drawn is the old theme until the next layout
             _styles.ClearCache();   // ...styles rebuilt for the new backdrop...
             _signatureValid = false;
@@ -693,8 +705,8 @@ public sealed class DocumentTabColorizer
         if (state.Unstylable || state.Abandoned) return null;
         try
         {
-            // A project's text and × are chosen against what shows behind the tab (#30/#31: the fill
-            // fades to transparent); a family bar has no text, so its backdrop does not matter.
+            // A project's text and × are chosen against what shows behind the tab (#31/#36: the fill
+            // is translucent); a family bar has no text, so its backdrop does not matter.
             var backdrop = kind == FileKind.Project ? BackdropFor(entry.Tab, state) : state.OriginalBackground;
             return _styles.Create(state.BaseStyle, treatment, backdrop, Theme);
         }
@@ -753,8 +765,13 @@ public sealed class DocumentTabColorizer
             if (mayRender && !_backdropNeedsLayout)
             {
                 var t0 = Stopwatch.GetTimestamp();
-                rendered = TabBackdrop.Rendered(tab, out failure);
+                rendered = SampleRendered(tab, out failure);
                 sampleTicks = Stopwatch.GetTimestamp() - t0;
+                if (rendered is { } r && !Confirmed(backdrop, r.Color, tab, out var why))
+                {
+                    rendered = null;
+                    failure = why;
+                }
             }
             if (rendered is null && backdrop.Retries++ < MaxBackdropRetries)
             {
@@ -765,6 +782,8 @@ public sealed class DocumentTabColorizer
 
             backdrop.Done = true;
             backdrop.Guess = null;
+            backdrop.Stale = null;
+            backdrop.Candidate = null;
             var sampled = TabBackdrop.Describe(rendered, failure);
             if ((rendered ?? TabBackdrop.FromTree(tab)) is { } behind)
             {
@@ -775,6 +794,47 @@ public sealed class DocumentTabColorizer
             {
                 _log.Info("colorizer: nothing solid behind the tabs; project text and x are chosen against each tab's own background, else the theme surface. [" + TabBackdrop.Explain(tab, sampled) + "]");
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether a rendered sample of <paramref name="color"/> may settle the pane (rc.3 F1). A sample that
+    /// agrees with the tree's answer (the painted-layer search, else the ancestor walk), or when the tree
+    /// has none, is taken. One that disagrees is taken only once a later layout pass samples the same
+    /// color again, and never while it is the color settled before the last theme change: then the
+    /// window has not repainted yet (Revit 2027 lays out before it repaints the strip), and the tree,
+    /// which already moved with the theme, is believed. Until then the pane keeps waiting, within its
+    /// budget, and settles for the tree's answer when the budget runs out.
+    /// </summary>
+    private static bool Confirmed(PaneBackdrop backdrop, Rgb color, TabItem tab, out string? why)
+    {
+        why = null;
+        if (TabBackdrop.FromTree(tab) is not { } tree || tree.Color == color) return true;
+        if (backdrop.Stale == color)
+        {
+            why = Inv($"the sample {color.ToHex()} is the color before the theme change, the tree says {tree.Color.ToHex()}: not repainted yet");
+            return false;
+        }
+        if (backdrop.Candidate == color) return true; // two layout passes agree: what is drawn
+        backdrop.Candidate = color;
+        why = Inv($"the sample {color.ToHex()} differs from the tree's {tree.Color.ToHex()}: waiting for a second sample");
+        return false;
+    }
+
+    /// <summary>
+    /// After a theme change: every pane's backdrop is found again, and the color each had settled on is
+    /// kept as <see cref="PaneBackdrop.Stale"/>, so a sample of the old paint is not taken for the new one.
+    /// </summary>
+    private void ForgetBackdrops()
+    {
+        foreach (var (_, backdrop) in _backdrops)
+        {
+            backdrop.Stale = backdrop.Done && backdrop.Brush is SolidColorBrush b ? new Rgb(b.Color.R, b.Color.G, b.Color.B) : backdrop.Stale;
+            backdrop.Done = false;
+            backdrop.Brush = null;
+            backdrop.Guess = null;
+            backdrop.Candidate = null;
+            backdrop.Retries = 0;
         }
     }
 

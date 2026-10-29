@@ -20,8 +20,8 @@ public interface ITabStyleFactory
     /// null for none) that applies <paramref name="treatment"/>. Text and × contrast are measured
     /// against <paramref name="originalBackground"/> when it is a <see cref="SolidColorBrush"/>
     /// (blended over <paramref name="theme"/>'s surface token), else against that token. The
-    /// colorizer passes what shows behind the tab (<see cref="TabBackdrop"/>: the fill fades to
-    /// transparent, #30), else the tab's background under its original style. The same inputs
+    /// colorizer passes what shows behind the tab (<see cref="TabBackdrop"/>: the fill is translucent
+    /// and fades to half its opacity, #36), else the tab's background under its original style. The same inputs
     /// return the same instance.
     /// </summary>
     /// <exception cref="ArgumentException">
@@ -44,12 +44,15 @@ public interface ITabStyleFactory
 /// <param name="Selected">The selected tab's fill color, drawn at <paramref name="Opacity"/>.</param>
 /// <param name="SelectedText">Text over the selected fill, chosen as <paramref name="Text"/>.</param>
 /// <param name="Accent">The selected tab's 3 px top line (darker, opaque).</param>
-/// <param name="Glyph">The close glyph in every state (#30): the fill ends before it, so it is black or
-/// white against the backdrop alone: what shows behind the tab (decision #33, found by <see cref="TabBackdrop"/>),
-/// else the tab's original background, else the theme surface; not the fill.</param>
+/// <param name="Glyph">The close glyph on an unselected tab (#36): the × sits on the fade, so it is black or
+/// white, whichever has the higher minimum contrast over the fill under each of its pixel columns
+/// (<see cref="ProjectFillShape.CloseShares"/>), blended over the backdrop: what shows behind the tab
+/// (decision #33, found by <see cref="TabBackdrop"/>), else the tab's original background, else the theme surface.</param>
+/// <param name="HoverGlyph">The close glyph over the hover fill, chosen as <paramref name="Glyph"/>.</param>
+/// <param name="SelectedGlyph">The close glyph over the selected fill, chosen as <paramref name="Glyph"/>.</param>
 public readonly record struct TabFillColors(
     Rgb Fill, double Opacity, double MutedOpacity, Rgb Text, Rgb Hover, Rgb HoverText, Rgb Selected, Rgb SelectedText, Rgb Accent,
-    Rgb Glyph);
+    Rgb Glyph, Rgb HoverGlyph, Rgb SelectedGlyph);
 
 /// <summary>
 /// The family top bar's shape (FnB decision #27): not a setting, a constant of the look. The
@@ -77,18 +80,19 @@ public readonly record struct FamilyTopBarShape(double Height, double Width, dou
 /// <summary>
 /// The tab style factory (spec, Shapes and settings).
 /// <list type="bullet">
-/// <item><b>Project fill</b> (FnB decisions #22, #23 and #30): the selected tab shows the color at the
+/// <item><b>Project fill</b> (FnB decisions #22, #23 and #36): the selected tab shows the color at the
 /// fill opacity with a <see cref="AccentHeight"/> px line, darker by <see cref="AccentDarken"/>,
 /// along its top edge; the project's other tabs show the same color at the Unselected tab
 /// opacity (<see cref="TabTreatment.UnselectedPercent"/> of the fill opacity, default 50 %), so
 /// the active view stands out. At 100 % only the top line marks the selected tab. The fill and
-/// the line take <see cref="ProjectFill"/>'s shape (#30): solid from the left edge, then a fixed
-/// 24 px fade that ends just before the close button, so the × sits on Revit's own strip. The
-/// text is black or white, whichever has the higher WCAG contrast against the fill as shown in
-/// that state at its worst over two points, the solid part and the fade under a title's last
-/// column (#31), both blended over the backdrop; the close glyph is black or white against the
-/// backdrop alone. The backdrop is what shows through the fade's end and under the ×: whatever is
-/// behind the tab (the fill replaces the tab's own background), which the colorizer finds with
+/// the line take <see cref="ProjectFill"/>'s shape (#36, superseding #34): solid from the left edge
+/// to a fade start 26 px before the close button (where #30's fade started), then a linear fade
+/// through the × to half the opacity at the tab's right edge, so a project's tabs meet with no
+/// colorless gap. The text is black or white, whichever has the higher WCAG contrast against the
+/// fill as shown in that state at its worst over two points, the solid part and the fade under a
+/// title's last column (#31); the close glyph likewise, per state, at its worst over the fade under
+/// each of its pixel columns (#36). All are blended over the backdrop: whatever is behind the tab
+/// and shows through the translucent fill (the fill replaces the tab's own background), which the colorizer finds with
 /// <see cref="TabBackdrop"/>; else the tab's original background, else the theme surface. Hover
 /// lightens an unselected tab's fill by <see cref="HoverLighten"/>.</item>
 /// <item><b>Family marks</b> (#27): a bar of the bar width on the left edge at the bar opacity,
@@ -162,7 +166,7 @@ public sealed class TabStyleFactory : ITabStyleFactory
         ProjectFill = projectFill ?? ProjectFillShape.Default;
     }
 
-    /// <summary>The project fill's shape this factory draws (#30).</summary>
+    /// <summary>The project fill's shape this factory draws (#36).</summary>
     public ProjectFillShape ProjectFill { get; }
 
     /// <summary>The family top bar's shape this factory draws (#27).</summary>
@@ -202,8 +206,9 @@ public sealed class TabStyleFactory : ITabStyleFactory
     /// The colors a project <paramref name="treatment"/> shows over <paramref name="backdrop"/>, in
     /// <paramref name="shape"/> (<see cref="ProjectFillShape.Default"/> when null). Each state's text
     /// is black or white by its worst case over two points (#31): the solid part, and the fade under
-    /// a title's last column (<see cref="ProjectFillShape.TitleEndShare"/> of the opacity), both
-    /// blended over <paramref name="backdrop"/>.
+    /// a title's last column (<see cref="ProjectFillShape.TitleEndShare"/> of the opacity). Each
+    /// state's × is black or white by its worst case over the fade under each of its pixel columns
+    /// (#36, <see cref="ProjectFillShape.CloseShares"/>). All are blended over <paramref name="backdrop"/>.
     /// </summary>
     public static TabFillColors FillColors(TabTreatment treatment, Rgb backdrop, ProjectFillShape? shape = null)
     {
@@ -211,9 +216,17 @@ public sealed class TabStyleFactory : ITabStyleFactory
         var opacity = treatment.Opacity;
         var muted = treatment.UnselectedOpacity;
         var hover = ColorMath.Lighten(color, HoverLighten);
-        var end = (shape ?? ProjectFillShape.Default).TitleEndShare;
+        var s = shape ?? ProjectFillShape.Default;
+        var end = s.TitleEndShare;
+        var close = s.CloseShares();
+        var under = new Rgb[close.Length];
         Rgb Text(Rgb c, double o) =>
             ColorMath.TextColorForAll(ColorMath.Blend(c, o, backdrop), ColorMath.Blend(c, o * end, backdrop));
+        Rgb Glyph(Rgb c, double o)
+        {
+            for (var i = 0; i < close.Length; i++) under[i] = ColorMath.Blend(c, o * close[i], backdrop);
+            return ColorMath.TextColorForAll(under);
+        }
         return new TabFillColors(
             Fill: color,
             Opacity: opacity,
@@ -224,7 +237,9 @@ public sealed class TabStyleFactory : ITabStyleFactory
             Selected: color,
             SelectedText: Text(color, opacity),
             Accent: ColorMath.Darken(color, AccentDarken),
-            Glyph: ColorMath.TextColorFor(backdrop));
+            Glyph: Glyph(color, muted),
+            HoverGlyph: Glyph(hover, muted),
+            SelectedGlyph: Glyph(color, opacity));
     }
 
     public Style Create(Style? basedOn, TabTreatment treatment, Brush? originalBackground, UiTheme theme)
@@ -260,7 +275,10 @@ public sealed class TabStyleFactory : ITabStyleFactory
         var hoverText = Brush(colors.HoverText);
         var selected = ProjectFillConverter.Binding(colors.Selected, colors.Opacity, shape);
         var selectedText = Brush(colors.SelectedText);
-        var glyph = Brush(colors.Glyph); // one color: the × is on the strip in every state (#30)
+        // The × sits on the fade (#36), so each state has its own black or white.
+        var glyph = Brush(colors.Glyph);
+        var hoverGlyph = Brush(colors.HoverGlyph);
+        var selectedGlyph = Brush(colors.SelectedGlyph);
         var accent = new TabDecorationSpec(null, 0, Brush(colors.Accent), AccentHeight, topAccentAnchor: shape);
 
         // Plain setters: the state before any trigger applies.
@@ -275,19 +293,19 @@ public sealed class TabStyleFactory : ITabStyleFactory
         var hoverTrigger = new MultiTrigger();
         hoverTrigger.Conditions.Add(new Condition(UIElement.IsMouseOverProperty, true));
         hoverTrigger.Conditions.Add(new Condition(TabItem.IsSelectedProperty, false));
-        AddState(hoverTrigger.Setters, hover, hoverText, glyph);
+        AddState(hoverTrigger.Setters, hover, hoverText, hoverGlyph);
         style.Triggers.Add(hoverTrigger);
 
         // 3. Selected: the fill opacity and the darker top line, in the same shape.
         var selectedTrigger = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
-        AddState(selectedTrigger.Setters, selected, selectedText, glyph);
+        AddState(selectedTrigger.Setters, selected, selectedText, selectedGlyph);
         selectedTrigger.Setters.Add(new Setter(TabDecoration.DecorationProperty, accent));
         style.Triggers.Add(selectedTrigger);
     }
 
     /// <summary>
-    /// One state's fill (a binding, #30), text, and close glyph. The glyph is never left Revit's
-    /// grey (#22); since #30 it sits on the strip, so it has its own black or white.
+    /// One state's fill (a binding, #36), text, and close glyph. The glyph is never left Revit's
+    /// grey (#22); since #36 it sits on the fade, so it has its own black or white per state.
     /// </summary>
     private static void AddState(SetterBaseCollection setters, BindingBase fill, Brush text, Brush glyph)
     {

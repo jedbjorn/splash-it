@@ -2,7 +2,7 @@
 
 Splash-It is a Revit add-in that colors every open file's view tabs, so with several
 models and many views open you can see at a glance which tab belongs to which file.
-Projects (`.rvt`) get a color fill that fades out just before the close ×; families
+Projects (`.rvt`) get a color fill that fades through the close × to half strength at the tab's edge, so a project's tabs join with no gap; families
 (`.rfa`, including one opened with Edit Family) get a colored L: a bar on the tab's left
 edge and a thin line along its top.
 Templates (`.rte`, `.rft`) stay native. Colors, opacity and bar width are set in a
