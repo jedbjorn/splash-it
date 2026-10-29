@@ -228,7 +228,8 @@ public sealed class RevitDocuments : IDocumentInfo
         /// <summary>
         /// The document's current titles as its tabs may show them
         /// (<see cref="TabTitleMatcher.TitleForms"/>: the title and the saved file name, each with
-        /// and without the Revit extension).
+        /// and without the Revit extension, and the title with its kind's extension: an Edit Family
+        /// document has no path, and its tabs read "&lt;title&gt;.rfa - &lt;view&gt;", SC-004).
         /// </summary>
         public IReadOnlyList<string> Titles { get; private set; } = [];
 
@@ -250,7 +251,7 @@ public sealed class RevitDocuments : IDocumentInfo
         /// </summary>
         public bool Read()
         {
-            var current = TabTitleMatcher.TitleForms(Document.Title ?? "", Document.PathName);
+            var current = TabTitleMatcher.TitleForms(Document.Title ?? "", Document.PathName, Document.IsFamilyDocument);
             var kind = FileKindClassifier.Classify(Document.IsFamilyDocument, Document.PathName, Document.IsModelInCloud, out var rule);
             var changed = kind != Kind || Titles.Count == 0 || !string.Equals(Titles[0], current.Count > 0 ? current[0] : "", StringComparison.Ordinal);
             var kept = new List<string>();
