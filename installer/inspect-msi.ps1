@@ -155,10 +155,10 @@ if ($props['ProductVersion'] -ne $numeric) {
 }
 $msiName = Split-Path -Leaf $Msi
 if ($msiName -ne "SplashIt-$Version.msi") { $problems += "MSI is named $msiName, expected SplashIt-$Version.msi" }
-# The exact file set, per Revit year (8 files each, 24 in all): PDBs ship,
+# The exact file set, per Revit year (12 files each, 36 in all): PDBs ship,
 # XML doc files do not (installer/stage.sh drops them). English only
 # (decision #8): no satellite language folders. A file added to the add-in
-# output (the ribbon icons under SplashIt\Resources\icons\, for one) must be
+# output (as the ribbon icons under SplashIt\Resources\icons\ were) must be
 # added here and to Product.wxs too, deliberately.
 $perYear = @(
   'SplashIt.addin',
@@ -168,7 +168,11 @@ $perYear = @(
   'SplashIt\SplashIt.Revit.dll',
   'SplashIt\SplashIt.Revit.pdb',
   'SplashIt\SplashIt.UI.dll',
-  'SplashIt\SplashIt.UI.pdb'
+  'SplashIt\SplashIt.UI.pdb',
+  'SplashIt\Resources\icons\splash_16.png',
+  'SplashIt\Resources\icons\splash_16_dark.png',
+  'SplashIt\Resources\icons\splash_32.png',
+  'SplashIt\Resources\icons\splash_32_dark.png'
 )
 # The folders Splash-It owns in each Addins\<year>\: SplashIt\ and every
 # folder under it that holds a listed file (and their parents). Each must be

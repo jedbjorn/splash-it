@@ -1,16 +1,15 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Media;
 using SplashIt.Core.Colors;
+using SplashIt.UI.Tabs;
+using SplashIt.UI.Theming;
 
 namespace SplashIt.UI.Settings.Preview;
 
 /// <summary>
 /// Builds the preview strip's tab styles. The spec has the preview use the same style factory
-/// as the colorizer; that factory (ITabStyleFactory, Lane B) is built in parallel, so the
-/// preview goes through this small seam and <see cref="PlaceholderTabStyler"/> stands in until
-/// the factory lands, when an adapter over it replaces the placeholder in
-/// <see cref="PreviewStrip.Styler"/>.
+/// as the colorizer: <see cref="FactoryTabStyler"/> is the colorizer's <see cref="TabStyleFactory"/>.
+/// The seam stays so a test can substitute it.
 /// </summary>
 internal interface IPreviewTabStyler
 {
@@ -31,81 +30,26 @@ internal interface IPreviewTabStyler
 }
 
 /// <summary>
-/// Stand-in for Lane B's tab style factory: draws the spec's treatments (Shapes and settings)
-/// on the preview's own flat tab template through <see cref="PreviewTab"/>'s attached properties.
+/// The preview's styler: the colorizer's own <see cref="TabStyleFactory"/> (Lane B), so the
+/// preview is exactly what the tabs get, including the adorner-drawn top line and bar (the
+/// strip has its own adorner layer). It keeps its own factory instance, so dragging a slider
+/// never churns the colorizer's style cache. The backdrop given is the color the tabs sit on;
+/// text contrast is measured against it.
 /// </summary>
-internal sealed class PlaceholderTabStyler : IPreviewTabStyler
+internal sealed class FactoryTabStyler : IPreviewTabStyler
 {
-    /// <summary>How much hover lightens a project fill.</summary>
-    private const double HoverLighten = 0.15;
+    private readonly TabStyleFactory _factory = new();
 
-    /// <summary>How much the selected tab's top accent darkens the color.</summary>
-    private const double AccentDarken = 0.3;
+    public Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, int unselectedShare, Rgb backdrop) =>
+        _factory.Create(baseStyle, TabTreatment.ProjectFill(color, fillOpacity, unselectedShare), Solid(backdrop), SplashItTheme.Current);
 
-    public Style ProjectStyle(Style baseStyle, Rgb color, int fillOpacity, int unselectedShare, Rgb backdrop)
+    public Style FamilyStyle(Style baseStyle, Rgb color, int barWidth, int barOpacity) =>
+        _factory.Create(baseStyle, TabTreatment.FamilyBar(color, barWidth, barOpacity), null, SplashItTheme.Current);
+
+    private static SolidColorBrush Solid(Rgb c)
     {
-        var selectedFill = ColorMath.Blend(color, fillOpacity / 100.0, backdrop);
-        var shown = ColorMath.Blend(color, fillOpacity / 100.0 * (unselectedShare / 100.0), backdrop);
-        var hover = ColorMath.Lighten(shown, HoverLighten);
-
-        var style = new Style(typeof(TabItem), baseStyle);
-        style.Setters.Add(new Setter(Control.BackgroundProperty, Brush(shown)));
-        style.Setters.Add(new Setter(Control.ForegroundProperty, Brush(ColorMath.TextColorFor(shown))));
-
-        var hovered = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
-        hovered.Setters.Add(new Setter(Control.BackgroundProperty, Brush(hover)));
-        hovered.Setters.Add(new Setter(Control.ForegroundProperty, Brush(ColorMath.TextColorFor(hover))));
-        style.Triggers.Add(hovered);
-
-        // Last, so it wins over hover: the full fill opacity and a 3 px darker line along the top.
-        var selected = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
-        selected.Setters.Add(new Setter(Control.BackgroundProperty, Brush(selectedFill)));
-        selected.Setters.Add(new Setter(Control.ForegroundProperty, Brush(ColorMath.TextColorFor(selectedFill))));
-        selected.Setters.Add(new Setter(PreviewTab.AccentBrushProperty, Brush(ColorMath.Darken(color, AccentDarken))));
-        style.Triggers.Add(selected);
-
-        style.Seal();
-        return style;
-    }
-
-    public Style FamilyStyle(Style baseStyle, Rgb color, int barWidth, int barOpacity)
-    {
-        var style = new Style(typeof(TabItem), baseStyle);
-        style.Setters.Add(new Setter(PreviewTab.BarBrushProperty, Brush(color, barOpacity / 100.0)));
-        style.Setters.Add(new Setter(PreviewTab.BarWidthProperty, (double)barWidth));
-        style.Seal();
-        return style;
-    }
-
-    private static SolidColorBrush Brush(Rgb c, double opacity = 1)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)) { Opacity = opacity };
+        var brush = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
         brush.Freeze();
         return brush;
     }
-}
-
-/// <summary>Attached properties the preview's tab template draws: the selected tab's top accent and the family bar.</summary>
-public static class PreviewTab
-{
-    public static readonly DependencyProperty AccentBrushProperty = DependencyProperty.RegisterAttached(
-        "AccentBrush", typeof(Brush), typeof(PreviewTab), new FrameworkPropertyMetadata(null));
-
-    public static Brush? GetAccentBrush(DependencyObject d) => (Brush?)d.GetValue(AccentBrushProperty);
-
-    public static void SetAccentBrush(DependencyObject d, Brush? value) => d.SetValue(AccentBrushProperty, value);
-
-    public static readonly DependencyProperty BarBrushProperty = DependencyProperty.RegisterAttached(
-        "BarBrush", typeof(Brush), typeof(PreviewTab), new FrameworkPropertyMetadata(null));
-
-    public static Brush? GetBarBrush(DependencyObject d) => (Brush?)d.GetValue(BarBrushProperty);
-
-    public static void SetBarBrush(DependencyObject d, Brush? value) => d.SetValue(BarBrushProperty, value);
-
-    public static readonly DependencyProperty BarWidthProperty = DependencyProperty.RegisterAttached(
-        "BarWidth", typeof(double), typeof(PreviewTab), new FrameworkPropertyMetadata(0.0));
-
-    public static double GetBarWidth(DependencyObject d) => (double)d.GetValue(BarWidthProperty);
-
-    public static void SetBarWidth(DependencyObject d, double value) => d.SetValue(BarWidthProperty, value);
 }

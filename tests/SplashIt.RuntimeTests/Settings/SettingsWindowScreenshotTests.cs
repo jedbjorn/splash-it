@@ -228,9 +228,10 @@ public class SettingsWindowScreenshotTests
         else
         {
             Assert.Equal(Visibility.Collapsed, note.Visibility);
-            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over the surface.
-            var surface = theme == UiTheme.Dark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
-            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, surface));
+            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over what the
+            // tabs sit on (the strip's window color), drawn by the colorizer's TabStyleFactory.
+            var well = Palette(theme, UiPalette.Window);
+            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, new Rgb(well.R, well.G, well.B)));
             Assert.True(Distance(expected, tower2Pixel) <= 3, $"preview tab is {tower2Pixel}, expected {expected}");
         }
     });
@@ -509,7 +510,10 @@ public class SettingsWindowScreenshotTests
         Screenshots.Save(bitmap, Name("preview-matrix", theme));
         Assert.True(Screenshots.DistinctPixels(bitmap) > 60, "the render looks blank");
 
-        var surface = theme == UiTheme.Dark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
+        // The tabs sit on the strip's window color; the project fills (the colorizer's TabStyleFactory
+        // since the Lane B integration) are translucent over it.
+        var windowColor = UiPalette.For(theme)[UiPalette.Window];
+        var surface = new Rgb(windowColor.R, windowColor.G, windowColor.B);
         var tabBackground = UiPalette.For(theme)[UiPalette.Hover];
         var tabRgb = new Rgb(tabBackground.R, tabBackground.G, tabBackground.B);
         var border = UiPalette.For(theme)[UiPalette.Border];
@@ -539,7 +543,7 @@ public class SettingsWindowScreenshotTests
             // text), and a 3 px darker line along its top.
             AssertNear(ToColor(ColorMath.Blend(project1, opacity / 100.0, surface)), At(tower1, 4, tower1.ActualHeight - 3),
                 $"Tower selected, {width}/{opacity}/{share}");
-            var line = ColorMath.Darken(project1, 0.3);
+            var line = ColorMath.Darken(project1, SplashIt.UI.Tabs.TabStyleFactory.AccentDarken);
             AssertNear(ToColor(line), At(tower1, 6, 0.5), $"Tower top line, row 1, {width}/{opacity}/{share}");
             AssertNear(ToColor(line), At(tower1, 6, 2.5), $"Tower top line, row 3, {width}/{opacity}/{share}");
             // The project's other tab, and the other project: fill × the unselected share (decision #23).
