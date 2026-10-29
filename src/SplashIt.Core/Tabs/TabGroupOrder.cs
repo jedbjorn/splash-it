@@ -9,10 +9,13 @@ namespace SplashIt.Core.Tabs;
 public readonly record struct TabMove(int From, int To);
 
 /// <summary>
-/// The "Group tabs by File" order rule (spec #2, Behavior 1–3, 6). Pure.
+/// The "Group tabs by File" order rule (spec #2, Behavior 1–3, 6; decision #28). Pure.
 /// <list type="number">
-/// <item><b>Files keep their place</b>: files are ordered by their leftmost tab, so each file's
-/// group starts where that file's leftmost tab is now (relative to the other files).</item>
+/// <item><b>The active file first</b>: the group of the active file (the file of the pane's
+/// selected tab) comes first, then every other file in the order of its current leftmost tab.
+/// On an overflowing strip AvalonDock pulls a hidden selected tab to the front; with its file
+/// first, that tab stays inside its own group, so the strip stays grouped and grouping again
+/// makes no moves.</item>
 /// <item><b>Stable within a file</b>: a file's tabs keep their current relative order.</item>
 /// <item><b>Unmatched tabs last</b>: tabs with no document key keep their current relative
 /// order after every grouped tab.</item>
@@ -26,15 +29,23 @@ public static class TabGroupOrder
     /// <summary>
     /// The target order: <c>result[j]</c> is the current index of the tab that belongs at
     /// position <c>j</c>. <paramref name="keys"/>[i] is the document key of the tab now at
-    /// index i, or null when the tab matches no document. Keys are compared with
-    /// <paramref name="comparer"/> (default equality when null).
+    /// index i, or null when the tab matches no document. <paramref name="activeKey"/> is the
+    /// active file's key: its group goes first (when it has tabs here; null for none). Keys are
+    /// compared with <paramref name="comparer"/> (default equality when null).
     /// </summary>
-    public static int[] Target(IReadOnlyList<object?> keys, IEqualityComparer<object>? comparer = null)
+    public static int[] Target(IReadOnlyList<object?> keys, object? activeKey = null, IEqualityComparer<object>? comparer = null)
     {
         ArgumentNullException.ThrowIfNull(keys);
         var groupOf = new Dictionary<object, int>(comparer ?? EqualityComparer<object>.Default);
         var groups = new List<List<int>>();
         var unmatched = new List<int>();
+        if (activeKey is not null)
+        {
+            // The active file's group is created first, so it is emitted first; it stays
+            // empty (and adds nothing) when the file has no tab here.
+            groupOf[activeKey] = 0;
+            groups.Add(new List<int>());
+        }
         for (var i = 0; i < keys.Count; i++)
         {
             var key = keys[i];
@@ -114,8 +125,8 @@ public static class TabGroupOrder
     }
 
     /// <summary><see cref="Target"/> then <see cref="Moves"/>.</summary>
-    public static IReadOnlyList<TabMove> Plan(IReadOnlyList<object?> keys, IEqualityComparer<object>? comparer = null) =>
-        Moves(Target(keys, comparer));
+    public static IReadOnlyList<TabMove> Plan(IReadOnlyList<object?> keys, object? activeKey = null, IEqualityComparer<object>? comparer = null) =>
+        Moves(Target(keys, activeKey, comparer));
 
     /// <summary>The indices of one longest strictly increasing subsequence of <paramref name="values"/> (patience sorting, O(n log n)).</summary>
     private static List<int> LongestIncreasingRun(int[] values)
