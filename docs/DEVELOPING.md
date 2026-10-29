@@ -239,20 +239,33 @@ contrast, refuses a newer schema outright.
 
 `DocumentTabColorizer` (SplashIt.UI) colors document tabs through `ITabSurface`; in Revit
 the surface is `RevitTabSurface`, which finds AvalonDock's `LayoutDocumentPaneControl` under
-Revit's main window by type name and resolves each tab to its document by the title prefix
-`Document.Title + " - "` read from the tab's tool tip. Styles come from `TabStyleFactory`:
-the project fill is `Background`/`Foreground` setters plus `IsSelected`/hover triggers, and
-the family bar and the selected tab's 2 px accent are drawn by an adorner
-(`TabDecoration`), so they do not depend on Revit's template. Both were checked in Revit
+Revit's main window by type name and resolves each tab to its document by title
+(`TabTitleMatcher` in Core): the tab's tool tip is `"<document> - <view>"`, matched against
+the document's title, its saved file name, each with and without the Revit extension, and
+its titles before a Save As; ordinal, `" - "`-separated, the longest wins, and a tie between
+two documents leaves the tab uncolored. No reflection probe runs on Revit's internals (none
+finds a document handle on 2026 or 2027).
+
+Styles come from `TabStyleFactory` (decisions #22 and #23): the selected project tab shows the
+color at the fill opacity with a 3 px darker top line; the project's other tabs show it at the
+Unselected tab opacity (a share of the fill opacity, default 50 %). The fill is
+`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family bar and the top
+line are drawn by an adorner (`TabDecoration`), so they do not depend on Revit's template.
+Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
+(`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
+AvalonDock theme), so `TabCloseGlyph` sets it to the text color per state and puts the
+button's own value back when the original style returns. All of this was checked in Revit
 2026 and 2027 on the VM (`shared/evidence/lane-b/vm/`).
 
 - Revit API calls happen only in Revit's own events (`RevitDocuments` caches titles and
   kinds there); the hot path runs from WPF layout passes and reads only WPF and the cache.
 - The log (`%LocalAppData%\SplashIt\logs\splashit-<yyyyMMdd>.log`) records counts, kinds
   and type names, never titles or paths. The start cost is logged as
-  `colorizer: start took <n> ms`.
-- **Debug builds only:** create `%LocalAppData%\SplashIt\diag.on` and the surface writes
-  `diag-<n>.txt` beside it: every tab's title, the members behind it and its visual tree
-  with brushes. That file holds titles, so it never exists in a Release build.
+  `colorizer: start took <n> ms`, split into the settings read, the pyRevit check, theme
+  detection, the document listing, the subscriptions and the first pass.
+- **Debug builds only:** create `%LocalAppData%\SplashIt\diag.on` (looked for once a second)
+  and the surface writes `diag-<n>.txt` beside it: every tab's title, the members behind it,
+  its visual tree with brushes, and where the close button's color comes from. That file
+  holds titles, so it never exists in a Release build.
 - Ribbon icons: `python3 tools/make_icons.py` (Pillow) regenerates
   `src/SplashIt.Revit/Resources/icons/`. The glyph is in `tools/glyph.py`.
