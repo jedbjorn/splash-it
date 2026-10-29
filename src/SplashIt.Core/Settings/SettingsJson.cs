@@ -77,6 +77,11 @@ internal static class SettingsJson
     /// valid value (a fraction is rounded first); a bad color entry → dropped; more
     /// than 12 colors → the first 12; no usable color → the default list. A newer
     /// schemaVersion is read for the fields this version knows. Never throws.
+    /// <para>
+    /// Known and accepted for v1: the result is schema 1, so the next Save rewrites a
+    /// newer-schema file as schema 1 and drops any fields this version does not know
+    /// (docs/DEVELOPING.md, Settings file).
+    /// </para>
     /// </summary>
     public static SplashItSettings ReadTolerant(string? json, Action<string>? log)
     {
@@ -93,7 +98,7 @@ internal static class SettingsJson
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException)
         {
-            log?.Invoke($"settings: the settings file is not valid JSON ({ex.Message}); using defaults.");
+            Log(log, $"settings: the settings file is not valid JSON ({ex.Message}); using defaults.");
             return SplashItSettings.Default;
         }
 
@@ -102,16 +107,16 @@ internal static class SettingsJson
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                log?.Invoke($"settings: the settings file holds a {root.ValueKind}, not an object; using defaults.");
+                Log(log, $"settings: the settings file holds a {root.ValueKind}, not an object; using defaults.");
                 return SplashItSettings.Default;
             }
 
             if (!TryWholeNumber(root, SchemaVersionKey, out var schema))
                 log?.Invoke("settings: no whole-number schemaVersion; reading as schema 1.");
             else if (schema > SplashItDefaults.SchemaVersion)
-                log?.Invoke($"settings: schemaVersion {schema} is newer than {SplashItDefaults.SchemaVersion}; reading the known fields.");
+                Log(log, $"settings: schemaVersion {schema} is newer than {SplashItDefaults.SchemaVersion}; reading the known fields.");
             else if (schema < SplashItDefaults.SchemaVersion)
-                log?.Invoke($"settings: schemaVersion {schema} is not supported; reading as schema 1.");
+                Log(log, $"settings: schemaVersion {schema} is not supported; reading as schema 1.");
 
             return new SplashItSettings
             {
@@ -132,12 +137,12 @@ internal static class SettingsJson
     {
         if (!root.TryGetProperty(key, out var e))
         {
-            log?.Invoke($"settings: no {key}; using {fallback.ToString().ToLowerInvariant()}.");
+            Log(log, $"settings: no {key}; using {fallback.ToString().ToLowerInvariant()}.");
             return fallback;
         }
         if (e.ValueKind == JsonValueKind.True) return true;
         if (e.ValueKind == JsonValueKind.False) return false;
-        log?.Invoke($"settings: {key} is not true or false; using {fallback.ToString().ToLowerInvariant()}.");
+        Log(log, $"settings: {key} is not true or false; using {fallback.ToString().ToLowerInvariant()}.");
         return fallback;
     }
 
@@ -145,17 +150,17 @@ internal static class SettingsJson
     {
         if (!root.TryGetProperty(key, out var e))
         {
-            log?.Invoke($"settings: no {key}; using {fallback}.");
+            Log(log, $"settings: no {key}; using {fallback}.");
             return fallback;
         }
         if (e.ValueKind != JsonValueKind.Number || !e.TryGetDouble(out var d) || !double.IsFinite(d))
         {
-            log?.Invoke($"settings: {key} is not a number; using {fallback}.");
+            Log(log, $"settings: {key} is not a number; using {fallback}.");
             return fallback;
         }
         var rounded = Math.Round(d, MidpointRounding.AwayFromZero);
         var clamped = (int)Math.Clamp(rounded, min, max);
-        if (clamped != d) log?.Invoke($"settings: {key} {d} is outside {min} to {max} or not whole; using {clamped}.");
+        if (clamped != d) Log(log, $"settings: {key} {d} is outside {min} to {max} or not whole; using {clamped}.");
         return clamped;
     }
 
@@ -163,7 +168,7 @@ internal static class SettingsJson
     {
         if (!root.TryGetProperty(key, out var e) || e.ValueKind != JsonValueKind.Array)
         {
-            log?.Invoke($"settings: {key} is missing or not a list; using the default list.");
+            Log(log, $"settings: {key} is missing or not a list; using the default list.");
             return fallback;
         }
 
@@ -172,20 +177,20 @@ internal static class SettingsJson
         foreach (var item in e.EnumerateArray())
         {
             position++;
-            if (item.ValueKind == JsonValueKind.String && ColorMath.TryParseHex(item.GetString(), out var c))
+            if (TryGetString(item, out var text) && ColorMath.TryParseHex(text, out var c))
                 colors.Add(c);
             else
-                log?.Invoke($"settings: {key} entry {position} is not a #RRGGBB color; dropped.");
+                Log(log, $"settings: {key} entry {position} is not a #RRGGBB color; dropped.");
         }
 
         if (colors.Count > SplashItDefaults.MaxColors)
         {
-            log?.Invoke($"settings: {key} has {colors.Count} colors; keeping the first {SplashItDefaults.MaxColors}.");
+            Log(log, $"settings: {key} has {colors.Count} colors; keeping the first {SplashItDefaults.MaxColors}.");
             colors.RemoveRange(SplashItDefaults.MaxColors, colors.Count - SplashItDefaults.MaxColors);
         }
         if (colors.Count < SplashItDefaults.MinColors)
         {
-            log?.Invoke($"settings: {key} has no usable color; using the default list.");
+            Log(log, $"settings: {key} has no usable color; using the default list.");
             return fallback;
         }
         return colors;
@@ -198,7 +203,7 @@ internal static class SettingsJson
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            errors.Add(CoreStrings.Import_NotJson("empty"));
+            errors.Add(CoreStrings.Import_Empty);
             return null;
         }
         JsonDocument doc;
@@ -231,8 +236,8 @@ internal static class SettingsJson
         var start = errors.Count;
 
         if (!root.TryGetProperty(FormatKey, out var format)
-            || format.ValueKind != JsonValueKind.String
-            || format.GetString() != ExportFormat)
+            || !TryGetString(format, out var formatText)
+            || formatText != ExportFormat)
             errors.Add(CoreStrings.Import_WrongFormat);
 
         if (!TryWholeNumber(root, SchemaVersionKey, out var schema))
@@ -282,7 +287,7 @@ internal static class SettingsJson
         foreach (var item in e.EnumerateArray())
         {
             position++;
-            if (item.ValueKind == JsonValueKind.String && ColorMath.TryParseHex(item.GetString(), out var c))
+            if (TryGetString(item, out var text) && ColorMath.TryParseHex(text, out var c))
             {
                 colors.Add(c);
             }
@@ -329,6 +334,32 @@ internal static class SettingsJson
         value = (int)d;
         return true;
     }
+
+    /// <summary>
+    /// The value of a JSON string, without throwing. False when <paramref name="e"/> is
+    /// not a string, or when it cannot be decoded: an escaped unpaired surrogate such as
+    /// <c>"\ud800"</c> is legal JSON that <see cref="JsonDocument"/> accepts, but
+    /// <see cref="JsonElement.GetString"/> throws <see cref="InvalidOperationException"/> on it.
+    /// Callers treat false as a bad value.
+    /// </summary>
+    internal static bool TryGetString(JsonElement e, out string? value)
+    {
+        value = null;
+        if (e.ValueKind != JsonValueKind.String) return false;
+        try
+        {
+            value = e.GetString();
+            return value is not null;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Logs with numbers formatted culture-invariantly, so logs read the same on every machine.</summary>
+    private static void Log(Action<string>? log, FormattableString message) =>
+        log?.Invoke(FormattableString.Invariant(message));
 
     /// <summary>Raw JSON text for an error message, cut to a readable length.</summary>
     private static string Shorten(string raw) => raw.Length <= 40 ? raw : raw[..37] + "...";

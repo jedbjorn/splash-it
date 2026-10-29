@@ -337,6 +337,31 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Read_EscapedLoneSurrogateColor_IsDropped_NotThrown()
+    {
+        // "\ud800" is legal JSON, but JsonElement.GetString() throws on it.
+        var path = _temp.File("settings.json");
+        File.WriteAllText(path, """{ "schemaVersion": 1, "enabled": false, "projectColors": ["\ud800", "#123456"], "familyColors": ["\udfff"] }""");
+
+        var read = SplashItSettings.Read(path, _log.Add);
+
+        Assert.False(read.Enabled);
+        Assert.Equal(["#123456"], read.ProjectColors.Select(c => c.ToHex()));
+        Assert.Equal(SplashItDefaults.FamilyColors, read.FamilyColors);
+        Assert.Contains(_log, l => l.Contains("projectColors entry 1") && l.Contains("dropped"));
+    }
+
+    [Fact]
+    public void Read_OnlyEscapedLoneSurrogates_FallsBackToTheDefaultList()
+    {
+        var path = _temp.File("settings.json");
+        File.WriteAllText(path, """{ "projectColors": ["\ud800"] }""");
+        var read = SplashItSettings.Read(path, _log.Add);
+        Assert.Equal(SplashItSettings.Default, read);
+        Assert.True(read.Enabled);
+    }
+
+    [Fact]
     public void Read_OnlyBadColors_FallsBackToTheDefaultList()
     {
         var read = SplashItSettings.FromJson("""{ "schemaVersion": 1, "projectColors": ["nope"] }""");
@@ -384,11 +409,70 @@ public sealed class SettingsStoreTests : IDisposable
         var path = _temp.File("settings.json");
         Directory.CreateDirectory(path);
 
-        var ex = Record.Exception(() => SplashItSettings.Default.Write(path));
+        var ex = Record.Exception(() => SplashItSettings.Default.Write(path, _log.Add));
         Assert.True(ex is IOException or UnauthorizedAccessException, $"unexpected {ex}");
 
         Assert.Empty(Directory.GetFiles(_temp.Path));
         Assert.True(Directory.Exists(path));
+
+        // The replace was retried a bounded number of times, each retry logged.
+        Assert.Equal(4, _log.Count(l => l.Contains("retrying")));
+        Assert.Contains(_log, l => l.Contains("after 5 attempts"));
+    }
+
+    [Fact]
+    public void Write_WhileAReaderHoldsTheFileOpenWithShareDelete_Succeeds()
+    {
+        // The documented way to read these files: FileShare.ReadWrite | FileShare.Delete.
+        // Windows then lets the replace go through while the handle is open.
+        var path = _temp.File("settings.json");
+        SplashItSettings.Default.Write(path);
+
+        using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        {
+            Custom().Write(path, _log.Add);
+        }
+
+        Assert.Equal(Custom(), SplashItSettings.Read(path));
+        Assert.Equal(["settings.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Write_RetriesWhileAnotherProcessBrieflyLocksTheFile()
+    {
+        // A reader without FileShare.Delete (an antivirus scanner, a sync client) makes
+        // Windows refuse the replace; the write retries and succeeds once it lets go.
+        // Elsewhere the rename never waits on readers, so the first attempt succeeds.
+        var path = _temp.File("settings.json");
+        SplashItSettings.Default.Write(path);
+
+        var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(60);
+            held.Dispose();
+        });
+
+        Custom().Write(path, _log.Add);
+        await release;
+
+        Assert.Equal(Custom(), SplashItSettings.Read(path));
+        Assert.Equal(["settings.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Contains(_log, l => l.Contains("retrying"));
+            Assert.Contains(_log, l => l.Contains("replaced settings.json on attempt"));
+        }
+    }
+
+    [Fact]
+    public void Read_WhileAWriterHoldsTheFileOpen_StillReads()
+    {
+        var path = _temp.File("settings.json");
+        Custom().Write(path);
+        using var other = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+        Assert.Equal(Custom(), SplashItSettings.Read(path, _log.Add));
+        Assert.Empty(_log);
     }
 
     [Fact]
@@ -408,7 +492,11 @@ public sealed class SettingsStoreTests : IDisposable
             {
                 try
                 {
-                    var text = File.ReadAllText(path);
+                    // Open as the real reader must, so Windows can replace the file meanwhile.
+                    string text;
+                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    using (var streamReader = new StreamReader(stream))
+                        text = streamReader.ReadToEnd();
                     reads++;
                     var log = new List<string>();
                     var s = SplashItSettings.FromJson(text, log.Add);
@@ -416,7 +504,7 @@ public sealed class SettingsStoreTests : IDisposable
                 }
                 catch (IOException)
                 {
-                    // Windows may refuse the open during the rename; that is not a partial read.
+                    // An open that loses a race with the rename is not a partial read.
                 }
                 catch (UnauthorizedAccessException)
                 {
@@ -424,6 +512,7 @@ public sealed class SettingsStoreTests : IDisposable
             }
         });
 
+        // Every write must succeed (on Windows too, with the reader holding the file).
         for (var i = 0; i < 200; i++) (i % 2 == 0 ? b : a).Write(path);
         stop.Cancel();
         await reader;

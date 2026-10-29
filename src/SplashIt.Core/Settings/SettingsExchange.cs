@@ -37,9 +37,13 @@ public static class SettingsExchange
         return SettingsJson.Write(settings, export: true);
     }
 
-    /// <summary>Writes the export of <paramref name="settings"/> to <paramref name="path"/> atomically.</summary>
-    public static void ExportFile(SplashItSettings settings, string path) =>
-        AtomicFile.WriteAllText(path, Export(settings));
+    /// <summary>
+    /// Writes the export of <paramref name="settings"/> to <paramref name="path"/>
+    /// atomically, as <see cref="SplashItSettings.Write"/> does (replace retries logged
+    /// to <paramref name="log"/>).
+    /// </summary>
+    public static void ExportFile(SplashItSettings settings, string path, Action<string>? log = null) =>
+        AtomicFile.WriteAllText(path, Export(settings), log);
 
     /// <summary>
     /// Reads an export. On success the result's settings carry the file's colors and
@@ -65,10 +69,10 @@ public static class SettingsExchange
         {
             var info = new FileInfo(path);
             if (!info.Exists)
-                return Failed(CoreStrings.Import_ReadFailed(new FileNotFoundException().Message));
+                return Failed(CoreStrings.Import_FileNotFound);
             if (info.Length > MaxImportBytes)
                 return Failed(CoreStrings.Import_TooLarge(MaxImportBytes / 1024));
-            json = File.ReadAllText(path);
+            json = AtomicFile.ReadAllText(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or System.Security.SecurityException or ArgumentException)
         {

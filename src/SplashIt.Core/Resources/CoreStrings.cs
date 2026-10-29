@@ -35,6 +35,8 @@ internal static class CoreStrings
         Format(nameof(Validation_Schema), version, current);
 
     internal static string Import_NotJson(object? detail) => Format(nameof(Import_NotJson), detail);
+    internal static string Import_Empty => Get(nameof(Import_Empty));
+    internal static string Import_FileNotFound => Get(nameof(Import_FileNotFound));
     internal static string Import_NotObject => Get(nameof(Import_NotObject));
     internal static string Import_WrongFormat => Get(nameof(Import_WrongFormat));
     internal static string Import_NoSchema => Get(nameof(Import_NoSchema));
