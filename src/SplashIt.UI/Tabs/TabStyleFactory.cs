@@ -17,10 +17,12 @@ public interface ITabStyleFactory
 {
     /// <summary>
     /// A sealed style <c>BasedOn</c> <paramref name="basedOn"/> (the tab's original style;
-    /// null for none) that applies <paramref name="treatment"/>. Text contrast is measured
-    /// against <paramref name="originalBackground"/> (the tab's background under its
-    /// original style) when it is a <see cref="SolidColorBrush"/>, else against
-    /// <paramref name="theme"/>'s surface token. The same inputs return the same instance.
+    /// null for none) that applies <paramref name="treatment"/>. Text and × contrast are measured
+    /// against <paramref name="originalBackground"/> when it is a <see cref="SolidColorBrush"/>
+    /// (blended over <paramref name="theme"/>'s surface token), else against that token. The
+    /// colorizer passes what shows behind the tab (<see cref="TabBackdrop"/>: the fill fades to
+    /// transparent, #30), else the tab's background under its original style. The same inputs
+    /// return the same instance.
     /// </summary>
     /// <exception cref="ArgumentException">
     /// <paramref name="basedOn"/> targets a type a <see cref="TabItem"/> style cannot derive
@@ -83,11 +85,11 @@ public readonly record struct FamilyTopBarShape(double Height, double Width, dou
 /// 24 px fade that ends just before the close button, so the × sits on Revit's own strip. The
 /// text is black or white, whichever has the higher WCAG contrast against the fill as shown in
 /// that state at its worst over two points, the solid part and the fade under a title's last
-/// column (#31), both blended over the tab's original background when that is a solid brush,
-/// else over the theme surface; the close glyph is black or white against that background alone.
-/// What actually shows through the fade's end is whatever is behind the tab (the fill replaces
-/// the tab's own background), which these choices assume is close to it. Hover lightens an
-/// unselected tab's fill by <see cref="HoverLighten"/>.</item>
+/// column (#31), both blended over the backdrop; the close glyph is black or white against the
+/// backdrop alone. The backdrop is what shows through the fade's end and under the ×: whatever is
+/// behind the tab (the fill replaces the tab's own background), which the colorizer finds with
+/// <see cref="TabBackdrop"/>; else the tab's original background, else the theme surface. Hover
+/// lightens an unselected tab's fill by <see cref="HoverLighten"/>.</item>
 /// <item><b>Family marks</b> (#27): a bar of the bar width on the left edge at the bar opacity,
 /// full height, plus a fixed top bar (<see cref="FamilyTopBarShape.Default"/>: 2 px high, from
 /// the left edge, 95 % of the tab's width, fading out over its last 15 %, #29) in the same color
