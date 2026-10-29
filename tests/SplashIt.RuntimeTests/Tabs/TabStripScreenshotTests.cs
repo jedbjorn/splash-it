@@ -127,7 +127,7 @@ public class TabStripScreenshotTests
                     ("Family1 - Elevation: Front", TabTreatment.FamilyBar(F1, width, 100)),
                     ("Project1 - Floor Plan: L1", TabTreatment.ProjectFill(P1, 100)));
                 strips[width] = strip;
-                rows.Add(Label($"Family side bar {width} px plus the 2 px top bar over 90 % of the tab (#27), at 100 % (second tab selected; selection stays native)", theme));
+                rows.Add(Label($"Family side bar {width} px plus the 2 px top bar over 95 % of the tab, fading over its last 15 % (#29), at 100 % (second tab selected; selection stays native)", theme));
                 rows.Add(strip);
             }
             var (bitmap, root) = Shoot("tabs-family-bars", theme, rows.ToArray());
@@ -150,20 +150,26 @@ public class TabStripScreenshotTests
     }
 
     /// <summary>
-    /// #27: the family top bar, 2 px high, from x = 0, over 90 % of the tab's actual width
-    /// (rounded half away from zero), in the family color; nothing below it or past its end.
+    /// #27/#29: the family top bar, 2 px high, from x = 0, over 95 % of the tab's actual width
+    /// (rounded half away from zero), in the family color, its last 15 % fading out: opaque where
+    /// the fade starts, transparent (the tab's own background) at its end; nothing below it or past it.
     /// </summary>
     private static void AssertTopBar(BitmapSource bitmap, FrameworkElement root, TabItem tab, Rgb color)
     {
         var length = TabDecorationAdorner.TopAccentWidthFor(tab.ActualWidth, FamilyTopBarShape.Default.Width);
-        Assert.Equal(Math.Round(tab.ActualWidth * 0.9, MidpointRounding.AwayFromZero), length);
+        Assert.Equal(Math.Round(tab.ActualWidth * 0.95, MidpointRounding.AwayFromZero), length);
+        var fadeStart = TabDecorationAdorner.TopAccentFadeStartFor(length, FamilyTopBarShape.Default.Fade);
+        Assert.Equal(Math.Round(length * 0.85, MidpointRounding.AwayFromZero), fadeStart);
         var c = HostTabs.ColorOf(color);
-        Near(c, PixelIn(bitmap, root, tab, 0.5, 0.5));             // starts at the left edge
-        Near(c, PixelIn(bitmap, root, tab, 10.5, 0.5));            // row 1...
-        Near(c, PixelIn(bitmap, root, tab, 10.5, 1.5));            // ...and row 2: 2 px high
-        Assert.NotEqual(c, PixelIn(bitmap, root, tab, 10.5, 2.5)); // not 3
-        Near(c, PixelIn(bitmap, root, tab, length - 0.5, 0.5));    // its last pixel...
-        Assert.NotEqual(c, PixelIn(bitmap, root, tab, length + 0.5, 0.5)); // ...and nothing past 90 %
+        var behind = PixelIn(bitmap, root, tab, length + 0.5, 0.5);  // the tab's own top row, past the bar
+        Assert.NotEqual(c, behind);                                   // nothing past 95 %
+        Near(behind, PixelIn(bitmap, root, tab, 10.5, 2.5));          // the row below the bar: not 3 px high
+        Near(c, PixelIn(bitmap, root, tab, 0.5, 0.5));                // starts at the left edge
+        Near(c, PixelIn(bitmap, root, tab, 10.5, 0.5));               // row 1...
+        Near(c, PixelIn(bitmap, root, tab, 10.5, 1.5));               // ...and row 2: 2 px high
+        Near(c, PixelIn(bitmap, root, tab, fadeStart - 0.5, 0.5));    // solid up to the fade...
+        Near(c, PixelIn(bitmap, root, tab, fadeStart + 0.5, 1.5), 10); // ...opaque where it starts...
+        Near(behind, PixelIn(bitmap, root, tab, length - 0.5, 0.5), 10); // ...transparent at its end
     }
 
     /// <summary>#27: the top bar is the adorner's, so it follows a resize, and restoring the original style removes it.</summary>
@@ -191,7 +197,7 @@ public class TabStripScreenshotTests
                 Assert.Equal(0, rect.X);
                 Assert.Equal(0, rect.Y);
                 Assert.Equal(2, rect.Height);
-                Assert.Equal(Math.Round(width * 0.9, MidpointRounding.AwayFromZero), rect.Width);
+                Assert.Equal(Math.Round(width * 0.95, MidpointRounding.AwayFromZero), rect.Width);
                 AssertTopBar(bitmap, root, tab, F1);
             }
 
@@ -218,13 +224,15 @@ public class TabStripScreenshotTests
     [InlineData("E")]
     public void FamilyTopBar_OptionSheet(string option)
     {
+        // The sheet as the FnB saw it (a record; #29 then chose D at 95 %): A is spelled out, not the default.
+        var a = new FamilyTopBarShape(Height: 2, Width: 0.9);
         var shape = option switch
         {
-            "A" => FamilyTopBarShape.Default,
-            "B" => FamilyTopBarShape.Default with { Width = 1.0 },
-            "C" => FamilyTopBarShape.Default with { MatchSideBar = true },
-            "D" => FamilyTopBarShape.Default with { Fade = 0.15 },
-            "E" => FamilyTopBarShape.Default with { OpacityShare = 0.6 },
+            "A" => a,
+            "B" => a with { Width = 1.0 },
+            "C" => a with { MatchSideBar = true },
+            "D" => a with { Fade = 0.15 },
+            "E" => a with { OpacityShare = 0.6 },
             _ => throw new ArgumentOutOfRangeException(nameof(option)),
         };
         Screenshots.RunSta(() =>

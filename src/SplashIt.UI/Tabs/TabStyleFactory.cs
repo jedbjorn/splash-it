@@ -57,10 +57,11 @@ public readonly record struct TabFillColors(
 public readonly record struct FamilyTopBarShape(double Height, double Width, double OpacityShare = 1, double Fade = 0, bool MatchSideBar = false)
 {
     /// <summary>
-    /// The shape in use, #27 (option A): 2 px high, from the left edge, 90 % of the tab's width,
+    /// The shape in use, FnB decision #29 (option D at 95 %): 2 px high, from the left edge, 95 % of
+    /// the tab's width, its last 15 % fading to transparent,
     /// at the family bar opacity.
     /// </summary>
-    public static FamilyTopBarShape Default { get; } = new(Height: 2, Width: 0.9);
+    public static FamilyTopBarShape Default { get; } = new(Height: 2, Width: 0.95, Fade: 0.15);
 
     /// <summary>The top bar's height on a tab whose side bar is <paramref name="sideBarWidth"/> px wide.</summary>
     public double HeightFor(int sideBarWidth) => MatchSideBar ? sideBarWidth : Height;
@@ -79,7 +80,8 @@ public readonly record struct FamilyTopBarShape(double Height, double Width, dou
 /// an unselected tab's fill by <see cref="HoverLighten"/>.</item>
 /// <item><b>Family marks</b> (#27): a bar of the bar width on the left edge at the bar opacity,
 /// full height, plus a fixed top bar (<see cref="FamilyTopBarShape.Default"/>: 2 px high, from
-/// the left edge, 90 % of the tab's width) in the same color and opacity, so the two read as
+/// the left edge, 95 % of the tab's width, fading out over its last 15 %, #29) in the same color
+/// and opacity, so the two read as
 /// an L. Only the side bar's width is a setting. Nothing else changes, so selection and hover
 /// stay native.</item>
 /// </list>
