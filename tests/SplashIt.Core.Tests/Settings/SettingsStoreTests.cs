@@ -537,23 +537,22 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Write_RetriesWhileAnotherProcessBrieflyLocksTheFile()
+    public void Write_RetriesWhileAnotherProcessBrieflyLocksTheFile()
     {
         // A reader without FileShare.Delete (an antivirus scanner, a sync client) makes
         // Windows refuse the replace; the write retries and succeeds once it lets go.
         // Elsewhere the rename never waits on readers, so the first attempt succeeds.
+        // The reader lets go when the write logs its first "retrying" (logged before the
+        // wait), so the retry succeeds whatever the machine's load: no timer races the write.
         var path = _temp.File("settings.json");
         SplashItSettings.Default.Write(path);
 
-        var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var release = Task.Run(async () =>
+        using var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Custom().Write(path, line =>
         {
-            await Task.Delay(60);
-            held.Dispose();
+            _log.Add(line);
+            if (line.Contains("retrying", StringComparison.Ordinal)) held.Dispose();
         });
-
-        Custom().Write(path, _log.Add);
-        await release;
 
         Assert.Equal(Custom(), SplashItSettings.Read(path));
         Assert.Equal(["settings.json"], Directory.GetFiles(_temp.Path).Select(Path.GetFileName));
