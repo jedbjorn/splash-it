@@ -93,9 +93,19 @@ public static class TabTitleMatcher
     /// and each without its Revit extension (<c>.rvt</c>, <c>.rfa</c>, <c>.rte</c>, <c>.rft</c>).
     /// Seen on the VM in Revit 2026: after a Save As, <c>Document.Title</c> is "Tower26" while the
     /// tabs read "Tower26.rvt - Floor Plan: L1"; the extension shows or not with the Windows
-    /// setting. Distinct, in that order; empty when there is no title and no path.
+    /// setting.
+    /// <para>
+    /// When <paramref name="isFamilyDocument"/> is given and the document has <b>no path</b>, the
+    /// title with its kind's extension is a form too: <c>.rfa</c> for a family, <c>.rvt</c> for a
+    /// project, unless the title already ends in it. With a path, its file name already carries
+    /// the real extension, and an added one could only make new ties (delta review d2). This is the rc.1 root cause of SC-004: a family opened with Edit Family has
+    /// an empty path and the title "Support - Steel Bar", while its tabs read
+    /// "Support - Steel Bar.rfa - 3D View: View 1", so no other form matched. A family opened
+    /// from disk matched only through its path's file name.
+    /// </para>
+    /// Distinct, in that order; empty when there is no title and no path.
     /// </summary>
-    public static IReadOnlyList<string> TitleForms(string? title, string? path = null)
+    public static IReadOnlyList<string> TitleForms(string? title, string? path = null, bool? isFamilyDocument = null)
     {
         var forms = new List<string>(4);
         void Add(string? form)
@@ -109,6 +119,11 @@ public static class TabTitleMatcher
         var fileName = FileNameOf(path);
         Add(fileName);
         Add(WithoutRevitExtension(fileName));
+        if (isFamilyDocument is { } family && !string.IsNullOrEmpty(title) && string.IsNullOrWhiteSpace(path))
+        {
+            var extension = family ? ".rfa" : ".rvt";
+            if (!title.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) Add(title + extension);
+        }
         return forms;
     }
 

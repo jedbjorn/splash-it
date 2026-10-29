@@ -127,19 +127,213 @@ public class TabStripScreenshotTests
                     ("Family1 - Elevation: Front", TabTreatment.FamilyBar(F1, width, 100)),
                     ("Project1 - Floor Plan: L1", TabTreatment.ProjectFill(P1, 100)));
                 strips[width] = strip;
-                rows.Add(Label($"Family bar {width} px at 100 % (second tab selected; selection stays native)", theme));
+                rows.Add(Label($"Family side bar {width} px plus the 2 px top bar over 95 % of the tab, fading over its last 15 % (#29), at 100 % (second tab selected; selection stays native)", theme));
                 rows.Add(strip);
             }
             var (bitmap, root) = Shoot("tabs-family-bars", theme, rows.ToArray());
 
             foreach (var (width, strip) in strips)
             {
+                foreach (var tab in new[] { HostTabs.Tab(strip, 0), HostTabs.Tab(strip, 1) }) // unselected and selected
+                {
+                    Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, 0.5, 10));
+                    Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, width - 0.5, 10));
+                    Assert.NotEqual(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, width + 1.5, 10));
+                    Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, 0.5, 0.5));   // full height: top...
+                    Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, 0.5, 19.5));  // ...and bottom
+                    AssertTopBar(bitmap, root, tab, F1);
+                }
+                // The project beside it has no top bar (it is not selected).
+                Assert.NotEqual(HostTabs.ColorOf(F1), PixelIn(bitmap, root, HostTabs.Tab(strip, 2), 20, 0.5));
+            }
+        });
+    }
+
+    /// <summary>
+    /// #27/#29: the family top bar, 2 px high, from x = 0, over 95 % of the tab's actual width
+    /// (rounded half away from zero), in the family color, its last 15 % fading out: opaque where
+    /// the fade starts, transparent (the tab's own background) at its end; nothing below it or past it.
+    /// </summary>
+    private static void AssertTopBar(BitmapSource bitmap, FrameworkElement root, TabItem tab, Rgb color)
+    {
+        var length = TabDecorationAdorner.TopAccentWidthFor(tab.ActualWidth, FamilyTopBarShape.Default.Width);
+        Assert.Equal(Math.Round(tab.ActualWidth * 0.95, MidpointRounding.AwayFromZero), length);
+        var fadeStart = TabDecorationAdorner.TopAccentFadeStartFor(length, FamilyTopBarShape.Default.Fade);
+        Assert.Equal(Math.Round(length * 0.85, MidpointRounding.AwayFromZero), fadeStart);
+        var c = HostTabs.ColorOf(color);
+        var behind = PixelIn(bitmap, root, tab, length + 0.5, 0.5);  // the tab's own top row, past the bar
+        Assert.NotEqual(c, behind);                                   // nothing past 95 %
+        Near(behind, PixelIn(bitmap, root, tab, 10.5, 2.5));          // the row below the bar: not 3 px high
+        Near(c, PixelIn(bitmap, root, tab, 0.5, 0.5));                // starts at the left edge
+        Near(c, PixelIn(bitmap, root, tab, 10.5, 0.5));               // row 1...
+        Near(c, PixelIn(bitmap, root, tab, 10.5, 1.5));               // ...and row 2: 2 px high
+        Near(c, PixelIn(bitmap, root, tab, fadeStart - 0.5, 0.5));    // solid up to the fade...
+        Near(c, PixelIn(bitmap, root, tab, fadeStart + 0.5, 1.5), 10); // ...opaque where it starts...
+        // ...half way through at its middle (review m2: a ramp, not a hard step at the end)...
+        var middle = Math.Floor((fadeStart + length) / 2) + 0.5;
+        var share = 1 - (middle - fadeStart) / (length - fadeStart);
+        Near(Blend(c, share, behind), PixelIn(bitmap, root, tab, middle, 0.5), 15);
+        Assert.InRange(share, 0.4, 0.6);
+        Near(behind, PixelIn(bitmap, root, tab, length - 0.5, 0.5), 10); // ...transparent at its end
+    }
+
+    /// <summary><paramref name="top"/> at <paramref name="alpha"/> over <paramref name="under"/>.</summary>
+    private static Color Blend(Color top, double alpha, Color under) => Color.FromRgb(
+        (byte)Math.Round(top.R * alpha + under.R * (1 - alpha)),
+        (byte)Math.Round(top.G * alpha + under.G * (1 - alpha)),
+        (byte)Math.Round(top.B * alpha + under.B * (1 - alpha)));
+
+    /// <summary>
+    /// Review m2: at 30 % the L is one even color. The corner, where the side bar and the top bar
+    /// meet, is not drawn twice (no darker square), and both bars show the color at 30 % over
+    /// the tab, on an unselected and a selected tab, with side bars of 3 and 6 px.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Themes))]
+    public void FamilyL_AtLowOpacity_IsOneEvenColor_AtTheCorner(UiTheme theme)
+    {
+        Screenshots.RunSta(() =>
+        {
+            var factory = new TabStyleFactory();
+            var original = HostTabs.RevitLikeStyle(theme);
+            var rows = new List<UIElement>();
+            var strips = new List<TabControl>();
+            foreach (var width in new[] { 3, 6 })
+            {
+                var strip = Styled(factory, original, theme, selected: 1,
+                    ("Family1 - Floor Plan: Ref. Level", TabTreatment.FamilyBar(F1, width, 30)),
+                    ("Family1 - Elevation: Front", TabTreatment.FamilyBar(F1, width, 30)));
+                strips.Add(strip);
+                rows.Add(Label($"Family side bar {width} px at 30 %: the L's corner is the same color as both bars", theme));
+                rows.Add(strip);
+            }
+            var (bitmap, root) = Shoot("tabs-family-l-30", theme, rows.ToArray());
+
+            foreach (var strip in strips)
+            {
+                foreach (var tab in new[] { HostTabs.Tab(strip, 0), HostTabs.Tab(strip, 1) })
+                {
+                    var corner = PixelIn(bitmap, root, tab, 1.5, 1.5);
+                    var side = PixelIn(bitmap, root, tab, 1.5, 10);
+                    var top = PixelIn(bitmap, root, tab, 10.5, 1.5);
+                    var behind = PixelIn(bitmap, root, tab, 10.5, 2.5);   // the tab's own color, under the top bar
+                    Near(side, corner, 2);
+                    Near(top, corner, 2);
+                    Near(Blend(HostTabs.ColorOf(F1), 0.3, behind), corner, 3);
+                }
+            }
+        });
+    }
+
+    /// <summary>#27: the top bar is the adorner's, so it follows a resize, and restoring the original style removes it.</summary>
+    [Fact]
+    public void FamilyTopBar_FollowsAResize_AndIsGoneAfterRestore()
+    {
+        Screenshots.RunSta(() =>
+        {
+            var theme = UiTheme.Light;
+            var factory = new TabStyleFactory();
+            var original = HostTabs.RevitLikeStyle(theme);
+            var strip = Styled(factory, original, theme, selected: 1,
+                ("Family1 - Floor Plan: Ref. Level", TabTreatment.FamilyBar(F1, 3, 100)),
+                ("Family1 - Elevation: Front", TabTreatment.FamilyBar(F1, 3, 100)));
+            var tab = HostTabs.Tab(strip, 0);
+            var root = HostTabs.Host(strip, theme.Surface(), padding: 12);
+
+            foreach (var width in new[] { 160.0, 237.0, 101.0 })
+            {
+                tab.Width = width;
+                HostTabs.Layout(root);
+                var bitmap = Screenshots.Render(root);
+                Assert.Equal(width, tab.ActualWidth);
+                var rect = TabDecorationAdorner.TopAccentRect(tab.RenderSize, TabDecoration.FindAdorner(tab)!.Spec);
+                Assert.Equal(0, rect.X);
+                Assert.Equal(0, rect.Y);
+                Assert.Equal(2, rect.Height);
+                Assert.Equal(Math.Round(width * 0.95, MidpointRounding.AwayFromZero), rect.Width);
+                AssertTopBar(bitmap, root, tab, F1);
+            }
+
+            tab.Style = original;
+            HostTabs.Layout(root);
+            var after = Screenshots.Render(root);
+            Assert.Null(TabDecoration.FindAdorner(tab));
+            Assert.Null(TabDecoration.GetDecoration(tab));
+            Assert.NotEqual(HostTabs.ColorOf(F1), PixelIn(after, root, tab, 10.5, 0.5));
+            Assert.NotEqual(HostTabs.ColorOf(F1), PixelIn(after, root, tab, 0.5, 10));
+        });
+    }
+
+    /// <summary>
+    /// #27 option sheet (SC-004): for the FnB to choose the top bar's shape. Each PNG is three
+    /// family tabs (the 2nd selected) beside one project tab, side bar 3 px, light above dark,
+    /// at 2x (nearest neighbour), drawn by the real factory and adorner with the option's shape.
+    /// </summary>
+    [Theory]
+    [InlineData("A")]
+    [InlineData("B")]
+    [InlineData("C")]
+    [InlineData("D")]
+    [InlineData("E")]
+    public void FamilyTopBar_OptionSheet(string option)
+    {
+        // The sheet as the FnB saw it (a record; #29 then chose D at 95 %): A is spelled out, not the default.
+        var a = new FamilyTopBarShape(Height: 2, Width: 0.9);
+        var shape = option switch
+        {
+            "A" => a,
+            "B" => a with { Width = 1.0 },
+            "C" => a with { MatchSideBar = true },
+            "D" => a with { Fade = 0.15 },
+            "E" => a with { OpacityShare = 0.6 },
+            _ => throw new ArgumentOutOfRangeException(nameof(option)),
+        };
+        Screenshots.RunSta(() =>
+        {
+            var panel = new StackPanel();
+            var shots = new List<(UiTheme Theme, FrameworkElement Host, TabControl Strip)>();
+            foreach (var theme in new[] { UiTheme.Light, UiTheme.Dark })
+            {
+                var factory = new TabStyleFactory(shape);
+                var original = HostTabs.RevitLikeStyle(theme);
+                var strip = Styled(factory, original, theme, selected: 1,
+                    ("Door - Floor Plan: Ref. Level", TabTreatment.FamilyBar(F1, 3, 100)),
+                    ("Door - Elevation: Front", TabTreatment.FamilyBar(F1, 3, 100)),
+                    ("Door - 3D View: View 1", TabTreatment.FamilyBar(F1, 3, 100)),
+                    ("Tower - Floor Plan: L1", TabTreatment.ProjectFill(P1, 100)));
+                var stack = new StackPanel();
+                stack.Children.Add(Label($"Option {option}, {Suffix(theme)}", theme));
+                stack.Children.Add(strip);
+                var host = HostTabs.Host(stack, theme.Surface(), padding: 12);
+                panel.Children.Add(host);
+                shots.Add((theme, host, strip));
+            }
+            HostTabs.Layout(panel);
+            var bitmap = Screenshots.Render(panel);
+            Screenshots.Save(Screenshots.Zoom(bitmap, 2), "family-top-bar-option-" + option);
+
+            // Each option draws what its README line says (checked at 1x).
+            foreach (var (theme, host, strip) in shots)
+            {
                 var tab = HostTabs.Tab(strip, 0);
-                Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, 0.5, 10));
-                Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, width - 0.5, 10));
-                Assert.NotEqual(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, width + 1.5, 10));
-                Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, 0.5, 0.5));   // full height: top...
-                Near(HostTabs.ColorOf(F1), PixelIn(bitmap, root, tab, 0.5, 19.5));  // ...and bottom
+                var length = TabDecorationAdorner.TopAccentWidthFor(tab.ActualWidth, shape.Width);
+                var height = shape.HeightFor(3);
+                var full = HostTabs.ColorOf(F1);
+                var top = PixelIn(bitmap, panel, tab, 10.5, 0.5);
+                if (shape.OpacityShare < 1) Near(Shown(F1, shape.OpacityShare, HostTabs.Well(theme)), top, 6);
+                else Near(full, top);
+                Near(full, PixelIn(bitmap, panel, tab, 0.5, 10));                         // the side bar
+                Assert.NotEqual(full, PixelIn(bitmap, panel, tab, 10.5, height + 0.5));   // the top bar's height
+                if (shape.Width >= 1) Near(full, PixelIn(bitmap, panel, tab, tab.ActualWidth - 0.5, 0.5));
+                else Assert.NotEqual(full, PixelIn(bitmap, panel, tab, length + 0.5, 0.5));
+                if (shape.Fade > 0)
+                {
+                    var end = PixelIn(bitmap, panel, tab, length - 0.5, 0.5);
+                    var well = HostTabs.ColorOf(HostTabs.Well(theme));
+                    Assert.True(Math.Abs(end.R - well.R) + Math.Abs(end.G - well.G) + Math.Abs(end.B - well.B)
+                                < Math.Abs(full.R - well.R) + Math.Abs(full.G - well.G) + Math.Abs(full.B - well.B),
+                        "the end of a fading top bar is closer to the strip than to the color");
+                }
             }
         });
     }

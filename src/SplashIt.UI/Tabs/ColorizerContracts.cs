@@ -14,6 +14,17 @@ public interface IDocumentInfo
     void GetOpenDocuments(List<object> into);
 
     /// <summary>
+    /// As <see cref="GetOpenDocuments(List{object})"/>, and <paramref name="changed"/> counts the
+    /// documents already known whose title or kind the listing found changed (review m1: a
+    /// title or kind no event reported). The default reports none.
+    /// </summary>
+    void GetOpenDocuments(List<object> into, out int changed)
+    {
+        GetOpenDocuments(into);
+        changed = 0;
+    }
+
+    /// <summary>
     /// The document's kind now (<see cref="FileKindClassifier.Classify"/> on what Revit
     /// reports about it); <see cref="FileKind.Other"/> for an unknown key. Must not throw.
     /// </summary>
@@ -40,6 +51,13 @@ public interface IColorizerEventSink
 
     /// <summary>The UI theme changed to <paramref name="theme"/>.</summary>
     void OnThemeChanged(UiTheme theme);
+
+    /// <summary>
+    /// The scan <see cref="IColorizerEventSource.RequestDocumentScan"/> asked for: called where
+    /// <see cref="IDocumentInfo.GetOpenDocuments"/> may run (in Revit, the API context of the
+    /// next Idling), so documents no event announced are registered (SC-004).
+    /// </summary>
+    void OnDocumentScan();
 }
 
 /// <summary>
@@ -57,6 +75,15 @@ public interface IColorizerEventSource
 
     /// <summary>Stops delivering events and releases every underlying subscription.</summary>
     void Unsubscribe();
+
+    /// <summary>
+    /// Asks for one <see cref="IColorizerEventSink.OnDocumentScan"/> soon, from a context where
+    /// <see cref="IDocumentInfo.GetOpenDocuments"/> may run. Called from a layout pass, which in
+    /// Revit is outside the API context, so the source defers it (Revit: the next Idling).
+    /// Requests before the scan runs merge into one. Cheap, allocation-free, never throws;
+    /// ignored while unsubscribed.
+    /// </summary>
+    void RequestDocumentScan();
 }
 
 /// <summary>

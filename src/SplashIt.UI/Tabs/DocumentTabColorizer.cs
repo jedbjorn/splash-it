@@ -36,6 +36,15 @@ namespace SplashIt.UI.Tabs;
 /// restores the tabs and reports <see cref="ColorizerStatus.Faulted"/>.</item>
 /// <item><b>Theme change</b>: restore, drop the captured originals, recapture them, recompute
 /// the text contrast and reapply.</item>
+/// <item><b>Registration fallback</b> (SC-004, #26): documents are registered from the open
+/// and create events, and also when their tabs appear. While a pass finds tabs that resolve
+/// to no document, the colorizer asks the event source for a document scan
+/// (<see cref="IColorizerEventSource.RequestDocumentScan"/>), at most once per
+/// <see cref="DocumentScanIntervalMs"/> and at most <see cref="MaxScansPerChange"/> times
+/// after each change of the tabs (a pass a scan itself forces is not a change). The source runs it where the document list may be read
+/// (Revit: the next Idling, in API context), and the scan registers every open document the
+/// events did not announce, so its tabs are colored. With every tab resolved, the unchanged
+/// hot path only compares a counter.</item>
 /// </list>
 /// Runs on the UI thread only: the public methods verify it.
 /// </summary>
@@ -51,6 +60,16 @@ public sealed class DocumentTabColorizer
     public const int MaxRecaptures = 5;
 
     public const long RecaptureWindowMs = 10_000;
+
+    /// <summary>The least time between two document scan requests (SC-004).</summary>
+    public const long DocumentScanIntervalMs = 1_000;
+
+    /// <summary>
+    /// How many scans unresolved tabs may ask for after each change of the tabs: a tab that
+    /// matches no document even after the scans (two files with the same title) stops asking
+    /// until the tabs change again.
+    /// </summary>
+    public const int MaxScansPerChange = 3;
 
     private readonly ITabSurface _surface;
     private readonly IDocumentInfo _documents;
@@ -68,6 +87,7 @@ public sealed class DocumentTabColorizer
     private readonly List<Signature> _signature = new();
     private readonly List<TabItem> _drop = new();
     private readonly List<object> _keys = new();
+    private readonly List<object> _gone = new();
     private readonly List<object> _projectOrder = new();
     private readonly List<object> _familyOrder = new();
 
@@ -79,6 +99,10 @@ public sealed class DocumentTabColorizer
     private int _consecutiveFaults;
     private double _guardMs;
     private string _lastCounts = "";
+    private int _lastScanUnresolved = -1;
+    private int _unresolvedTabs;
+    private int _scansLeft;
+    private long _lastScanRequestMs = long.MinValue / 2;
 
     public DocumentTabColorizer(
         ITabSurface surface,
@@ -330,6 +354,9 @@ public sealed class DocumentTabColorizer
         _families.Clear();
         _signatureValid = false;
         _lastCounts = "";
+        _lastScanUnresolved = -1;
+        _unresolvedTabs = 0;
+        _scansLeft = 0;
         try
         {
             _styles.ClearCache();
@@ -441,6 +468,76 @@ public sealed class DocumentTabColorizer
         }
     }
 
+    /// <summary>
+    /// The fallback scan (SC-004): registers every open document no event announced, takes a
+    /// changed kind of a known one like a Save As (review m1), and forgets those no longer open.
+    /// When anything changed, including only a title, the surface forgets its resolutions (a tab
+    /// that matched nothing may match now) and the tabs are restyled. Each scan is logged with
+    /// what it found and the unresolved tabs left. Runs where the source allows the document
+    /// list to be read.
+    /// </summary>
+    private void OnDocumentScan()
+    {
+        if (!_running) return;
+        try
+        {
+            _documents.GetOpenDocuments(_keys, out var retitled);
+            int projects = 0, families = 0, others = 0, rekinded = 0;
+            foreach (var key in _keys)
+            {
+                var kind = Classify(key);
+                if (_kinds.TryGetValue(key, out var old))
+                {
+                    if (old == kind) continue;
+                    // A kind no event reported (a missed Save As): as OnDocumentSavedAs.
+                    Forget(key);
+                    _kinds[key] = kind;
+                    AllocatorFor(kind)?.Assign(key);
+                    rekinded++;
+                    continue;
+                }
+                _kinds[key] = kind;
+                AllocatorFor(kind)?.Assign(key);
+                switch (kind)
+                {
+                    case FileKind.Project: projects++; break;
+                    case FileKind.Family: families++; break;
+                    default: others++; break;
+                }
+            }
+            foreach (var key in _kinds.Keys)
+                if (!_keys.Contains(key)) _gone.Add(key);
+            foreach (var key in _gone) Forget(key);
+            var gone = _gone.Count;
+            _gone.Clear();
+            _keys.Clear();
+
+            var added = projects + families + others;
+            var found = added + gone + retitled + rekinded > 0;
+            if (found)
+            {
+                _surface.Invalidate(); // tabs that resolved to nothing resolve again
+                _signatureValid = false;
+                // The scan's own follow-up pass does not refill the scan budget (delta review d1):
+                // only a change of the tabs or a document event does, so scans stay bounded.
+                Pass(force: true, refillScans: false);
+            }
+            // Logged when it found something, or when the unresolved count moved (delta review d3).
+            if (found || _unresolvedTabs != _lastScanUnresolved)
+            {
+                _lastScanUnresolved = _unresolvedTabs;
+                _log.Info(Inv($"colorizer: a document scan registered {added} documents no event announced ({projects} project, {families} family, {others} other); {retitled} changed title or kind, {rekinded} reclassified; {gone} no longer open; {_unresolvedTabs} unresolved."));
+            }
+            _consecutiveFaults = 0;
+        }
+        catch (Exception ex)
+        {
+            _keys.Clear();
+            _gone.Clear();
+            Fault("document scan", ex);
+        }
+    }
+
     private void Forget(object key)
     {
         _kinds.Remove(key);
@@ -450,18 +547,26 @@ public sealed class DocumentTabColorizer
 
     // ---- the pass ----
 
-    private void Pass(bool force)
+    /// <param name="force">Restyle even when the signature is unchanged.</param>
+    /// <param name="refillScans">Whether unresolved tabs after this pass refill the scan budget
+    /// (false for the pass a scan forces, delta review d1).</param>
+    private void Pass(bool force, bool refillScans = true)
     {
         var result = _surface.Read(_read);
         if (!result.IsAvailable)
         {
             if (_tabs.Count > 0) RestoreAll();
             _signatureValid = false;
+            _unresolvedTabs = 0;
             SetStatus(ColorizerStatus.Unavailable, result.Reason ?? "The document tabs were not found.");
             return;
         }
 
-        if (!force && _signatureValid && Status == ColorizerStatus.Active && SignatureMatches()) return;
+        if (!force && _signatureValid && Status == ColorizerStatus.Active && SignatureMatches())
+        {
+            MaybeRequestScan();
+            return;
+        }
 
         SetStatus(ColorizerStatus.Active, null);
         var generation = ++_generation;
@@ -501,6 +606,24 @@ public sealed class DocumentTabColorizer
 
         RecordSignature();
         LogCounts(projects, families, others, unresolved);
+
+        _unresolvedTabs = unresolved;
+        if (unresolved > 0 && refillScans) _scansLeft = MaxScansPerChange;
+        MaybeRequestScan();
+    }
+
+    /// <summary>
+    /// Asks for a document scan while tabs resolve to no document (SC-004): throttled, and no
+    /// allocation, so it may run on the unchanged hot path.
+    /// </summary>
+    private void MaybeRequestScan()
+    {
+        if (_unresolvedTabs == 0 || _scansLeft <= 0) return;
+        var now = _clockMs();
+        if (now - _lastScanRequestMs < DocumentScanIntervalMs) return;
+        _lastScanRequestMs = now;
+        _scansLeft--;
+        _events.RequestDocumentScan();
     }
 
     private Style? Desired(SurfaceTab entry, TabState state, ref int projects, ref int families, ref int others, ref int unresolved)
@@ -798,5 +921,7 @@ public sealed class DocumentTabColorizer
         public void OnLayoutUpdated() => owner.OnLayoutUpdated();
 
         public void OnThemeChanged(UiTheme theme) => owner.OnThemeChanged(theme);
+
+        public void OnDocumentScan() => owner.OnDocumentScan();
     }
 }
