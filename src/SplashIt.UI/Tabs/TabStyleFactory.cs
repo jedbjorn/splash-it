@@ -45,6 +45,28 @@ public readonly record struct TabFillColors(
     Rgb Fill, double Opacity, double MutedOpacity, Rgb Text, Rgb Hover, Rgb HoverText, Rgb Selected, Rgb SelectedText, Rgb Accent);
 
 /// <summary>
+/// The family top bar's shape (FnB decision #27): not a setting, a constant of the look. The
+/// shapes the FnB was shown (option sheet, SC-004) differ only in these numbers, so choosing
+/// another is a change to <see cref="Default"/> alone.
+/// </summary>
+/// <param name="Height">The top bar's height, pixels (ignored when <paramref name="MatchSideBar"/>).</param>
+/// <param name="Width">The share of the tab's width it spans from the left edge (0 to 1).</param>
+/// <param name="OpacityShare">Its opacity as a share of the family bar opacity (0 to 1).</param>
+/// <param name="Fade">The share of its length, at the right end, that fades out (0 = none).</param>
+/// <param name="MatchSideBar">True: as high as the side bar is wide.</param>
+public readonly record struct FamilyTopBarShape(double Height, double Width, double OpacityShare = 1, double Fade = 0, bool MatchSideBar = false)
+{
+    /// <summary>
+    /// The shape in use, #27 (option A): 2 px high, from the left edge, 90 % of the tab's width,
+    /// at the family bar opacity.
+    /// </summary>
+    public static FamilyTopBarShape Default { get; } = new(Height: 2, Width: 0.9);
+
+    /// <summary>The top bar's height on a tab whose side bar is <paramref name="sideBarWidth"/> px wide.</summary>
+    public double HeightFor(int sideBarWidth) => MatchSideBar ? sideBarWidth : Height;
+}
+
+/// <summary>
 /// The tab style factory (spec, Shapes and settings).
 /// <list type="bullet">
 /// <item><b>Project fill</b> (FnB decisions #22 and #23): the selected tab shows the color at the
@@ -55,8 +77,11 @@ public readonly record struct TabFillColors(
 /// white, whichever has the higher WCAG contrast against the fill as shown in that state
 /// (blended over the tab's own solid background, else over the theme surface). Hover lightens
 /// an unselected tab's fill by <see cref="HoverLighten"/>.</item>
-/// <item><b>Family bar</b>: a bar of the bar width on the left edge at the bar opacity, full
-/// height. Nothing else changes, so selection and hover stay native.</item>
+/// <item><b>Family marks</b> (#27): a bar of the bar width on the left edge at the bar opacity,
+/// full height, plus a fixed top bar (<see cref="FamilyTopBarShape.Default"/>: 2 px high, from
+/// the left edge, 90 % of the tab's width) in the same color and opacity, so the two read as
+/// an L. Only the side bar's width is a setting. Nothing else changes, so selection and hover
+/// stay native.</item>
 /// </list>
 /// <para>
 /// <b>Mechanism (AC4; Revit's template is confirmed only by AC11).</b> Every style is
@@ -110,6 +135,14 @@ public sealed class TabStyleFactory : ITabStyleFactory
     private static readonly ConditionalWeakTable<Style, object> Derived = new();
 
     private readonly Dictionary<Key, Style> _cache = new();
+
+    /// <param name="familyTopBar">The family top bar's shape; <see cref="FamilyTopBarShape.Default"/> when null
+    /// (another is given only to render the options the FnB chose from).</param>
+    public TabStyleFactory(FamilyTopBarShape? familyTopBar = null) =>
+        FamilyTopBar = familyTopBar ?? FamilyTopBarShape.Default;
+
+    /// <summary>The family top bar's shape this factory draws (#27).</summary>
+    public FamilyTopBarShape FamilyTopBar { get; }
 
     /// <summary>The number of cached styles.</summary>
     public int CachedCount => _cache.Count;
@@ -224,9 +257,14 @@ public sealed class TabStyleFactory : ITabStyleFactory
         setters.Add(new Setter(TabCloseGlyph.ForegroundProperty, text));
     }
 
-    private static void AddFamilyBar(Style style, TabTreatment treatment)
+    /// <summary>The family's L (#27): the side bar of the bar width, and the top bar of <see cref="FamilyTopBar"/>.</summary>
+    private void AddFamilyBar(Style style, TabTreatment treatment)
     {
-        var bar = new TabDecorationSpec(Brush(treatment.Color, treatment.Opacity), treatment.BarWidth, null, 0);
+        var shape = FamilyTopBar;
+        var bar = new TabDecorationSpec(
+            Brush(treatment.Color, treatment.Opacity), treatment.BarWidth,
+            Brush(treatment.Color, treatment.Opacity * Math.Clamp(shape.OpacityShare, 0, 1)), shape.HeightFor(treatment.BarWidth),
+            shape.Width, shape.Fade);
         style.Setters.Add(new Setter(TabDecoration.DecorationProperty, bar));
     }
 

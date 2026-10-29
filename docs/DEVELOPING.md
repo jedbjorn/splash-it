@@ -250,8 +250,11 @@ finds a document handle on 2026 or 2027).
 Styles come from `TabStyleFactory` (decisions #22 and #23): the selected project tab shows the
 color at the fill opacity with a 3 px darker top line; the project's other tabs show it at the
 Unselected tab opacity (a share of the fill opacity, default 50 %). The fill is
-`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family bar and the top
-line are drawn by an adorner (`TabDecoration`), so they do not depend on Revit's template.
+`Background`/`Foreground` setters plus `IsSelected`/hover triggers. The family marks (#27: the
+side bar of the bar width, plus a fixed 2 px top bar from the left edge over 90 % of the tab,
+`FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
+(`TabDecoration`), so they do not depend on Revit's template, follow a resize, and go with
+the original style.
 Revit's close button (`mDocumentCloseButton`) takes its grey from its own style
 (`DynamicResource DockWindowButtonNormalForegroundBrush`, defined in UIFramework's
 AvalonDock theme), so `TabCloseGlyph` sets it to the text color per state and puts the

@@ -6,17 +6,30 @@ namespace SplashIt.UI.Tabs;
 
 /// <summary>
 /// What <see cref="TabDecoration"/> draws over a tab: a bar on the left edge (a family's
-/// bar) and/or an accent along the top edge (the selected project tab's accent).
-/// Immutable; the brushes are frozen.
+/// side bar) and/or a bar along the top edge (the selected project tab's accent, or a
+/// family's top bar, #27). The top bar starts at the left edge and spans
+/// <see cref="TopAccentWidth"/> of the tab's width; its last <see cref="TopAccentFade"/>
+/// of that width may fade out. Immutable; the brushes are frozen.
 /// </summary>
 public sealed class TabDecorationSpec
 {
-    public TabDecorationSpec(Brush? leftBar, double leftBarWidth, Brush? topAccent, double topAccentHeight)
+    public TabDecorationSpec(Brush? leftBar, double leftBarWidth, Brush? topAccent, double topAccentHeight,
+        double topAccentWidth = 1, double topAccentFade = 0)
     {
         LeftBar = Frozen(leftBar);
         LeftBarWidth = leftBar is null ? 0 : Math.Max(0, leftBarWidth);
         TopAccent = Frozen(topAccent);
         TopAccentHeight = topAccent is null ? 0 : Math.Max(0, topAccentHeight);
+        TopAccentWidth = Math.Clamp(double.IsNaN(topAccentWidth) ? 1 : topAccentWidth, 0, 1);
+        TopAccentFade = Math.Clamp(double.IsNaN(topAccentFade) ? 0 : topAccentFade, 0, 1);
+        if (TopAccentFade > 0 && TopAccent is SolidColorBrush solid)
+        {
+            var from = solid.Color;
+            var to = Color.FromArgb(0, from.R, from.G, from.B);
+            var fade = new LinearGradientBrush(from, to, new Point(0, 0), new Point(1, 0)) { Opacity = solid.Opacity };
+            fade.Freeze();
+            TopAccentFadeBrush = fade;
+        }
     }
 
     public Brush? LeftBar { get; }
@@ -26,6 +39,15 @@ public sealed class TabDecorationSpec
     public Brush? TopAccent { get; }
 
     public double TopAccentHeight { get; }
+
+    /// <summary>The share of the tab's width the top bar spans, from the left edge (0 to 1; 1 = full width).</summary>
+    public double TopAccentWidth { get; }
+
+    /// <summary>The share of the top bar's own length, at its right end, that fades out (0 = none).</summary>
+    public double TopAccentFade { get; }
+
+    /// <summary>The fading end's brush (the top bar's color to transparent), when it fades.</summary>
+    public Brush? TopAccentFadeBrush { get; }
 
     private static Brush? Frozen(Brush? brush)
     {
@@ -262,7 +284,10 @@ public static class TabDecoration
 
 /// <summary>
 /// Draws a <see cref="TabDecorationSpec"/> in the adorned element's bounds: the left bar
-/// at full height, the top accent at full width. Never hit-testable.
+/// at full height, the top bar from the left edge across its share of the width. Both are
+/// measured from the element's current size at every render, and the adorner layer re-renders
+/// the adorner when the element is resized, so a resized tab's bars follow it. Never
+/// hit-testable.
 /// </summary>
 public sealed class TabDecorationAdorner : Adorner
 {
@@ -306,11 +331,45 @@ public sealed class TabDecorationAdorner : Adorner
         var size = element.RenderSize;
         if (element.Visibility != Visibility.Visible || size.Width <= 0 || size.Height <= 0) return;
 
+        var left = 0.0;
         if (_spec.LeftBar is { } bar && _spec.LeftBarWidth > 0)
-            DrawSnapped(drawingContext, bar, new Rect(0, 0, Math.Min(_spec.LeftBarWidth, size.Width), size.Height));
+        {
+            left = Math.Min(_spec.LeftBarWidth, size.Width);
+            DrawSnapped(drawingContext, bar, new Rect(0, 0, left, size.Height));
+        }
 
-        if (_spec.TopAccent is { } accent && _spec.TopAccentHeight > 0)
-            DrawSnapped(drawingContext, accent, new Rect(0, 0, size.Width, Math.Min(_spec.TopAccentHeight, size.Height)));
+        if (_spec.TopAccent is not { } accent || _spec.TopAccentHeight <= 0) return;
+        var top = TopAccentRect(size, _spec);
+        // The side bar already covers the corner: the top bar starts where it ends, so a
+        // translucent L is one even color, not darker where the two overlap.
+        var start = Math.Min(left, top.Right);
+        var fadeStart = _spec.TopAccentFadeBrush is null ? top.Right : Math.Round(top.Right * (1 - _spec.TopAccentFade), MidpointRounding.AwayFromZero);
+        fadeStart = Math.Max(start, fadeStart);
+        if (fadeStart > start) DrawSnapped(drawingContext, accent, new Rect(start, top.Top, fadeStart - start, top.Height));
+        if (_spec.TopAccentFadeBrush is { } fade && top.Right > fadeStart)
+            DrawSnapped(drawingContext, fade, new Rect(fadeStart, top.Top, top.Right - fadeStart, top.Height));
+    }
+
+    /// <summary>
+    /// Where the top bar lies in an element of <paramref name="size"/>: from the left edge, the
+    /// bar's height (at most the element's), and <see cref="TopAccentWidthFor"/> wide.
+    /// </summary>
+    public static Rect TopAccentRect(Size size, TabDecorationSpec spec)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        if (spec.TopAccent is null || size.Width <= 0 || size.Height <= 0) return Rect.Empty;
+        return new Rect(0, 0, TopAccentWidthFor(size.Width, spec.TopAccentWidth), Math.Min(spec.TopAccentHeight, size.Height));
+    }
+
+    /// <summary>
+    /// The top bar's length on a tab <paramref name="tabWidth"/> wide: the share of the width,
+    /// rounded to a whole pixel (half away from zero), never more than the tab.
+    /// </summary>
+    public static double TopAccentWidthFor(double tabWidth, double share)
+    {
+        if (tabWidth <= 0 || double.IsNaN(tabWidth)) return 0;
+        if (share >= 1) return tabWidth;
+        return Math.Min(tabWidth, Math.Round(tabWidth * Math.Max(0, share), MidpointRounding.AwayFromZero));
     }
 
     /// <summary>Draws on whole device pixels, so a 1 px bar stays one crisp pixel at any position.</summary>
