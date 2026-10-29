@@ -35,8 +35,11 @@ public sealed class ColorAllocator<TKey> where TKey : notnull
     /// <summary>The number of keys holding an index.</summary>
     public int Count => _order.Count;
 
-    /// <summary>The keys holding an index, in the order they first took one.</summary>
-    public IReadOnlyList<TKey> Keys => _order;
+    /// <summary>
+    /// A snapshot of the keys holding an index, in the order they first took one.
+    /// Safe to enumerate while releasing keys; later changes do not show in it.
+    /// </summary>
+    public IReadOnlyList<TKey> Keys => Array.AsReadOnly(_order.ToArray());
 
     /// <summary>
     /// The index held by <paramref name="key"/>, assigning one first if it has none.
@@ -57,7 +60,10 @@ public sealed class ColorAllocator<TKey> where TKey : notnull
     {
         if (!_indexOf.Remove(key, out var index)) return false;
         _holders[index]--;
-        _order.Remove(key);
+        // Match with the dictionary's comparer, not TKey's own Equals: the key passed
+        // in may differ from the stored one (e.g. "DOC" vs "Doc" under OrdinalIgnoreCase).
+        var comparer = _indexOf.Comparer;
+        _order.RemoveAt(_order.FindIndex(k => comparer.Equals(k, key)));
         return true;
     }
 
@@ -82,7 +88,7 @@ public sealed class ColorAllocator<TKey> where TKey : notnull
     public void Reset(IEnumerable<TKey> keysInOrder)
     {
         ArgumentNullException.ThrowIfNull(keysInOrder);
-        var keys = keysInOrder.ToList(); // materialize first: the caller may pass Keys itself
+        var keys = keysInOrder.ToList(); // materialize first: the sequence may be lazy over this allocator
         Clear();
         foreach (var key in keys) Assign(key);
     }
