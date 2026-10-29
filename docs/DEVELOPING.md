@@ -262,22 +262,35 @@ whichever has the higher *minimum* contrast over two points, the solid part and 
 title's last column (Revit leaves 12 px between a title and its ×, so a title that fills its tab
 ends 10.5 px into the 24 px fade, at about 44 % of the opacity); the × is black or white against
 the backdrop alone. The backdrop is what actually shows through the fade's transparent end and
-under the ×: whatever is behind the tab, since the fill replaces the tab's own background. The
-colorizer finds it with `TabBackdrop`: a search of what is painted under the centre of the tabs'
-panel, from the nearest layer down (at each of the panel's ancestors, the siblings drawn below the
-tabs' branch, then the ancestor's own background), skipping every tab. The first border or panel
-background (or shape fill) covering that point that is an opaque `SolidColorBrush` is what shows,
-with translucent ones above it blended over it. It reads the tree rather than hit-testing it, so
-elements that are not hit-testable count. When it finds nothing, it walks the tab's visual parents
-to the first panel or border with an opaque solid background. (On Revit 2026 the strip behind the
-tabs, `#CCCCCC` light and `#454F61` dark, is not an ancestor's background: the nearest solid
-ancestors are `#EEEEEE` and `#2E3440`; a hit test found nothing.) It does this once per laid-out
-pane (the tabs' parent), logs what it found, the layers it met and the ancestor chain ("tabs sit on
-#RRGGBB (…) [painted: …; layers met: …; ancestors: …; chain: …]"), and again after a theme change,
-so the per-pass hot path is untouched. With nothing solid behind the tab (or before the tab is in a tree), it falls back to
-the tab's original background, then to the theme surface. Over every default color, fill,
-unselected share and state, one of black and white reaches 3:1 at both points on each candidate
-strip. The settings preview passes its tab color, which its template lays under the fill. The
+under the ×: whatever is behind the tab, since the fill replaces the tab's own background
+(decision #33). The colorizer finds it with `TabBackdrop`, in this order:
+
+1. **Rendered sample.** What the window actually draws, sampled (one 1 px render) where a tab shows
+   only what is behind it: the middle of the 2 px gap between a filled tab's fade and its ×, or the
+   slot of an unselected, unhovered tab's hidden ×. Only tabs that are drawn (`Visibility` Visible;
+   Revit leaves Hidden tabs at stale positions) and points inside the tabs' panel count. It is taken
+   only in a pass run from a layout pass (render data is current then), and not before the first
+   layout after a theme change.
+2. **Painted-layer search.** What is painted under the centre of the tabs' panel, from the nearest
+   layer down (at each of the panel's ancestors, the siblings drawn below the tabs' branch, then the
+   ancestor's own background), skipping every tab: the first border or panel background (or shape
+   fill) covering that point that is an opaque `SolidColorBrush`, with translucent ones above it
+   blended over it. It reads the tree rather than hit-testing it.
+3. **Ancestor walk.** The tab's visual parents, to the first panel or border with an opaque solid
+   background.
+4. Else the tab's original background, then the theme surface.
+
+On Revit 2026 and 2027 (VM) the rendered sample and the painted search agree with the pixels,
+`#CCCCCC` light and `#454F61` dark; the ancestor walk alone gives `#EEEEEE` and `#2E3440`, and a hit
+test finds nothing. Each pane (the tabs' parent) is worked out at the top of a pass, before any style
+is assigned. Until a sample is taken it uses the tree's answer, uncached, and the next layout passes
+look again, at most 20 times per pane; then the tree's answer is settled. Settled panes are kept in a
+weak table (a pane Revit drops is not kept alive), dropped on a theme change and on Stop, and each is
+logged once: "tabs sit on #RRGGBB (…) (sample N ms). [rendered: …; painted: …; layers met: …;
+ancestors: …; chain: …]". The per-pass hot path is untouched. Over every default color, fill,
+unselected share and state, one of black and white reaches 3:1 over the whole title (from the solid
+part to its end in the fade) on each candidate strip. The settings preview passes its tab color,
+which its template lays under the fill. The
 family marks (#27: the
 side bar of the bar width, plus a fixed 2 px top bar from the left edge over 95 % of the tab,
 fading out over its last 15 % (#29), `FamilyTopBarShape.Default`) and the project's top line are drawn by an adorner
