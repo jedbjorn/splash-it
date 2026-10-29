@@ -10,8 +10,9 @@ namespace SplashIt.UI.Tabs;
 /// family's top bar, #27). The top bar starts at the left edge and spans
 /// <see cref="TopAccentWidth"/> of the tab's width; its last <see cref="TopAccentFade"/>
 /// of that width may fade out. Or, when <see cref="TopAccentAnchor"/> is set (the selected
-/// project tab's line, #30), it ends where the project fill ends, before the close button, and
-/// fades over the same fixed pixels. Immutable; the brushes are frozen.
+/// project tab's line, #36), it takes the project fill's shape: solid to the fade start before
+/// the close button, then fading through the × to the shape's edge share at the tab's right edge.
+/// Immutable; the brushes are frozen.
 /// </summary>
 public sealed class TabDecorationSpec
 {
@@ -28,7 +29,10 @@ public sealed class TabDecorationSpec
         if ((TopAccentFade > 0 || TopAccentAnchor is not null) && TopAccent is SolidColorBrush solid)
         {
             var from = solid.Color;
-            var to = Color.FromArgb(0, from.R, from.G, from.B);
+            // A family's top bar fades to transparent (#29); the selected project line ends where the
+            // project fill does, at the shape's edge share of its opacity (#36).
+            var edge = TopAccentAnchor is { } shape ? shape.Edge : 0;
+            var to = Color.FromArgb((byte)Math.Round(from.A * edge, MidpointRounding.AwayFromZero), from.R, from.G, from.B);
             var fade = new LinearGradientBrush(from, to, new Point(0, 0), new Point(1, 0)) { Opacity = solid.Opacity };
             fade.Freeze();
             TopAccentFadeBrush = fade;
@@ -50,13 +54,16 @@ public sealed class TabDecorationSpec
     public double TopAccentFade { get; }
 
     /// <summary>
-    /// When set, the top bar takes the project fill's shape (#30) instead of <see cref="TopAccentWidth"/>
-    /// and <see cref="TopAccentFade"/>: it ends at the shape's anchor before the close button and fades
-    /// over its fixed width.
+    /// When set, the top bar takes the project fill's shape (#36) instead of <see cref="TopAccentWidth"/>
+    /// and <see cref="TopAccentFade"/>: full width, solid to the fade start before the close button, then
+    /// fading to the shape's edge share at the right edge.
     /// </summary>
     public ProjectFillShape? TopAccentAnchor { get; }
 
-    /// <summary>The fading end's brush (the top bar's color to transparent), when it fades.</summary>
+    /// <summary>
+    /// The fading end's brush, when it fades: the top bar's color to transparent (a family's, #29), or
+    /// to the shape's edge share of its opacity (the selected project line, #36).
+    /// </summary>
     public Brush? TopAccentFadeBrush { get; }
 
     private static Brush? Frozen(Brush? brush)
@@ -363,9 +370,9 @@ public sealed class TabDecorationAdorner : Adorner
 
     /// <summary>
     /// Where the top bar on <paramref name="element"/> (laid out at <paramref name="size"/>) starts to
-    /// fade and where it ends, from the left edge: the project fill's anchored shape (#30) when
-    /// <paramref name="spec"/> has one, else <see cref="TopAccentRect"/> and its fade share. With no
-    /// fade, both are the end.
+    /// fade and where it ends, from the left edge: the project fill's shape (#36: from the fade start
+    /// before the ×, to the right edge) when <paramref name="spec"/> has one, else
+    /// <see cref="TopAccentRect"/> and its fade share. With no fade, both are the end.
     /// </summary>
     public static (double FadeStart, double End) TopAccentExtent(UIElement element, Size size, TabDecorationSpec spec)
     {
@@ -374,7 +381,7 @@ public sealed class TabDecorationAdorner : Adorner
         if (spec.TopAccentAnchor is { } shape)
         {
             var closeLeft = element is FrameworkElement fe ? ProjectFillShape.CloseButtonLeft(fe) : null;
-            var (from, to) = shape.FadeFor(shape.AnchorFor(size.Width, closeLeft));
+            var (from, to) = shape.FadeFor(size.Width, closeLeft);
             return spec.TopAccentFadeBrush is null ? (to, to) : (from, to);
         }
         var right = TopAccentRect(size, spec).Right;

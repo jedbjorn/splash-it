@@ -27,16 +27,17 @@ public static class HostTabs
     /// sets its own selected and unselected backgrounds (selected: the theme's surface;
     /// unselected: transparent over the strip). As in Revit (vm/2026-review/diag-2026-close-button.txt
     /// and the AC11 captures), the close button is 16 x 16, its right edge 2 px inside the tab
-    /// (here the grid's 1 px gap plus 1 px), 12 px after the title as Revit's, and Hidden,
+    /// (the content's inset), 12 px after the title as Revit's, and Hidden,
     /// keeping its slot, unless the tab is
-    /// selected or under the mouse.
+    /// selected or under the mouse. Tabs sit flush, as Revit's do (the VM captures: one tab's last
+    /// column is the next tab's neighbour, with no strip between), so a fill reaches the next tab (#36).
     /// <para>
     /// The optional numbers make a variant whose close button is NOT where Revit's is (review M2:
     /// so a test can tell an anchor measured from the button from one at the right edge), or one
     /// with no named close button (<paramref name="closeName"/> another name: the fallback slot).
     /// </para>
     /// </summary>
-    public static Style RevitLikeStyle(UiTheme theme, double closeWidth = 16, double closeRightInset = 1,
+    public static Style RevitLikeStyle(UiTheme theme, double closeWidth = 16, double closeRightInset = 2,
         string closeName = "mDocumentCloseButton", string unselectedBackground = "#00FFFFFF")
     {
         var dark = theme == UiTheme.Dark;
@@ -55,7 +56,7 @@ public static class HostTabs
               <Setter Property="Template">
                 <Setter.Value>
                   <ControlTemplate TargetType="TabItem">
-                    <Grid x:Name="mGrid" Height="20" Margin="0,0,1,0">
+                    <Grid x:Name="mGrid" Height="20">
                       <Border x:Name="mBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" />
                       <DockPanel Margin="4,2,{{closeRightInset}},2">
                         <Button x:Name="{{closeName}}" DockPanel.Dock="Right" Content="×" Width="{{closeWidth}}" Height="16" Margin="12,0,0,0"
