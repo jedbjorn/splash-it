@@ -106,7 +106,7 @@ public class TabGrouperTests
     [Fact]
     public void Group_GroupsByFile_AndRestoresTheSelectedTab()
     {
-        var pane = new FakePane(Tabs("B1 A1 C1 A2 B2 C2 A3"), selected: "A2");
+        var pane = new FakePane(Tabs("B1 A1 C1 A2 B2 C2 A3"), selected: "C1"); // index 2 now, 5 after: an index-based selection would lose it
         var selected = pane.SelectedItem;
         var (grouper, log) = Grouper();
 
