@@ -220,6 +220,12 @@ public class SettingsViewModelTests
         Assert.Single(rig.Host.Applied);
         Assert.Equal(UiStrings.Settings_ApplyFailed("tree changed"), rig.Model.ErrorHeading);
         Assert.False(rig.Model.IsDirty);
+        // The tabs weren't restyled: Save stays on so the user can retry.
+        Assert.True(rig.Model.SaveCommand.CanExecute(null));
+        rig.Host.ApplyThrows = null;
+        rig.Model.SaveCommand.Execute(null);
+        Assert.Equal(2, rig.Host.Applied.Count);
+        Assert.Equal(UiStrings.Settings_Saved, rig.Model.Notice);
     });
 
     // ---- Import and export --------------------------------------------------------------------
@@ -234,6 +240,7 @@ public class SettingsViewModelTests
             ProjectColors = [Red, Green, Blue],
             FamilyColors = [Blue],
             ProjectFillOpacity = 35,
+            ProjectUnselectedOpacity = 25,
             FamilyBarWidth = 5,
             FamilyBarOpacity = 45,
         };
@@ -313,6 +320,7 @@ public class SettingsViewModelTests
         var target = rig.Folder.File("out.json");
         rig.Dialogs.SaveResult = target;
         rig.Model.ProjectFillOpacity = 55;
+        rig.Model.ProjectUnselectedOpacity = 65;
 
         rig.Model.ExportCommand.Execute(null);
 
@@ -321,6 +329,8 @@ public class SettingsViewModelTests
         var back = SettingsExchange.ImportFile(target, SplashItSettings.Default);
         Assert.True(back.Succeeded);
         Assert.Equal(55, back.Settings!.ProjectFillOpacity);
+        Assert.Equal(65, back.Settings.ProjectUnselectedOpacity);
+        Assert.Contains("\"projectUnselectedOpacity\": 65", text, StringComparison.Ordinal);
         Assert.Equal(UiStrings.Settings_Exported("out.json"), rig.Model.Notice);
         Assert.Empty(rig.Host.Applied);
     });
@@ -575,6 +585,70 @@ public class SettingsViewModelTests
         rig.Model.Save();
         Assert.Equal(SplashItDefaults.ProjectColors, SplashItSettings.Read(rig.Path).ProjectColors);
     }, stored: SplashItSettings.Default with { ProjectColors = [Red], FamilyColors = [Blue, Green] });
+
+    // ---- Unselected tab opacity (decision #23) ---------------------------------------------------
+
+    [Fact]
+    public void UnselectedOpacity_Defaults50_Dirties_AndSavesThenApplies() => Sta(rig =>
+    {
+        Assert.Equal(50, rig.Model.ProjectUnselectedOpacity);
+        Assert.Equal("50%", rig.Model.ProjectUnselectedOpacityText);
+        Assert.False(rig.Model.IsDirty);
+
+        rig.Model.ProjectUnselectedOpacity = 70;
+        Assert.True(rig.Model.IsDirty);
+        Assert.Equal("70%", rig.Model.ProjectUnselectedOpacityText);
+        Assert.Equal(70, rig.Model.Current.ProjectUnselectedOpacity);
+
+        rig.Model.SaveCommand.Execute(null);
+        Assert.Equal(70, SplashItSettings.Read(rig.Path).ProjectUnselectedOpacity);
+        Assert.Equal(70, Assert.Single(rig.Host.Applied).ProjectUnselectedOpacity);
+        Assert.False(rig.Model.IsDirty);
+
+        rig.Model.ProjectUnselectedOpacity = 50;
+        Assert.True(rig.Model.IsDirty);
+        rig.Model.ProjectUnselectedOpacity = 70;
+        Assert.False(rig.Model.IsDirty);
+    });
+
+    [Fact]
+    public void UnselectedOpacity_OpensWithTheStoredValue() => Sta(rig =>
+    {
+        Assert.Equal(20, rig.Model.ProjectUnselectedOpacity);
+        Assert.False(rig.Model.IsDirty);
+    }, stored: SplashItSettings.Default with { ProjectUnselectedOpacity = 20 });
+
+    [Fact]
+    public void ResetToDefaults_ResetsTheColorsOnly_LikeTheOtherSliders() => Sta(rig =>
+    {
+        rig.Model.ProjectColors.ResetCommand.Execute(null);
+        Assert.Equal(SplashItDefaults.ProjectColors, rig.Model.ProjectColors.Colors);
+        Assert.Equal(30, rig.Model.ProjectUnselectedOpacity);
+        Assert.Equal(40, rig.Model.ProjectFillOpacity);
+    }, stored: SplashItSettings.Default with { ProjectColors = [Red], ProjectFillOpacity = 40, ProjectUnselectedOpacity = 30 });
+
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(100, true)]
+    [InlineData(9, false)]
+    [InlineData(101, false)]
+    [InlineData(0, false)]
+    public void Save_HoldsTheUnselectedOpacityBounds(int share, bool saves) => Sta(rig =>
+    {
+        var before = rig.FileBytes();
+        rig.Model.ProjectUnselectedOpacity = share;
+        Assert.Equal(saves, rig.Model.Save());
+        if (saves)
+        {
+            Assert.Equal(share, SplashItSettings.Read(rig.Path).ProjectUnselectedOpacity);
+        }
+        else
+        {
+            Assert.Equal(before, rig.FileBytes());
+            Assert.Equal([$"Unselected tab opacity must be from 10 to 100; it is {share}."], rig.Model.Errors);
+            Assert.Empty(rig.Host.Applied);
+        }
+    });
 
     // ---- Bounds ---------------------------------------------------------------------------------
 

@@ -208,6 +208,7 @@ public class SettingsWindowScreenshotTests
             .Count(b => AutomationProperties.GetAutomationId(b).StartsWith("Settings.FamilyColors.Chip", StringComparison.Ordinal)));
         Assert.Equal(kind == SettingsStatusKind.Active, shown.ById<Button>("Settings.ResetAssignments").IsEnabled);
         Assert.Equal("100%", shown.ById<TextBlock>("Settings.ProjectFillOpacityValue").Text);
+        Assert.Equal("50%", shown.ById<TextBlock>("Settings.ProjectUnselectedOpacityValue").Text);
         Assert.Equal("3 px", shown.ById<TextBlock>("Settings.FamilyBarWidthValue").Text);
         AssertChipNumbers(shown, bitmap);
         // Chip 1 (blue in the project list) is selected: its ring must still read.
@@ -227,7 +228,10 @@ public class SettingsWindowScreenshotTests
         else
         {
             Assert.Equal(Visibility.Collapsed, note.Visibility);
-            Assert.True(Distance(ToColor(SplashItDefaults.ProjectColors[0]), tower2Pixel) <= 3, $"preview tab is {tower2Pixel}");
+            // The project's unselected tab: fill (100 %) × the unselected share (50 %) over the surface.
+            var surface = theme == UiTheme.Dark ? SplashItDefaults.DarkSurface : SplashItDefaults.LightSurface;
+            var expected = ToColor(ColorMath.Blend(SplashItDefaults.ProjectColors[0], 0.5, surface));
+            Assert.True(Distance(expected, tower2Pixel) <= 3, $"preview tab is {tower2Pixel}, expected {expected}");
         }
     });
 
@@ -246,6 +250,7 @@ public class SettingsWindowScreenshotTests
             ProjectFillOpacity = 60,
             FamilyBarWidth = 5,
             FamilyBarOpacity = 80,
+            ProjectUnselectedOpacity = 80,
         };
         using var shown = new Shown(theme, new SettingsStatus(SettingsStatusKind.Active), stored);
 
@@ -275,6 +280,7 @@ public class SettingsWindowScreenshotTests
         Assert.Equal("60%", shown.ById<TextBlock>("Settings.ProjectFillOpacityValue").Text);
         Assert.Equal("5 px", shown.ById<TextBlock>("Settings.FamilyBarWidthValue").Text);
         Assert.Equal("80%", shown.ById<TextBlock>("Settings.FamilyBarOpacityValue").Text);
+        Assert.Equal("80%", shown.ById<TextBlock>("Settings.ProjectUnselectedOpacityValue").Text);
 
         // Each chip is drawn in its color with its number (1 to 12) in the middle.
         AssertChipNumbers(shown, bitmap);
@@ -400,6 +406,7 @@ public class SettingsWindowScreenshotTests
             ProjectFillOpacity = 40,
             FamilyBarWidth = 6,
             FamilyBarOpacity = 70,
+            ProjectUnselectedOpacity = 30,
         }, team);
         shown.Dialogs.OpenResult = team;
         shown.Model.ImportCommand.Execute(null);
@@ -410,6 +417,7 @@ public class SettingsWindowScreenshotTests
         AssertWindowRender(bitmap, theme);
         Assert.Equal("Imported from team-colors.json; Save to apply.", shown.ById<TextBlock>("Settings.Notice").Text);
         Assert.Equal("40%", shown.ById<TextBlock>("Settings.ProjectFillOpacityValue").Text);
+        Assert.Equal("30%", shown.ById<TextBlock>("Settings.ProjectUnselectedOpacityValue").Text);
         Assert.Equal(6, shown.Model.ProjectColors.Count);
         Assert.True(shown.Model.IsDirty);
     });
@@ -467,14 +475,17 @@ public class SettingsWindowScreenshotTests
         SplashItTheme.Apply(theme);
         var text = new SolidColorBrush(Palette(theme, UiPalette.Text));
         var root = new StackPanel { Background = new SolidColorBrush(Palette(theme, UiPalette.Surface)), UseLayoutRounding = true };
-        var strips = new List<(PreviewStrip Strip, int Width, int Opacity)>();
-        foreach (var width in new[] { 1, 3, 6 })
+        var strips = new List<(PreviewStrip Strip, int Width, int Opacity, int Share)>();
+        // Bar widths 1, 3 and 6 at 30 % and 100 % (with the default unselected share, 50 %), then the
+        // unselected share's ends at full fill: 100 % (only the top line marks the selected tab) and 10 %.
+        var cases = new[] { 1, 3, 6 }.SelectMany(w => new[] { (w, 30, 50), (w, 100, 50) })
+            .Concat([(3, 100, 100), (3, 100, 10)]);
+        foreach (var (width, opacity, share) in cases)
         {
-            foreach (var opacity in new[] { 30, 100 })
             {
                 root.Children.Add(new TextBlock
                 {
-                    Text = $"Bar width {width} px · bar opacity {opacity}% · fill opacity {opacity}%",
+                    Text = $"Bar width {width} px · bar {opacity}% · fill {opacity}% · unselected tabs {share}% of the fill",
                     Foreground = text,
                     FontFamily = new FontFamily("Segoe UI"),
                     FontSize = 12,
@@ -482,11 +493,14 @@ public class SettingsWindowScreenshotTests
                 });
                 var strip = new PreviewStrip
                 {
-                    Settings = SplashItSettings.Default with { FamilyBarWidth = width, FamilyBarOpacity = opacity, ProjectFillOpacity = opacity },
+                    Settings = SplashItSettings.Default with
+                    {
+                        FamilyBarWidth = width, FamilyBarOpacity = opacity, ProjectFillOpacity = opacity, ProjectUnselectedOpacity = share,
+                    },
                     Margin = new Thickness(12, 0, 12, 0),
                 };
                 root.Children.Add(strip);
-                strips.Add((strip, width, opacity));
+                strips.Add((strip, width, opacity, share));
             }
         }
         root.Children.Add(new Border { Height = 12 });
@@ -504,7 +518,7 @@ public class SettingsWindowScreenshotTests
         var project2 = SplashItDefaults.ProjectColors[1];
         var family1 = SplashItDefaults.FamilyColors[0];
 
-        foreach (var (strip, width, opacity) in strips)
+        foreach (var (strip, width, opacity, share) in strips)
         {
             TabItem Tab(string id) => WindowCapture.Descendants<TabItem>(strip).Single(t => AutomationProperties.GetAutomationId(t) == id);
             Color At(TabItem tab, double x, double y)
@@ -520,13 +534,19 @@ public class SettingsWindowScreenshotTests
             var template = Tab("Settings.Preview.Template");
             Assert.True(tower1.IsSelected);
 
-            // The selected project tab shows its color at full opacity (below its top accent, left of its text).
-            AssertNear(ToColor(project1), At(tower1, 4, tower1.ActualHeight - 3), $"Tower selected, {width}/{opacity}");
-            // Unselected tabs of the same project: the fill opacity over the theme surface.
-            AssertNear(ToColor(ColorMath.Blend(project1, opacity / 100.0, surface)), At(tower2, 4, tower2.ActualHeight - 3),
-                $"Tower unselected, {width}/{opacity}");
-            AssertNear(ToColor(ColorMath.Blend(project2, opacity / 100.0, surface)), At(annex, 4, annex.ActualHeight - 3),
-                $"Annex, {width}/{opacity}");
+            var unselected = opacity / 100.0 * (share / 100.0);
+            // The selected project tab: its color at the fill opacity (below its top line, left of its
+            // text), and a 3 px darker line along its top.
+            AssertNear(ToColor(ColorMath.Blend(project1, opacity / 100.0, surface)), At(tower1, 4, tower1.ActualHeight - 3),
+                $"Tower selected, {width}/{opacity}/{share}");
+            var line = ColorMath.Darken(project1, 0.3);
+            AssertNear(ToColor(line), At(tower1, 6, 0.5), $"Tower top line, row 1, {width}/{opacity}/{share}");
+            AssertNear(ToColor(line), At(tower1, 6, 2.5), $"Tower top line, row 3, {width}/{opacity}/{share}");
+            // The project's other tab, and the other project: fill × the unselected share (decision #23).
+            AssertNear(ToColor(ColorMath.Blend(project1, unselected, surface)), At(tower2, 4, tower2.ActualHeight - 3),
+                $"Tower unselected, {width}/{opacity}/{share}");
+            AssertNear(ToColor(ColorMath.Blend(project2, unselected, surface)), At(annex, 4, annex.ActualHeight - 3),
+                $"Annex, {width}/{opacity}/{share}");
             // The family bar: inside it, the family color at the bar opacity over what is beneath (the
             // tab's 1 px left border in column 0, its background after that); just right of it, the tab.
             var barX = width / 2;
