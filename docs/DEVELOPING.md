@@ -21,6 +21,7 @@ src/
                          SettingsExchange (export/import), the shared JSON reader
     Resources/           CoreStrings.resx (user-facing messages) + CoreStrings.cs
     Logging/             FileLog (%LocalAppData%\SplashIt\logs, 7 days), ILog
+    Tabs/                TabGroupOrder: the Group Tabs order rule and fewest moves (spec #2)
   SplashIt.UI/           net8.0-windows;net10.0-windows, WPF, NO Revit references:
                          the tab style factory, the colorizer engine (against
                          ITabSurface and a document-info abstraction), the settings
@@ -36,19 +37,22 @@ src/
     Tabs/                TabStyleFactory (ITabStyleFactory), TabTreatment,
                          TabDecoration (adorner: family bar, selected accent),
                          DocumentTabColorizer, ITabSurface + TreeTabSurface (the
-                         tree walk by type name), LayoutPulse, PyRevitGuard
+                         tree walk by type name), LayoutPulse, PyRevitGuard;
+                         Group Tabs: IDocumentPane, TabGrouper, GroupTabsRunner
   SplashIt.Revit/        the add-in (net8.0-windows for 2025 and 2026,
                          net10.0-windows for 2027): App, the command, the Revit tab
                          surface, Revit event and theme adapters, logger wiring.
                          References SplashIt.UI and SplashIt.Core.
     App.cs               IExternalApplication: ribbon button, icons, colorizer start
     Commands/            OpenSettings → SettingsLauncher.Show (the settings window),
-                         over ColorizerSettingsHost
+                         over ColorizerSettingsHost; GroupTabs (spec #2)
     Tabs/                RevitTabSurface (the only class touching Revit's UI tree),
                          RevitDocuments (keys, titles, kinds; API context only),
-                         RevitColorizerEvents, TabDiagnostics (Debug only)
+                         RevitColorizerEvents, TabDiagnostics (Debug only),
+                         AvalonDockPane (Group Tabs' only reach into AvalonDock's
+                         layout model, by reflection; no Revit API)
     Theming/             RevitThemeDetector.Detect() → UiTheme, pushed into SplashItTheme
-    Resources/           RevitStrings.resx; icons\splash_{16,32}[_dark].png
+    Resources/           RevitStrings.resx; icons\{splash,group}_{16,32}[_dark].png
     SplashIt.addin       manifest (VendorId DSOS; the ClientId never changes)
 tests/
   SplashIt.Core.Tests/   xUnit, net8.0;net10.0; runs on any OS (CI runs it on Linux
@@ -58,7 +62,7 @@ tests/
 docs/                    this file, RELEASING.md
 installer/               the per-user WiX MSI (Product.wxs, SplashIt.Installer.wixproj),
                          stage.sh, inspect-msi.ps1, test-detection.ps1, branding/
-tools/                   glyph.py (the splash glyph), make_icons.py (ribbon icons),
+tools/                   glyph.py (the splash and Group Tabs glyphs), make_icons.py (ribbon icons),
                          make_installer_branding.py (setup artwork, license page)
 ```
 
@@ -136,7 +140,11 @@ status state, a 12-color list, the color picker on a chip, import errors and the
 strip, in light and dark. Tests that open windows share the `WpfThemeCollection`, which
 runs them one at a time because `SplashItTheme.Current` is process-wide.
 
-Runtime tests reference `SplashIt.UI` and `SplashIt.Core`, never `SplashIt.Revit`.
+Runtime tests reference `SplashIt.UI` and `SplashIt.Core`, never `SplashIt.Revit`. One
+file is the exception: `src/SplashIt.Revit/Tabs/AvalonDockPane.cs` uses no Revit API, so
+the test project compiles it in by link, and `Tabs/AvalonDockPaneTests` and
+`Tabs/GroupTabsRunnerTests` run it against fake types shaped like AvalonDock's layout
+model (spec #2).
 
 ## CI
 
@@ -324,7 +332,9 @@ returns. All of this was checked in Revit
   handled like a Save As) and, when anything changed (a title too), drops the surface's
   cached resolutions and restyles.
 - Each document is logged once when registered:
-  `documents: doc#<n> registered by <event|start|fallback>: <kind> (rule <api|template-ext>); <count> open.`
+  `documents: doc#<n> registered by <event|start|fallback|group-tabs>: <kind> (rule <api|template-ext>); <count> open.`
+  (`group-tabs`: listed by a Group Tabs click, which runs the same scan at once while the
+  colorizer runs, so what it finds reaches the colorizer; spec #2, review m3 and n3.)
   The kind comes from `Document.IsFamilyDocument` (`api`); only `.rte` (projects) and
   `.rft` (families) demote to Other (`template-ext`). A scan that found or changed something,
   or whose unresolved count moved, logs
@@ -338,4 +348,11 @@ returns. All of this was checked in Revit
   its visual tree with brushes, and where the close button's color comes from. That file
   holds titles, so it never exists in a Release build.
 - Ribbon icons: `python3 tools/make_icons.py` (Pillow) regenerates
-  `src/SplashIt.Revit/Resources/icons/`. The glyph is in `tools/glyph.py`.
+  `src/SplashIt.Revit/Resources/icons/` (`splash_*` and the Group Tabs `group_*`). Both
+  glyphs are in `tools/glyph.py`, on the same tiles.
+- Group Tabs (spec #2, decision #28) logs one line per click: `group tabs: <n> moves over
+  <t> tabs in <p> panes.` (INF), `group tabs: already grouped …` (INF), `group tabs:
+  unavailable; nothing moved. <reason>` (WRN) or `group tabs: stopped after <n> moves. …`
+  (ERR). The AvalonDock assembly version and whether `MoveChild` was found are logged once,
+  on the **first click** of a session (`group tabs: first click this session: …`), not at
+  startup.

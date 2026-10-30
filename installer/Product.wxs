@@ -18,7 +18,8 @@
       SplashIt\
         SplashIt.Revit.dll, SplashIt.UI.dll, SplashIt.Core.dll, *.pdb,
         SplashIt.Revit.deps.json
-        Resources\icons\splash_16.png, splash_32.png (+ _dark variants for Revit's dark theme)
+        Resources\icons\splash_16.png, splash_32.png, group_16.png, group_32.png
+                                            (+ _dark variants for Revit's dark theme)
 
   English only (decision #8): there are no satellite language folders.
   2025 and 2026 are built for net8.0-windows, 2027 for net10.0-windows.
@@ -238,6 +239,19 @@
       </Component>
       <Component Directory="Icons$(var.Year)Dir" Condition="REVIT$(var.Year)FOUND OR REMOVE~=&quot;ALL&quot;" Transitive="yes">
         <File Id="Icon32Dark$(var.Year)" Source="stage\$(var.Year)\SplashIt\Resources\icons\splash_32_dark.png" />
+      </Component>
+      <!-- The Group Tabs button (spec #2). -->
+      <Component Directory="Icons$(var.Year)Dir" Condition="REVIT$(var.Year)FOUND OR REMOVE~=&quot;ALL&quot;" Transitive="yes">
+        <File Id="GroupIcon16$(var.Year)" Source="stage\$(var.Year)\SplashIt\Resources\icons\group_16.png" />
+      </Component>
+      <Component Directory="Icons$(var.Year)Dir" Condition="REVIT$(var.Year)FOUND OR REMOVE~=&quot;ALL&quot;" Transitive="yes">
+        <File Id="GroupIcon16Dark$(var.Year)" Source="stage\$(var.Year)\SplashIt\Resources\icons\group_16_dark.png" />
+      </Component>
+      <Component Directory="Icons$(var.Year)Dir" Condition="REVIT$(var.Year)FOUND OR REMOVE~=&quot;ALL&quot;" Transitive="yes">
+        <File Id="GroupIcon32$(var.Year)" Source="stage\$(var.Year)\SplashIt\Resources\icons\group_32.png" />
+      </Component>
+      <Component Directory="Icons$(var.Year)Dir" Condition="REVIT$(var.Year)FOUND OR REMOVE~=&quot;ALL&quot;" Transitive="yes">
+        <File Id="GroupIcon32Dark$(var.Year)" Source="stage\$(var.Year)\SplashIt\Resources\icons\group_32_dark.png" />
       </Component>
 
       <!-- Folder cleanup on uninstall. Windows Installer only removes a

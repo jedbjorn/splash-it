@@ -22,9 +22,10 @@ using RevitApplication = Autodesk.Revit.ApplicationServices.Application;
 namespace SplashIt.Revit;
 
 /// <summary>
-/// Revit entry point (spec, App): adds the "Splash-It" panel with one button to the built-in
-/// Add-Ins tab, swaps its icons with the theme, and at <c>ApplicationInitialized</c> reads the
-/// settings and starts the tab colorizer when enabled. Nothing here can fail Revit's startup:
+/// Revit entry point (spec, App): adds the "Splash-It" panel to the built-in Add-Ins tab with
+/// two buttons, Splash-It (the settings) and Group Tabs (spec #2), swaps their icons with the
+/// theme, and at <c>ApplicationInitialized</c> reads the settings and starts the tab colorizer
+/// when enabled. Nothing here can fail Revit's startup:
 /// each step catches its own exceptions and logs them.
 /// </summary>
 public sealed class App : IExternalApplication
@@ -33,12 +34,23 @@ public sealed class App : IExternalApplication
 
     private UIControlledApplication? _application;
     private PushButton? _button;
+    private PushButton? _groupButton;
 
     /// <summary>The add-in's log (<c>%LocalAppData%\SplashIt\logs</c>).</summary>
     internal static ILog Log { get; private set; } = NullLog.Instance;
 
     /// <summary>The tab colorizer, once <c>ApplicationInitialized</c> has created it.</summary>
     internal static DocumentTabColorizer? Colorizer { get; private set; }
+
+    /// <summary>
+    /// The open documents and the tab surface the colorizer was built with, once
+    /// <c>ApplicationInitialized</c> has created them. Group Tabs (spec #2) reuses them for its
+    /// tab discovery and document keys, whether coloring is on or off.
+    /// </summary>
+    internal static RevitDocuments? Documents { get; private set; }
+
+    /// <inheritdoc cref="Documents"/>
+    internal static RevitTabSurface? TabSurface { get; private set; }
 
     public Result OnStartup(UIControlledApplication application)
     {
@@ -61,11 +73,21 @@ public sealed class App : IExternalApplication
                 AvailabilityClassName = typeof(AlwaysAvailable).FullName,
             };
             _button = panel.AddItem(data) as PushButton;
+            var group = new PushButtonData(
+                "SplashIt.GroupTabs",
+                RevitStrings.GroupTabs_ButtonText,
+                Assembly.GetExecutingAssembly().Location,
+                typeof(GroupTabs).FullName)
+            {
+                ToolTip = RevitStrings.GroupTabs_Tooltip,
+                AvailabilityClassName = typeof(AlwaysAvailable).FullName,
+            };
+            _groupButton = panel.AddItem(group) as PushButton;
             OnTheme(RevitThemeDetector.Detect());
         }
         catch (Exception ex)
         {
-            Log.Error("startup: adding the ribbon button failed (" + ex.GetType().Name + ").");
+            Log.Error("startup: adding the ribbon buttons failed (" + ex.GetType().Name + ").");
         }
 
         try
@@ -115,6 +137,8 @@ public sealed class App : IExternalApplication
             var documents = new RevitDocuments(() => revit, Log);
             var ui = _application!;
             var surface = new RevitTabSurface(() => ui.MainWindowHandle, documents, Log);
+            Documents = documents;
+            TabSurface = surface;
             var events = new RevitColorizerEvents(ui, documents, Log);
             Colorizer = new DocumentTabColorizer(surface, documents, events, new TabStyleFactory(), new PyRevitGuard(log: Log), Log);
             Colorizer.Apply(settings);
@@ -148,11 +172,17 @@ public sealed class App : IExternalApplication
 
     private void SetIcons(UiTheme theme)
     {
-        if (_button is null) return;
+        SetIcons(_button, "splash", theme);
+        SetIcons(_groupButton, "group", theme);
+    }
+
+    private static void SetIcons(PushButton? button, string name, UiTheme theme)
+    {
+        if (button is null) return;
         var suffix = theme == UiTheme.Dark ? "_dark" : "";
         // A missing dark icon falls back to the light one; with neither, the button has no icon.
-        _button.LargeImage = LoadIcon($"splash_32{suffix}.png") ?? LoadIcon("splash_32.png");
-        _button.Image = LoadIcon($"splash_16{suffix}.png") ?? LoadIcon("splash_16.png");
+        button.LargeImage = LoadIcon($"{name}_32{suffix}.png") ?? LoadIcon($"{name}_32.png");
+        button.Image = LoadIcon($"{name}_16{suffix}.png") ?? LoadIcon($"{name}_16.png");
     }
 
     /// <summary>Loads an icon shipped next to the DLL; null when the file is missing.</summary>

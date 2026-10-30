@@ -36,4 +36,11 @@
     <ProjectReference Include="..\..\src\SplashIt.UI\SplashIt.UI.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Spec #2: AvalonDockPane, the one reflection boundary of Group Tabs, uses no Revit API,
+         so it is compiled in here by link and tested against fake AvalonDock-shaped types.
+         The project still references neither SplashIt.Revit nor any Revit assembly. -->
+    <Compile Include="..\..\src\SplashIt.Revit\Tabs\AvalonDockPane.cs" Link="Linked\AvalonDockPane.cs" />
+  </ItemGroup>
+
 </Project>

@@ -35,9 +35,9 @@ public sealed class RevitDocumentKey
 /// <para>
 /// <b>Registration log</b> (SC-004): each document is logged once, when first registered, with
 /// how it was found (<c>event</c>: an open, create or save event; <c>start</c>: listed when the
-/// colorizer started; <c>fallback</c>: listed by the scan its unresolved tabs asked for), its
-/// kind and the rule that decided it (<c>api</c> or <c>template-ext</c>), and the count open.
-/// Never a title or a path.
+/// colorizer started; <c>fallback</c>: listed by the scan its unresolved tabs asked for;
+/// <c>group-tabs</c>: listed by a Group Tabs click, spec #2), its kind and the rule that
+/// decided it (<c>api</c> or <c>template-ext</c>), and the count open. Never a title or a path.
 /// </para>
 /// UI thread only.
 /// </summary>
@@ -51,11 +51,35 @@ public sealed class RevitDocuments : IDocumentInfo
     private readonly List<IReadOnlyList<string>> _kept = new();
     private int _serial;
 
+    /// <summary>The <see cref="ListingSource"/> of a Group Tabs click (spec #2).</summary>
+    internal const string GroupTabsSource = "group-tabs";
+
     /// <summary>
     /// How <see cref="GetOpenDocuments"/> registers a document it finds for the first time, in the
-    /// log: "start" unless the event source is running the fallback scan ("fallback").
+    /// log: "start" unless the event source is running the fallback scan ("fallback") or a
+    /// listing runs inside <see cref="ListAs"/> (Group Tabs: "group-tabs").
     /// </summary>
     internal string ListingSource { get; set; } = "start";
+
+    /// <summary>
+    /// API context. Runs <paramref name="list"/> (a listing, directly or through the colorizer's
+    /// scan) with <paramref name="source"/> as the <see cref="ListingSource"/>, so a document it
+    /// registers is logged as found by that source; the previous source is restored afterwards,
+    /// also when <paramref name="list"/> throws.
+    /// </summary>
+    internal void ListAs(string source, Action list)
+    {
+        var previous = ListingSource;
+        ListingSource = source;
+        try
+        {
+            list();
+        }
+        finally
+        {
+            ListingSource = previous;
+        }
+    }
 
     public RevitDocuments(Func<RevitApplication?> application, ILog? log = null)
     {
