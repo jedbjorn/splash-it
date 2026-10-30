@@ -20,6 +20,9 @@ As spec #1 (decision #20) sets it:
    `v1.0.0` release, on another machine. A failure there is fixed in a patch
    release (`v1.0.1`).
 
+`v1.0.0` was tagged on 2026-10-30, on the same commit as `v1.0.0-rc.4`,
+after rc.4 passed the VM checks of step 2.
+
 ## Cut a release
 
 1. Make sure `main` is green and holds what should ship.
