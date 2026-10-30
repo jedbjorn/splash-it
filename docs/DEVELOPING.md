@@ -90,6 +90,8 @@ at runtime, and R27's `net10.0-windows` add-in can't be referenced from a
 `SplashIt.UI`, which never references Revit; `SplashIt.Revit` stays a thin adapter. The Revit API comes from the reference-only `Nice3point.Revit.Api.*`
 packages (versions per year in `Directory.Packages.props`, which manages every package
 version centrally), so everything builds without Revit installed, including on Linux.
+Each year is pinned to its earliest update (the API floor), and CI's `tools/check_revit_api_floor.py`
+fails on a higher pin; the README's Compatibility section says how to raise it on purpose.
 
 The version is `0.0.0-dev` unless a build passes `-p:SplashItVersion=<version>`
 (the release pipeline passes the tag without its `v`).
