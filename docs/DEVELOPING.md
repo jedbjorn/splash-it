@@ -59,7 +59,8 @@ tests/
                          and on Windows)
   SplashIt.RuntimeTests/ xUnit, net8.0-windows with WPF, references SplashIt.UI, no
                          Revit; runs on Windows only (CI). Renders WPF off-screen to PNG.
-docs/                    this file, RELEASING.md
+docs/                    this file, RELEASING.md; images/ holds the README's screenshots
+                         (crops of real Revit captures and of CI's settings window)
 installer/               the per-user WiX MSI (Product.wxs, SplashIt.Installer.wixproj),
                          stage.sh, inspect-msi.ps1, test-detection.ps1, branding/
 tools/                   glyph.py (the splash and Group Tabs glyphs), make_icons.py (ribbon icons),
@@ -91,7 +92,7 @@ packages (versions per year in `Directory.Packages.props`, which manages every p
 version centrally), so everything builds without Revit installed, including on Linux.
 
 The version is `0.0.0-dev` unless a build passes `-p:SplashItVersion=<version>`
-(the release pipeline will pass the tag without its `v`).
+(the release pipeline passes the tag without its `v`).
 
 ## Building and testing locally
 
