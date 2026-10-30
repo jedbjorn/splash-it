@@ -91,8 +91,11 @@ Uninstalling leaves two things behind: your settings in `%AppData%\SplashIt\sett
 
 ## Compatibility
 
-- Revit 2025, 2026 and 2027, on Windows. Older versions of Revit are not supported.
+- Every update of Revit 2025, 2026 and 2027, on Windows, from each year's first release on. Older versions of Revit are not supported.
+- Revit's journal file shows an "Assembly version conflict in some references" line for Splash-It (its RevitAPI and RevitAPIUI). That is expected and harmless: Splash-It is built against the year's first update, and Revit notes that it is running a newer one.
 - **pyRevit:** if pyRevit's own tab coloring is running, Splash-It stays off so the two don't fight over your tabs, and its settings window says so. To use Splash-It instead, turn off pyRevit's tab coloring and restart Revit.
+
+**Raising the minimum update (developers):** Splash-It compiles against each year's first update (`Nice3point.Revit.Api.*` 2025.0.2, 2026.0.4 and 2027.0.0), so it never calls Revit API that an older update lacks. CI fails if a Revit package is pinned higher. To use newer API on purpose, raise the version in `Directory.Packages.props` and `FLOOR` in `tools/check_revit_api_floor.py` in the same pull request, and update the first line of this section with the new minimum update.
 
 ## License
 

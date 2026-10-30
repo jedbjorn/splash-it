@@ -7,7 +7,9 @@ name: _build (reusable)
 # release.yml (v* tags), so a release builds exactly what CI builds.
 # Leading underscore = internal, not triggered directly.
 #
-#   • test     — SplashIt.Core.Tests on net8.0 and net10.0 (AC1–AC3).
+#   • test     — the Revit API floor check (tools/check_revit_api_floor.py: no
+#                Revit package above each year's earliest update), then
+#                SplashIt.Core.Tests on net8.0 and net10.0 (AC1–AC3).
 #   • build    — SplashIt.sln in all six configurations. Every leg is
 #                required. The Debug legs stage the add-in as an artifact laid
 #                out like %AppData%\Autodesk\Revit\Addins\<year>\
@@ -66,6 +68,8 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
+      - name: Revit API floor check (every Revit 2025/2026/2027 update)
+        run: python3 tools/check_revit_api_floor.py
       - name: dotnet test (net8.0 + net10.0)
         run: >-
           dotnet test tests/SplashIt.Core.Tests/SplashIt.Core.Tests.csproj
