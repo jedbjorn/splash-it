@@ -5,9 +5,7 @@
 
 **Splash-It** is a Revit add-in by Designs/OS that colors your view tabs by file. With several models and families open, you can tell at a glance which tab belongs to which, and one click puts each file's tabs back together. It is a sister app of [Gantt-It](https://github.com/jedbjorn/gantt-it).
 
-![Revit 2027's tab strip in the light theme: three blue tabs from one project, the first selected with a close ×; three orange tabs from a second project; a family tab marked with a pink L; and a template tab in Revit's own grey](docs/images/tabs-light.png)
-
-![The same tab strip in Revit's dark theme: blue and orange project tabs, a family tab with a pink L, a template tab left as it was, and a family opened with Edit Family, marked with a blue L](docs/images/tabs-dark.png)
+<img width="800" height="539" alt="splash-it preview " src="https://github.com/user-attachments/assets/2d36334c-c813-4712-951e-18fb3423e2fe" />
 
 ## What it does
 
@@ -62,6 +60,9 @@ After one click:
 To give it a keyboard shortcut, open Revit's **View › User Interface › Keyboard Shortcuts** and search for "Group Tabs".
 
 Group Tabs only changes the order of the tabs. It doesn't touch your model, and there is nothing to undo. If a Revit update changes the tab strip in a way Splash-It doesn't expect, it says "Splash-It can't group tabs on this Revit build" and leaves the tabs as they are.
+
+## Loading Time
+<img width="1361" height="916" alt="loadtime - splash-it" src="https://github.com/user-attachments/assets/62d99d08-0c3c-474b-8399-0e6f7a2a9870" />
 
 ## Install
 
