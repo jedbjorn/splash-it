@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Splash-It colors Revit document tabs by file and groups them in one click. Separate palettes for projects and families, light and dark themes, and no model changes.">
+  <meta name="theme-color" content="#111a2b">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Splash-It — Every Revit file, in its own color">
+  <meta property="og:description" content="Many files. Many tabs. One glance. Color Revit tabs by file, keep every view recognizable, and bring each file's tabs together in one click.">
+  <meta property="og:url" content="https://jedbjorn.github.io/splash-it/">
+  <meta property="og:image" content="https://jedbjorn.github.io/splash-it/images/splash-it-demo-poster.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <title>Splash-It — Every Revit file, in its own color</title>
+  <link rel="canonical" href="https://jedbjorn.github.io/splash-it/">
+  <link rel="icon" href="assets/splash-it-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/site.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="Splash-It home">
+        <img src="assets/splash-it-mark.svg" alt="" width="42" height="42">
+        <span class="brand-type">
+          <strong>SPLASH-IT</strong>
+          <span>Document tab colors for Revit</span>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#features">Features</a>
+        <a href="#group-tabs">Group Tabs</a>
+        <a href="#settings">Settings</a>
+        <a href="#install">Install</a>
+      </nav>
+      <a class="github-link" href="https://github.com/jedbjorn/splash-it">
+        GitHub <span aria-hidden="true">↗</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container">
+        <div class="hero-copy">
+          <p class="eyebrow hero-eyebrow"><span aria-hidden="true"></span> Native add-in for Revit 2025–2027</p>
+          <h1>Many files. Many tabs.<br><span>One glance.</span></h1>
+          <p class="hero-lede">Splash-It colors every Revit document tab by file, so you always know which model you are looking at. Projects get a rich fill, families a crisp color mark, and one click brings each file's tabs together.</p>
+          <div class="button-row">
+            <a class="button button-primary" href="https://github.com/jedbjorn/splash-it/releases/latest">Get the latest MSI <span aria-hidden="true">↓</span></a>
+            <a class="button button-secondary" href="https://github.com/jedbjorn/splash-it">Explore on GitHub <span aria-hidden="true">↗</span></a>
+          </div>
+          <ul class="hero-notes" aria-label="Installation highlights">
+            <li>Per-user install</li>
+            <li>No admin rights required</li>
+            <li>MIT licensed</li>
+          </ul>
+        </div>
+
+        <figure class="hero-shot">
+          <div class="window-bar" aria-hidden="true">
+            <span class="window-dots"><i></i><i></i><i></i></span>
+            <span>Splash-It in Autodesk Revit</span>
+            <span>DSOS</span>
+          </div>
+          <div class="demo-frame">
+            <video id="product-demo" width="800" height="539" muted loop playsinline preload="metadata" poster="images/splash-it-demo-poster.png" aria-label="Screen recording of Splash-It coloring Revit tabs and adjusting color settings">
+              <source src="images/splash-it-demo.mp4" type="video/mp4">
+              Your browser cannot play the demo. <a href="images/splash-it-demo.mp4">Download the product video</a>.
+            </video>
+            <button class="demo-control" id="demo-control" type="button" hidden>Pause demo</button>
+          </div>
+          <figcaption>Color by file. Group by file. Find your place at a glance.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="facts" aria-label="Product highlights">
+      <div class="container fact-grid">
+        <div><strong>2 × 12 color lists</strong><span>Independent project and family palettes</span></div>
+        <div><strong>Three Revit years</strong><span>2025, 2026, and 2027 in one MSI</span></div>
+        <div><strong>Zero model changes</strong><span>Only the document tabs are restyled</span></div>
+      </div>
+    </section>
+
+    <section class="section features" id="features">
+      <div class="container">
+        <div class="section-heading">
+          <p class="eyebrow">A little add-in. A clearer workspace.</p>
+          <h2>Your files, written in color.</h2>
+          <p>Keep several models, families, views, sheets, and schedules open without losing track. Splash-It makes the tab strip useful at a glance, then gets out of your way.</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card feature-project">
+            <span class="feature-number">01</span>
+            <h3>Projects get a color fill</h3>
+            <p>Every view in a project shares one color. The active tab stands at full strength while its siblings recede, with a smooth fade through the close button and no gap between tabs.</p>
+            <a href="https://github.com/jedbjorn/splash-it#what-it-does">See how coloring works <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card feature-family">
+            <span class="feature-number">02</span>
+            <h3>Families get their own mark</h3>
+            <p>A colored L on the left and top edge distinguishes family documents without filling the tab. It works for files opened from disk and families edited from a project.</p>
+            <a href="https://github.com/jedbjorn/splash-it#what-it-does">Learn about file types <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card feature-group">
+            <span class="feature-number">03</span>
+            <h3>One click puts tabs together</h3>
+            <p>Group Tabs gathers each file's views without changing their order or your selected view. It sorts only when you ask, works with coloring on or off, and never moves tabs between panes.</p>
+            <a href="https://github.com/jedbjorn/splash-it#group-tabs-by-file">Explore Group Tabs <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card feature-palette">
+            <span class="feature-number">04</span>
+            <h3>Your palettes, your way</h3>
+            <p>Choose up to 12 project colors and 12 family colors. Pick from a palette, enter a hex value, or sample anywhere on screen, then tune fill, inactive-tab, and family-bar opacity.</p>
+            <a href="https://github.com/jedbjorn/splash-it#settings">See the color controls <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card feature-theme">
+            <span class="feature-number">05</span>
+            <h3>Readable in light and dark</h3>
+            <p>Splash-It follows Revit's theme. Titles and close glyphs choose black or white for contrast against the color actually shown, so the strip stays legible when the theme changes.</p>
+            <a href="https://github.com/jedbjorn/splash-it#settings">Built for both themes <span aria-hidden="true">→</span></a>
+          </article>
+          <article class="feature-card feature-share">
+            <span class="feature-number">06</span>
+            <h3>A look you can share</h3>
+            <p>Export your colors and settings to a small JSON file, then import a teammate's look. Saving updates open tabs immediately. Turning coloring off restores Revit's original styles.</p>
+            <a href="https://github.com/jedbjorn/splash-it#settings">Share and reset settings <span aria-hidden="true">→</span></a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section group-section" id="group-tabs">
+      <div class="container">
+        <div class="section-heading section-heading-light">
+          <p class="eyebrow">From scattered to sorted</p>
+          <h2>One click. Every file back together.</h2>
+          <p>Revit adds new views at the end of the strip. Group Tabs brings each file's tabs together while keeping the current file first, preserving each file's view order, and leaving your selected view selected.</p>
+        </div>
+
+        <div class="group-comparison">
+          <figure class="group-shot">
+            <figcaption><span>Before</span><small>Views from different files are mixed together</small></figcaption>
+            <div class="group-image-scroll">
+              <img src="images/group-before-site.png" alt="Mixed Revit tabs from several color-coded projects and families before grouping" width="2200" height="52">
+            </div>
+          </figure>
+          <div class="comparison-arrow" aria-hidden="true">↓</div>
+          <figure class="group-shot group-shot-after">
+            <figcaption><span>After Group Tabs</span><small>Each file's views sit together; the active view stays active</small></figcaption>
+            <div class="group-image-scroll">
+              <img src="images/group-after-site.png" alt="The same Revit tabs grouped by file, with the selected blue tab still selected" width="2200" height="52">
+            </div>
+          </figure>
+        </div>
+
+        <ol class="step-grid">
+          <li>
+            <span class="step-number">1</span>
+            <h3>Open what you need</h3>
+            <p>Work across projects and families as usual. Coloring is helpful, but Group Tabs works with or without it.</p>
+          </li>
+          <li>
+            <span class="step-number">2</span>
+            <h3>Click Group Tabs</h3>
+            <p>Find the button beside Splash-It on Revit's Add-Ins tab, or assign your own keyboard shortcut.</p>
+          </li>
+          <li>
+            <span class="step-number">3</span>
+            <h3>Keep working your way</h3>
+            <p>Nothing resorts automatically. Drag tabs wherever you like afterwards, and group them again only when you want.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section settings-section" id="settings">
+      <div class="container settings-grid">
+        <figure class="settings-shot">
+          <div class="window-bar" aria-hidden="true">
+            <span class="window-dots"><i></i><i></i><i></i></span>
+            <span>Splash-It Settings</span>
+            <span>LIGHT</span>
+          </div>
+          <img src="images/settings.png" alt="Splash-It settings with twelve project colors, twelve family colors, opacity controls, a live tab preview, and import and export actions" width="624" height="576">
+          <figcaption>Separate palettes, precise controls, and a live preview.</figcaption>
+        </figure>
+        <div class="settings-copy">
+          <p class="eyebrow">Simple to tune. Easy to leave alone.</p>
+          <h2>Set the colors once. See the difference everywhere.</h2>
+          <p>Open Splash-It from Revit's Add-Ins tab. The preview changes as you tune your palettes, and Save restyles every open tab at once.</p>
+          <ul class="check-list">
+            <li>Edit, add, remove, and reorder up to 12 colors per list</li>
+            <li>Adjust project fills, inactive tabs, and family marks</li>
+            <li>Pick colors from a palette, a hex value, or your screen</li>
+            <li>Export and import settings without sharing your on/off choice</li>
+            <li>Turn coloring off to restore every tab's original style</li>
+          </ul>
+          <a class="text-link" href="https://github.com/jedbjorn/splash-it#settings">Read the settings guide <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section install-section" id="install">
+      <div class="container install-grid">
+        <div class="install-intro">
+          <p class="eyebrow">Small install. Immediate payoff.</p>
+          <h2>Up and running before your next model opens.</h2>
+          <p>One per-user MSI installs Splash-It into each supported Revit it finds. No administrator rights, no runtime download, and no change to your models.</p>
+          <a class="text-link" href="https://github.com/jedbjorn/splash-it#install">Read the full installation guide <span aria-hidden="true">→</span></a>
+        </div>
+        <ol class="install-steps">
+          <li><span>01</span><div><strong>Download and close Revit</strong><p>Get the latest <code>SplashIt-&lt;version&gt;.msi</code>, then close Revit before running it.</p></div></li>
+          <li><span>02</span><div><strong>Install for your Windows account</strong><p>The installer detects Revit 2025, 2026, and 2027 and adds Splash-It only where it belongs.</p></div></li>
+          <li><span>03</span><div><strong>Choose Always Load</strong><p>Start Revit and allow Splash-It. Coloring is on by default, ready for your first tab.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="download-section">
+      <div class="container">
+        <div class="download-card">
+          <div>
+            <p class="eyebrow">Ready when you are</p>
+            <h2>Give every file a color of its own.</h2>
+            <p>Download the latest release for Revit 2025, 2026, or 2027. Choose the versioned MSI for a per-user install, or a year-specific ZIP for a manual install.</p>
+          </div>
+          <div class="download-actions">
+            <div class="button-row">
+              <a class="button button-light" href="https://github.com/jedbjorn/splash-it/releases/latest">Get the latest MSI <span aria-hidden="true">↓</span></a>
+              <a class="button button-secondary" href="https://github.com/jedbjorn/splash-it#compatibility">Check compatibility <span aria-hidden="true">→</span></a>
+            </div>
+            <a href="https://github.com/jedbjorn/splash-it/releases">See every release <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <a class="brand brand-footer" href="#top" aria-label="Back to top">
+        <img src="assets/splash-it-mark.svg" alt="" width="34" height="34">
+        <span class="brand-type"><strong>SPLASH-IT</strong><span>By Designs/OS</span></span>
+      </a>
+      <p>Native Revit add-in · MIT licensed · Sister app to <a href="https://jedbjorn.github.io/rst-c/">RST</a></p>
+      <div class="footer-links">
+        <a href="https://github.com/jedbjorn/splash-it">GitHub</a>
+        <a href="https://github.com/jedbjorn/splash-it/releases">Releases</a>
+        <a href="https://github.com/jedbjorn/splash-it/blob/main/LICENSE">License</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
