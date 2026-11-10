@@ -99,6 +99,18 @@ Uninstalling leaves two things behind: your settings in `%AppData%\SplashIt\sett
 
 **Raising the minimum update (developers):** Splash-It compiles against each year's first update (`Nice3point.Revit.Api.*` 2025.0.2, 2026.0.4 and 2027.0.0), so it never calls Revit API that an older update lacks. CI fails if a Revit package is pinned higher. To use newer API on purpose, raise the version in `Directory.Packages.props` and `FLOOR` in `tools/check_revit_api_floor.py` in the same pull request, and update the first line of this section with the new minimum update.
 
+## More projects
+
+Other open-source projects by the same author:
+
+- **[FAI Browser](https://jedbjorn.github.io/fai-browser/)** — lets a coding agent work in one browser tab you approve, with permission levels, secret redaction and compact page summaries. ([source](https://github.com/jedbjorn/fai-browser))
+- **[Subfloor](https://subfloor.designs-os.com)** — a standing team of coding agents for your Git repository, with durable identity, memory, specs and handoffs, run through your coding harness. ([source](https://github.com/jedbjorn/subfloor))
+- **[RST](https://jedbjorn.github.io/rst-c/)** — a native Revit add-in for curated ribbon profiles: admins build them, users load them with one click. ([source](https://github.com/jedbjorn/rst-c))
+- **[Gantt-It](https://jedbjorn.github.io/gantt-it/)** — a Revit add-in that draws Gantt charts in your project, ready to place on sheets. ([source](https://github.com/jedbjorn/gantt-it))
+- **[md-converter](https://md-converter.designs-os.com)** — a static web app that renders themed Markdown into styled, shareable HTML. ([source](https://github.com/jedbjorn/md-converter))
+- **[Storybench](https://github.com/jedbjorn/storybench)** — a local workspace for developing videos with an AI production agent.
+- **[AnJ Cloud](https://jedbjorn.github.io/anj-cloud/)** — household file sync from a gateway you host yourself, with clients for Linux, macOS, Windows and Android. ([source](https://github.com/jedbjorn/anj-cloud))
+
 ## License
 
 Splash-It is released under the [MIT License](LICENSE). Copyright (c) 2026 Designs/OS.
