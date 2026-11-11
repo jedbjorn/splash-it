@@ -5,7 +5,7 @@
 
 **[Project website →](https://jedbjorn.github.io/splash-it/)**
 
-**Splash-It** is a Revit add-in by Designs/OS that colors your view tabs by file. With several models and families open, you can tell at a glance which tab belongs to which, and one click puts each file's tabs back together. It is a sister app of [Gantt-It](https://github.com/jedbjorn/gantt-it).
+**Splash-It** is a Revit add-in by [Designs/OS](https://designs-os.com) that colors your view tabs by file. With several models and families open, you can tell at a glance which tab belongs to which, and one click puts each file's tabs back together. It is a sister app of [Gantt-It](https://github.com/jedbjorn/gantt-it).
 
 <img width="800" height="539" alt="splash-it preview " src="https://github.com/user-attachments/assets/2d36334c-c813-4712-951e-18fb3423e2fe" />
 
