@@ -184,8 +184,8 @@ gh run download <run-id> -n SplashIt-screenshots
 
 Copy a `SplashIt-Debug-R<yy>` artifact's contents into
 `%AppData%\Autodesk\Revit\Addins\<year>\`. Revit locks loaded DLLs, so close Revit
-before redeploying. The add-in is unsigned, so Revit asks whether to load it on first
-launch.
+before redeploying. CI artifacts are unsigned (only tag releases are signed,
+docs/RELEASING.md), so Revit asks whether to load it on first launch.
 
 ## Settings file
 
