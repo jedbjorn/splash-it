@@ -72,13 +72,13 @@ Group Tabs only changes the order of the tabs. It doesn't touch your model, and 
 
 1. Download `SplashIt-<version>.msi` from the [latest release](https://github.com/jedbjorn/splash-it/releases/latest).
 2. Close Revit, then run the file.
-3. If Windows says "Windows protected your PC", choose **More info**, then **Run anyway**. Windows asks this because Splash-It is not digitally signed yet. That is expected.
+3. Releases after v1.1.1 are digitally signed by **AnJ Arch-Tech LLC**, the company behind Designs/OS. To check, right-click the file, choose **Properties › Digital Signatures**: the signer is AnJ Arch-Tech LLC, with a timestamp. If Windows says "Windows protected your PC", choose **More info**: the publisher must read AnJ Arch-Tech LLC (v1.1.1 and older: unknown, they are unsigned), then choose **Run anyway**.
 4. Accept the licence and click **Install**. The installer adds Splash-It to each Revit 2025, 2026 and 2027 it finds on your computer. It installs for you only and needs no administrator rights. If it finds none of them, it stops and says so.
-5. Start Revit. Revit asks whether to load Splash-It, for the same reason: choose **Always Load**.
+5. Start Revit. If Revit asks whether to load Splash-It, choose **Always Load**.
 
 Your tabs are now colored by file, and the **Splash-It** button on the **Add-Ins** tab opens its settings.
 
-**Upgrade:** close Revit, then run the newer installer. It replaces the old version. Revit asks again whether to load Splash-It on the next start: choose **Always Load** again.
+**Upgrade:** close Revit, then run the newer installer. It replaces the old version. If Revit asks again whether to load Splash-It on the next start, choose **Always Load** again.
 
 **Installed another Revit year later?** Close Revit, run the installer again and choose **Repair**. It adds Splash-It to the Revit you just installed.
 
