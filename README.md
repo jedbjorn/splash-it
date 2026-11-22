@@ -3,7 +3,7 @@
 [![Latest release](https://img.shields.io/github/v/release/jedbjorn/splash-it)](https://github.com/jedbjorn/splash-it/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**[Project website →](https://jedbjorn.github.io/splash-it/)**
+**[Project website →](https://splash-it.designs-os.com/)**
 
 **Splash-It** is a Revit add-in by [Designs/OS](https://designs-os.com) that colors your view tabs by file. With several models and families open, you can tell at a glance which tab belongs to which, and one click puts each file's tabs back together. It is a sister app of [Gantt-It](https://github.com/jedbjorn/gantt-it).
 
@@ -103,14 +103,14 @@ Uninstalling leaves two things behind: your settings in `%AppData%\SplashIt\sett
 
 Other open-source projects by the same author:
 
-- **[FAI Browser](https://jedbjorn.github.io/fai-browser/)** — lets a coding agent work in one browser tab you approve, with permission levels, secret redaction and compact page summaries. ([source](https://github.com/jedbjorn/fai-browser))
+- **[FAI Browser](https://fai-browser.designs-os.com/)** — lets a coding agent work in one browser tab you approve, with permission levels, secret redaction and compact page summaries. ([source](https://github.com/jedbjorn/fai-browser))
 - **[Subfloor](https://subfloor.designs-os.com)** — a standing team of coding agents for your Git repository, with durable identity, memory, specs and handoffs, run through your coding harness. ([source](https://github.com/jedbjorn/subfloor))
-- **[RST](https://jedbjorn.github.io/rst-c/)** — a native Revit add-in for curated ribbon profiles: admins build them, users load them with one click. ([source](https://github.com/jedbjorn/rst-c))
-- **[Gantt-It](https://jedbjorn.github.io/gantt-it/)** — a Revit add-in that draws Gantt charts in your project, ready to place on sheets. ([source](https://github.com/jedbjorn/gantt-it))
+- **[RST](https://rst-c.designs-os.com/)** — a native Revit add-in for curated ribbon profiles: admins build them, users load them with one click. ([source](https://github.com/jedbjorn/rst-c))
+- **[Gantt-It](https://gantt-it.designs-os.com/)** — a Revit add-in that draws Gantt charts in your project, ready to place on sheets. ([source](https://github.com/jedbjorn/gantt-it))
 - **[md-converter](https://md-converter.designs-os.com)** — a static web app that renders themed Markdown into styled, shareable HTML. ([source](https://github.com/jedbjorn/md-converter))
 - **[Storybench](https://github.com/jedbjorn/storybench)** — a local workspace for developing videos with an AI production agent.
-- **[AnJ Cloud](https://jedbjorn.github.io/anj-cloud/)** — household file sync from a gateway you host yourself, with clients for Linux, macOS, Windows and Android. ([source](https://github.com/jedbjorn/anj-cloud))
-- **[Pick-It](https://jedbjorn.github.io/pick-it/)** — a Revit add-in that picks any colour on screen, shows its RGB values on the ribbon button and adds it to Revit's custom colours. ([source](https://github.com/jedbjorn/pick-it))
+- **[AnJ Cloud](https://anj-cloud.designs-os.com/)** — household file sync from a gateway you host yourself, with clients for Linux, macOS, Windows and Android. ([source](https://github.com/jedbjorn/anj-cloud))
+- **[Pick-It](https://pick-it.designs-os.com/)** — a Revit add-in that picks any colour on screen, shows its RGB values on the ribbon button and adds it to Revit's custom colours. ([source](https://github.com/jedbjorn/pick-it))
 
 ## License
 
