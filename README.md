@@ -1,6 +1,7 @@
 # Splash-It
 
 [![Latest release](https://img.shields.io/github/v/release/jedbjorn/splash-it)](https://github.com/jedbjorn/splash-it/releases/latest)
+[![Release downloads](https://img.shields.io/github/downloads/jedbjorn/splash-it/total?label=release%20downloads&style=flat-square)](https://github.com/jedbjorn/splash-it/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **[Project website →](https://splash-it.designs-os.com/)**
